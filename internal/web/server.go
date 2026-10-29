@@ -34,6 +34,7 @@ type Server struct {
 	guard      *loginGuard
 	challenges challengeStore
 	sso        ssoCache
+	mux        *http.ServeMux
 
 	// MgmtACL guards the console listener.
 	MgmtACL *netacl.List
@@ -257,6 +258,10 @@ type Policy struct {
 	// NoExport: users may not export their vaults (the web vault and the
 	// extension refuse it; a member who can read items can still copy them).
 	NoExport bool `json:"no_export,omitempty"`
+	// NoSends: users may not make secret links.
+	NoSends bool `json:"no_sends,omitempty"`
+	// FourEyes: sensitive administrator actions need a second administrator.
+	FourEyes bool `json:"four_eyes,omitempty"`
 }
 
 // DefaultPolicy: lock after 15 minutes, clear the clipboard after 30 s,
@@ -338,6 +343,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/login/key/start", s.apiKeyLoginStart)
 	mux.HandleFunc("POST /api/login/key", s.apiKeyLogin)
 	mux.HandleFunc("GET /login/sso", s.handleSSOStart)
+	mux.HandleFunc("GET /send/{id}", s.handleSendPage)
+	mux.HandleFunc("GET /api/send/{id}", s.apiSendState)
+	mux.HandleFunc("POST /api/send/{id}/open", s.apiOpenSend)
 	mux.HandleFunc("GET /login/sso/callback", s.handleOIDCCallback)
 	mux.HandleFunc("POST /login/sso/saml", s.handleSAMLACS)
 	mux.HandleFunc("GET /login/sso/metadata", s.handleSAMLMetadata)
@@ -390,6 +398,16 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/account/keys/start", s.apiKeyRegisterStart)
 	api("POST /api/account/keys", s.apiKeyRegister)
 	api("GET /api/directory", s.apiDirectory)
+	api("GET /api/sends", s.apiSends)
+	api("POST /api/sends", s.apiCreateSend)
+	api("DELETE /api/sends/{id}", s.apiDeleteSend)
+	api("GET /api/emergency", s.apiEmergency)
+	api("POST /api/emergency", s.apiAddEmergency)
+	api("POST /api/emergency/{id}/{action}", s.apiEmergencyAction)
+	api("DELETE /api/emergency/{id}", s.apiDeleteEmergency)
+	api("GET /api/emergency/{id}/vault", s.apiEmergencyVault)
+	api("POST /api/items/{id}/access", s.apiItemAccess)
+	api("GET /api/items/{id}/access", s.apiItemAccessLog)
 	api("GET /api/groups", s.apiGroups)
 	api("POST /api/vaults", s.apiCreateVault)
 	api("GET /api/vaults/pending", s.apiPendingAccess)
@@ -414,6 +432,8 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /users/{id}", s.handleUserUpdate)
 	admin("POST /users/{id}/reset-2fa", s.handleUserReset2FA)
 	admin("POST /users/{id}/delete", s.handleUserDelete)
+	admin("GET /approvals", s.handleApprovals)
+	admin("POST /approvals/{id}/{decision}", s.handleApprovalDecide)
 	admin("GET /groups", s.handleGroups)
 	admin("GET /groups/{id}", s.handleGroup)
 	admin("POST /groups/{id}", s.handleGroupSave)
@@ -447,6 +467,7 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /settings/security", s.handleSecuritySave)
 	admin("POST /settings/security/unblock", s.handleUnblock)
 
+	s.mux = mux
 	return s.secure(s.aclCheck(s.MgmtACL, s.csrf(s.loadSession(mux))))
 }
 
@@ -627,6 +648,10 @@ func (s *Server) RunHousekeeping(ctx context.Context) {
 			s.log.Info("emptied the trash", "items", n, "days", days)
 		}
 		_ = s.store.PurgeSessions(ctx)
+		if err := s.store.PurgeSends(ctx); err != nil {
+			s.log.Warn("removing old secret links failed", "err", err)
+		}
+		_ = s.store.PurgeItemAccess(ctx)
 		select {
 		case <-ctx.Done():
 			return

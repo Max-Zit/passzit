@@ -66,7 +66,7 @@ func uiTexts(t *testing.T) map[string]bool {
 		out[p.Title] = true
 	}
 	// Composed elsewhere.
-	for _, s := range []string{"The address is already used.", "Not found.", "Weak", "Fair", "Good", "Strong", "Login", "Secure note", "Item", "Card", "Identity", "SSH key", "Cards", "Identities", "SSH keys", "Stable", "Testing (release candidates)"} {
+	for _, s := range []string{"The address is already used.", "Not found.", "Weak", "Fair", "Good", "Strong", "Login", "Secure note", "Item", "Card", "Identity", "SSH key", "Cards", "Identities", "SSH keys", "Stable", "Testing (release candidates)", "1 hour", "1 day", "3 days", "7 days", "30 days"} {
 		out[s] = true
 	}
 	return out

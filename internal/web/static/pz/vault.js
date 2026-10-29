@@ -12,6 +12,7 @@ import { authFor, strength } from "./common.js";
 import { parse as totpParse, code as totpCode } from "./totp.js";
 import { generate as sshGenerate, fingerprint as sshFingerprint } from "./sshkey.js";
 import { initSharing, loadKnown, completePending, createVault, openVault as openVaultDialog, rotateBanner, canEditVault, vaultLabel } from "./sharing.js";
+import { initSends, openSends, itemText } from "./sends.js";
 
 const root = document.getElementById("pz-vault");
 const S = {
@@ -41,6 +42,7 @@ const TYPES = {
 
 async function start() {
   initSharing({ S, render, sync, dialog, prompt1 });
+  initSends({ dialog, fmtDate });
   await loadTexts();
   wireLogout();
   let keys = null;
@@ -345,6 +347,7 @@ function renderFilters() {
   nav.append(el("span", { class: "navlabel" }), link("trash", t("Trash"), "trash"),
     el("span", { class: "navlabel", text: t("Tools") }),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openHealth(); } }, icon("shield"), el("span", { text: t("Password health") })),
+    S.acct.no_sends ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openSends(""); } }, icon("link"), el("span", { text: t("Secret links") })),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openImport(); } }, icon("upload"), el("span", { text: t("Import") })),
     S.acct.no_export ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openExport(); } }, icon("download"), el("span", { text: t("Export") })));
   return nav;
@@ -476,6 +479,7 @@ function renderDetail() {
   if (S.editing) return renderEditor();
   const it = S.items.get(S.selected);
   noShow = !!it && useOnly(it);
+  curItem = it || null;
   if (!it) {
     return el("div", { class: "empty" }, icon("lock"), el("p", { text: t("Choose an item, or add a new one.") }),
       el("p", { class: "small muted", text: t("%d items · encrypted in your browser", count("all")) }));
@@ -534,11 +538,13 @@ function renderDetail() {
         (S.vaults.get(it.vault_id) || {}).kind === "shared" ? " · " + vaultLabel(it.vault_id) : "")),
       it.deleted_at || !canEditItem(it) ? null : el("button", { type: "button", class: "iconbtn" + (d.favorite ? " fav-on" : ""), title: t("Favorite"), "aria-pressed": d.favorite ? "true" : "false", onclick: () => toggleFav(it) }, icon("star"))),
     it.deleted_at ? el("div", { class: "flash warn" }, icon("trash"), el("span", { text: t("In the trash since %s.", fmtDate(it.deleted_at)) })) : null,
-    ...rows, noShow ? null : attachmentsBlock(it), hist, meta, itemActions(it));
+    ...rows, noShow ? null : attachmentsBlock(it), hist, accessLog(it), meta, itemActions(it));
 }
 
 function itemActions(it) {
-  if (!canEditItem(it)) return null;
+  const send = !it.deleted_at && it.data && !useOnly(it) && !S.acct.no_sends
+    ? button(t("Send a copy"), { class: "ghost", icon: "link", onclick: () => openSends(itemText(it.data)) }) : null;
+  if (!canEditItem(it)) return send ? el("div", { class: "row vactions" }, send) : null;
   if (it.deleted_at) {
     return el("div", { class: "row vactions" },
       button(t("Restore"), { class: "primary", icon: "restore", onclick: () => act(it, "restore", t("Restored.")) }),
@@ -548,6 +554,7 @@ function itemActions(it) {
   }
   return el("div", { class: "row vactions" },
     it.data ? button(t("Edit"), { class: "primary", icon: "edit", onclick: () => startEdit(it) }) : null,
+    send,
     button(t("Move to the trash"), { class: "ghost", icon: "trash", onclick: () => act(it, "trash", t("Moved to the trash.")) }));
 }
 
@@ -575,14 +582,16 @@ function field(label, value, o) {
   const opt = o || {};
   const v = el(opt.mono || opt.secret ? "code" : "span", { class: "vvalue" + (opt.mono || opt.secret ? " mono" : ""), text: opt.secret ? "••••••••••" : value });
   const tools = el("span", { class: "vtools" });
+  const item = curItem;
   if (opt.secret && !noShow) {
     tools.append(el("button", { type: "button", class: "iconbtn sm", title: t("Show"), "aria-label": t("Show"), onclick: (ev) => {
       const shown = v.textContent !== "••••••••••";
+      if (!shown) reportUse(item, "show");
       v.textContent = shown ? "••••••••••" : value;
       ev.currentTarget.replaceChildren(icon(shown ? "eye" : "eyeoff"));
     } }, icon("eye")));
   }
-  if (opt.copy) tools.append(el("button", { type: "button", class: "iconbtn sm", title: t("Copy"), "aria-label": t("Copy") + " " + label, onclick: () => copy(value, !!opt.secret) }, icon("copy")));
+  if (opt.copy) tools.append(el("button", { type: "button", class: "iconbtn sm", title: t("Copy"), "aria-label": t("Copy") + " " + label, onclick: () => { if (opt.secret) reportUse(item, "copy"); copy(value, !!opt.secret); } }, icon("copy")));
   return el("div", { class: "vfield" }, el("label", { text: label }), el("div", { class: "vline" }, v, tools));
 }
 
@@ -1125,3 +1134,29 @@ function rightsText(r) {
 function rightsOf(it) { return (S.vaults.get(it.vault_id) || {}).rights || "view"; }
 function canEditItem(it) { return rightsOf(it) === "edit" || rightsOf(it) === "manage"; }
 function useOnly(it) { return rightsOf(it) === "use"; }
+
+// ---- who used an item of a shared vault (reported here, shown to managers)
+
+let curItem = null; // the item the detail view shows
+
+function reportUse(it, action) {
+  if (!it || (S.vaults.get(it.vault_id) || {}).kind !== "shared") return;
+  api("POST", "/api/items/" + it.id + "/access", { action }).catch(() => {});
+}
+
+function accessLog(it) {
+  const v = S.vaults.get(it.vault_id) || {};
+  if (v.kind !== "shared" || v.rights !== "manage") return null;
+  const body = el("div", { class: "small" }, el("p", { class: "muted", text: t("Loading…") }));
+  const d = el("details", { class: "vhist" }, el("summary", { text: t("Who used this item") }), body);
+  d.addEventListener("toggle", async () => {
+    if (!d.open) return;
+    try {
+      const list = await api("GET", "/api/items/" + it.id + "/access");
+      const what = { show: t("showed the password"), copy: t("copied a secret"), fill: t("filled it in"), view: t("opened it") };
+      body.replaceChildren(list.length ? el("ul", null, ...list.map((a) => el("li", null, el("b", { text: a.email }), " " + (what[a.action] || a.action) + " · ", el("small", { class: "muted", text: fmtDate(a.at) + (a.ip ? " · " + a.ip : "") }))))
+        : el("p", { class: "muted", text: t("Nobody has used it yet.") }));
+    } catch (e) { body.replaceChildren(el("p", { class: "muted", text: e.message })); }
+  });
+  return d;
+}

@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -67,6 +68,9 @@ func (s *Server) publicBase(r *http.Request) string {
 }
 
 func (s *Server) handleInviteCreate(w http.ResponseWriter, r *http.Request) {
+	if r.FormValue("role") == store.RoleAdmin && s.holdForApproval(w, r, "user.invite-admin", "invite "+strings.TrimSpace(r.FormValue("email"))+" as administrator", "/users") {
+		return
+	}
 	d := &usersData{Email: strings.TrimSpace(r.FormValue("email")), Role: r.FormValue("role")}
 	days := s.security(r.Context()).InviteDays
 	tok, inv, err := s.store.CreateInvite(r.Context(), d.Email, d.Role, userFrom(r).Email, time.Duration(days)*24*time.Hour)
@@ -139,6 +143,9 @@ func (s *Server) handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role, disabled := r.FormValue("role"), r.FormValue("disabled") == "1"
+	if role == store.RoleAdmin && u.Role != store.RoleAdmin && s.holdForApproval(w, r, "user.admin", "make "+u.Email+" an administrator", fmt.Sprintf("/users/%d", u.ID)) {
+		return
+	}
 	if u.ID == userFrom(r).ID {
 		disabled = false
 	}
@@ -153,6 +160,9 @@ func (s *Server) handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUserReset2FA(w http.ResponseWriter, r *http.Request) {
 	u := s.loadUser(w, r)
 	if u == nil {
+		return
+	}
+	if s.holdForApproval(w, r, "user.reset-2fa", "reset the two-factor sign-in of "+u.Email, fmt.Sprintf("/users/%d", u.ID)) {
 		return
 	}
 	if u.ID == userFrom(r).ID {
@@ -172,6 +182,9 @@ func (s *Server) handleUserReset2FA(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	u := s.loadUser(w, r)
 	if u == nil {
+		return
+	}
+	if s.holdForApproval(w, r, "user.delete", "delete the user "+u.Email, fmt.Sprintf("/users/%d", u.ID)) {
 		return
 	}
 	if u.ID == userFrom(r).ID {

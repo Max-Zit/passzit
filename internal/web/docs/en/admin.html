@@ -56,3 +56,6 @@
   <li>Both can keep <b>PassZit groups</b> in step with company groups of the same name at every sign-in.</li>
 </ul>
 <p>Browser extensions cannot use single sign-on; they sign in with the master password and the authenticator code (and are checked against the directory).</p>
+
+<h2 id="four-eyes">Four-eyes principle</h2>
+<p>With <i>Settings → Vault policy → Four-eyes principle</i>, sensitive actions of an administrator wait under <b>Approvals</b> until a <b>second administrator</b> approves them: deleting a user, resetting a second factor, making or inviting an administrator, and changing the vault policy, sign-in and security, network and company sign-in settings. Requests end after 24 hours; nobody approves their own. The stored request is sealed with the server key (it can contain secrets) and runs as the approving administrator; both are in the audit log. It takes effect with at least two active administrators — turning it off needs an approval too.</p>

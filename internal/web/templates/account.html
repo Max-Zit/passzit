@@ -57,6 +57,11 @@
   </div>
 </section>
 
+<section class="panel" id="emergency">
+  <h2>{{template "icon" "shield"}}{{.T "Emergency access"}}</h2>
+  <p class="muted">{{.T "Name people who may open your personal vault if something happens to you. They ask for it; if you do not reject the request within the waiting time, it opens to them. Your vault key is sealed to their key in your browser; the server cannot read it."}}</p>
+  <div id="pz-emergency"><p class="small muted">{{.T "Loading…"}}</p></div>
+</section>
 <section class="panel">
   <h2>{{template "icon" "key"}}{{.T "Your key for sharing"}}</h2>
   <p class="muted">{{.T "When someone shares a vault with you, they see this fingerprint of your public key. Compare it with them (in person or by phone) the first time: then nobody could have put another key in between."}}</p>

@@ -1,0 +1,19 @@
+<h1>Secret links and emergency access</h1>
+<p class="lead">Give one person a password without an account, let trusted people into your vault when something happens to you, and see who used an item of a shared vault.</p>
+
+<h2 id="links">Secret links</h2>
+<p><b>Tools → Secret links</b> (or <i>Send a copy</i> in an item) makes a link for a text or a file up to 8 MB. Choose how long it works (1 hour to 30 days) and how often it can be opened (1–100 times; once is the default). The content is encrypted in your browser; the key is the part of the link after <code>#</code>, which browsers never send to a server. The recipient opens the link in any browser, no account needed; after the last allowed opening the server deletes the encrypted data.</p>
+<p>An optional <b>password</b> protects the link a second time: the content cannot be decrypted without it, and wrong guesses are counted and blocked like failed sign-ins. Tell the password on another way than the link (phone, another messenger).</p>
+<p>The list under <i>Your links</i> shows how often each link was opened and when it ends; <i>Delete</i> stops it at once. The policy can switch secret links off (<i>Settings → Vault policy → Sharing and export</i>). Recipients outside your networks need to reach the server: check <i>Settings → Network and access</i>.</p>
+
+<h2 id="emergency">Emergency access</h2>
+<p>Under <b>My account → Emergency access</b> you name up to five people who may open your <b>personal vault</b> if something happens to you, each with a waiting time (0–90 days, 7 by default). Your browser seals your vault key to their public key; the server keeps it sealed.</p>
+<ol>
+  <li>The person asks for access on their <i>My account</i> page.</li>
+  <li>You see the request on your <i>My account</i> page and can <i>Reject</i> it (or <i>Approve now</i>).</li>
+  <li>Without your answer the access opens after the waiting time. The person can then read your personal vault (read only) in their browser. Every step is in the audit log.</li>
+</ol>
+<p>Removing the person ends it at once. Shared vaults are not part of it — they have their own members.</p>
+
+<h2 id="access">Who used an item</h2>
+<p>In shared vaults the web vault and the extension report when someone shows a password, copies a secret or fills a login. Managers of the vault see this under <i>Who used this item</i> in the item. Reports come from the browsers: someone who changes their software can avoid them, so the log helps against mistakes and answers "who had it", it is no proof.</p>

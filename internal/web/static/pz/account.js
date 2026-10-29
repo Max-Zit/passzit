@@ -123,3 +123,9 @@ import("./keys.js").then(({ keysSupported, registerKey }) => {
     location.reload();
   });
 });
+
+// Emergency access
+import("./emergency.js").then(({ initEmergency }) => {
+  const box = document.getElementById("pz-emergency");
+  if (box) initEmergency(box, document.body.dataset.email || "").catch((e) => { box.textContent = e.message; });
+});

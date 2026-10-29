@@ -1,0 +1,25 @@
+{{template "guest" .}}
+{{define "scripts"}}<script type="module" src="/static/pz/send.js?v={{.Asset}}"></script>{{end}}
+{{define "content"}}
+<div id="pz-send">
+  <h1>{{.T "Secret link"}}</h1>
+  <div class="flash err" role="alert" id="pz-error" hidden></div>
+  <section data-step="intro">
+    <p>{{.T "Someone shared a secret with you through PassZit. It is encrypted; the key is in the link and never reaches the server."}}</p>
+    <form class="stack" id="f-open">
+      <label id="pw-row" hidden>{{.T "Password of the link"}}<input type="password" name="password" autocomplete="off"></label>
+      <p class="small muted" id="views-note">{{.T "Opening may use up the link: it can be opened only a limited number of times."}}</p>
+      <button class="primary">{{template "icon" "eye"}}{{.T "Show the secret"}}</button>
+    </form>
+  </section>
+  <section data-step="shown" hidden>
+    <pre class="vnotes secret-text" id="send-text"></pre>
+    <p class="row"><button type="button" class="secondary" id="send-copy">{{template "icon" "copy"}}{{.T "Copy"}}</button> <a class="btn secondary" id="send-file" hidden>{{template "icon" "download"}}<span></span></a></p>
+    <p class="small muted" id="send-left"></p>
+    <p class="small muted">{{.T "Store the secret somewhere safe now; this page does not keep it."}}</p>
+  </section>
+  <section data-step="gone" hidden>
+    <p>{{.T "This link does not work any more: it was opened already, ran out or was deleted."}}</p>
+  </section>
+</div>
+{{end}}

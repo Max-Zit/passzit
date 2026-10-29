@@ -251,6 +251,9 @@ async function fill(id, tabId) {
   armLock();
   const r = res && res.result;
   if (!r || !r.ok) throw new Error(r && r.reason === "origin" ? t("The page changed. Try again.") : t("No sign-in fields were found on this page."));
+  // Uses of items in shared vaults are logged for their managers (the
+  // server ignores personal items).
+  server().then((s) => call(s.server, s.token, "POST", "/api/items/" + id + "/access", { action: "fill" })).catch(() => {});
   return r;
 }
 

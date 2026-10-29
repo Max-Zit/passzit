@@ -29,7 +29,13 @@
     <h2>{{template "icon" "users"}}{{.T "Sharing and export"}}</h2>
     <label class="check"><input type="checkbox" name="shared_admins_only" value="1" {{if .Data.SharedAdminsOnly}}checked{{end}}> {{.T "Only administrators may create shared vaults"}}</label>
     <label class="check"><input type="checkbox" name="no_export" value="1" {{if .Data.NoExport}}checked{{end}}> {{.T "Users may not export their vaults"}}</label>
+    <label class="check"><input type="checkbox" name="no_sends" value="1" {{if .Data.NoSends}}checked{{end}}> {{.T "Users may not make secret links"}}</label>
     <p class="small muted">{{.T "Without export, the web vault and the extension offer no export file. Anyone who can open an item can still read and copy it: these rules prevent mistakes, they are no protection against a member with bad intent."}}</p>
+  </section>
+  <section class="panel">
+    <h2>{{template "icon" "users"}}{{.T "Four-eyes principle"}}</h2>
+    <label class="check"><input type="checkbox" name="four_eyes" value="1" {{if .Data.FourEyes}}checked{{end}}> {{.T "Sensitive administrator actions need a second administrator"}}</label>
+    <p class="small muted">{{.T "Deleting a user, resetting a second factor, making an administrator, and changing the policy, sign-in, network or company sign-in settings then wait under Approvals until another administrator approves them (within 24 hours). It takes effect only with at least two active administrators."}}</p>
   </section>
   <section class="panel">
     <h2>{{template "icon" "key"}}{{.T "Key derivation (Argon2id)"}}</h2>

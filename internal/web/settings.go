@@ -38,6 +38,9 @@ func (s *Server) showNetwork(w http.ResponseWriter, r *http.Request, status int,
 }
 
 func (s *Server) handleNetworkSave(w http.ResponseWriter, r *http.Request) {
+	if s.holdForApproval(w, r, "settings.network", "change the network and access settings", "/settings/network") {
+		return
+	}
 	n := NetworkSettings{MgmtListen: strings.TrimSpace(r.FormValue("mgmt_listen")), MgmtAllowed: netacl.Split(r.FormValue("mgmt_allowed")),
 		PublicURL: strings.TrimRight(strings.TrimSpace(r.FormValue("public_url")), "/")}
 	if err := n.Validate(); err != nil {
@@ -91,6 +94,9 @@ func formInt(r *http.Request, k string) int {
 }
 
 func (s *Server) handleSecuritySave(w http.ResponseWriter, r *http.Request) {
+	if s.holdForApproval(w, r, "settings.security", "change the sign-in and security settings", "/settings/security") {
+		return
+	}
 	x := SecuritySettings{SessionHours: formInt(r, "session_hours"), IdleMinutes: formInt(r, "idle_minutes"), MaxAttempts: formInt(r, "max_attempts"),
 		WindowMinutes: formInt(r, "window_minutes"), BlockMinutes: formInt(r, "block_minutes"), InviteDays: formInt(r, "invite_days"), ExtDays: formInt(r, "ext_days"), ExtIdleDays: formInt(r, "ext_idle_days")}
 	if err := x.Validate(); err != nil {
@@ -165,10 +171,14 @@ func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request, status int, 
 }
 
 func (s *Server) handlePolicySave(w http.ResponseWriter, r *http.Request) {
+	if s.holdForApproval(w, r, "settings.policy", "change the vault policy", "/settings/policy") {
+		return
+	}
 	p := Policy{LockMinutes: formInt(r, "lock_minutes"), ClipboardSeconds: formInt(r, "clipboard_seconds"),
 		MinPasswordLength: formInt(r, "min_password_length"), TrashDays: formInt(r, "trash_days"),
 		MaxFileMB: formInt(r, "max_file_mb"), StorageMB: formInt(r, "storage_mb"), BreachCheck: r.FormValue("breach_check") == "1",
-		SharedAdminsOnly: r.FormValue("shared_admins_only") == "1", NoExport: r.FormValue("no_export") == "1"}
+		SharedAdminsOnly: r.FormValue("shared_admins_only") == "1", NoExport: r.FormValue("no_export") == "1",
+		NoSends: r.FormValue("no_sends") == "1", FourEyes: r.FormValue("four_eyes") == "1"}
 	p.KDF.Alg = "argon2id"
 	p.KDF.M, p.KDF.T, p.KDF.P = formInt(r, "kdf_m")*1024, formInt(r, "kdf_t"), formInt(r, "kdf_p")
 	if err := p.Validate(); err != nil {
@@ -179,7 +189,7 @@ func (s *Server) handlePolicySave(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	s.audit(r, "settings.policy", "settings", "lock %dmin, clipboard %ds, argon2id m=%dMiB t=%d p=%d, min length %d, trash %d days, files %dMB / %dMB per user, breach check %v, shared vaults only by admins %v, no export %v",
-		p.LockMinutes, p.ClipboardSeconds, p.KDF.M/1024, p.KDF.T, p.KDF.P, p.MinPasswordLength, p.TrashDays, p.MaxFileMB, p.StorageMB, p.BreachCheck, p.SharedAdminsOnly, p.NoExport)
+	s.audit(r, "settings.policy", "settings", "lock %dmin, clipboard %ds, argon2id m=%dMiB t=%d p=%d, min length %d, trash %d days, files %dMB / %dMB per user, breach check %v, shared vaults only by admins %v, no export %v, no secret links %v, four eyes %v",
+		p.LockMinutes, p.ClipboardSeconds, p.KDF.M/1024, p.KDF.T, p.KDF.P, p.MinPasswordLength, p.TrashDays, p.MaxFileMB, p.StorageMB, p.BreachCheck, p.SharedAdminsOnly, p.NoExport, p.NoSends, p.FourEyes)
 	s.redirect(w, r, "/settings/policy", "Saved.")
 }

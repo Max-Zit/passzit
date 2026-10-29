@@ -604,7 +604,7 @@ func TestPagesRender(t *testing.T) {
 		t.Fatalf("setup page: %d", code)
 	}
 	admin := e.setupAdmin()
-	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/settings/version", "/settings/backup", "/settings/directory", "/groups", "/docs"}
+	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/settings/version", "/settings/backup", "/settings/directory", "/groups", "/approvals", "/docs"}
 	for _, p := range DocPages {
 		pages = append(pages, "/docs/"+p.Slug)
 	}

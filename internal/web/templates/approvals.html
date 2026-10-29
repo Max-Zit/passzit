@@ -1,0 +1,21 @@
+{{template "app" .}}
+{{define "content"}}
+<h1>{{.T "Approvals"}}</h1>
+<section class="panel">
+  <p class="muted">{{.T "With the four-eyes principle (Settings → Vault policy), sensitive administrator actions wait here until a second administrator approves them. Requests end after 24 hours."}}</p>
+  {{if .Data.List}}
+  <div class="table-wrap"><table>
+    <thead><tr><th>{{.T "Action"}}</th><th>{{.T "Requested by"}}</th><th class="hide-sm">{{.T "Time"}}</th><th>{{.T "State"}}</th><th></th></tr></thead>
+    <tbody>{{range .Data.List}}<tr>
+      <td><b>{{.Summary}}</b>{{with .Result}}<br><small class="muted">{{.}}</small>{{end}}</td>
+      <td>{{.RequestedBy}}</td>
+      <td class="hide-sm nowrap">{{$.Time .RequestedAt}}</td>
+      <td>{{if eq .Status "pending"}}<span class="badge warn">{{$.T "waiting"}}</span>{{else if eq .Status "approved"}}<span class="badge ok">{{$.T "approved"}}</span> <small class="muted">{{.DecidedBy}}</small>{{else if eq .Status "rejected"}}<span class="badge">{{$.T "rejected"}}</span> <small class="muted">{{.DecidedBy}}</small>{{else if eq .Status "failed"}}<span class="badge bad">{{$.T "failed"}}</span>{{else}}<span class="badge">{{$.T "expired"}}</span>{{end}}</td>
+      <td class="actions nowrap">{{if eq .Status "pending"}}{{if ne .RequestedBy $.Data.Me}}
+        <form method="post" action="/approvals/{{.ID}}/approve" class="inline" data-confirm="{{$.T "Approve: %s?" .Summary}}"><button class="primary sm">{{template "icon" "check"}}{{$.T "Approve"}}</button></form>{{end}}
+        <form method="post" action="/approvals/{{.ID}}/reject" class="inline"><button class="ghost sm">{{template "icon" "x"}}{{$.T "Reject"}}</button></form>{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<p class="muted">{{.T "Nothing waits for approval."}}</p>{{end}}
+</section>
+{{end}}

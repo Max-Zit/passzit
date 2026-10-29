@@ -759,6 +759,9 @@ func (s *Server) handleDirectory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSSOSave(w http.ResponseWriter, r *http.Request) {
+	if s.holdForApproval(w, r, "settings.sso", "change single sign-on", "/settings/directory") {
+		return
+	}
 	old := s.SSO(r.Context())
 	c := SSOSettings{Protocol: r.FormValue("protocol"), Label: strings.TrimSpace(r.FormValue("label")), Issuer: strings.TrimSpace(r.FormValue("issuer")),
 		ClientID: strings.TrimSpace(r.FormValue("client_id")), ClientSecret: old.ClientSecret, MetadataURL: strings.TrimSpace(r.FormValue("metadata_url")),
@@ -811,6 +814,9 @@ func (s *Server) ldapFromForm(r *http.Request) LDAPSettings {
 }
 
 func (s *Server) handleLDAPSave(w http.ResponseWriter, r *http.Request) {
+	if s.holdForApproval(w, r, "settings.ldap", "change the directory check", "/settings/directory") {
+		return
+	}
 	c := s.ldapFromForm(r)
 	if err := c.Validate(); err != nil {
 		s.redirectErr(w, r, "/settings/directory", err.Error())

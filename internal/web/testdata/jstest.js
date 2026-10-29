@@ -7,6 +7,7 @@ import { siteOf, match } from "/ext/domain.js";
 import * as tr from "/static/pz/transfer.js";
 import * as totp from "/static/pz/totp.js";
 import * as sshkey from "/static/pz/sshkey.js";
+import * as sl from "/static/pz/sendlink.js";
 
 const out = {};
 try {
@@ -99,9 +100,16 @@ try {
   out.totp = tv;
   // SSH keys made in the browser are checked by Go
   out.ssh = await sshkey.generate("test@passzit");
+  // secret links: open again, with and without a password
+  const s1 = await sl.sealSend({ text: "hello" }, "");
+  out.send1 = (await sl.openSend(s1.id, s1.fragment, "", s1.data)).text === "hello" && s1.auth === "";
+  const s2 = await sl.sealSend({ text: "pw" }, "secret pass");
+  let wrongPw = false;
+  try { await sl.openSend(s2.id, s2.fragment, "other", s2.data); } catch (e) { wrongPw = true; }
+  out.send2 = wrongPw && (await sl.openSend(s2.id, s2.fragment, "secret pass", s2.data)).text === "pw" && s2.auth === await sl.authFor(s2.id, s2.fragment, "secret pass") && s2.auth.length === 43;
   // every page script and extension module must at least parse
   out.syntax = [];
-  for (const m of ["/static/pz/vault.js", "/static/pz/auth.js", "/static/pz/account.js", "/static/pz/genpage.js", "/static/pz/genui.js", "/static/pz/common.js", "/static/pz/sharing.js", "/static/pz/keys.js",
+  for (const m of ["/static/pz/vault.js", "/static/pz/auth.js", "/static/pz/account.js", "/static/pz/genpage.js", "/static/pz/genui.js", "/static/pz/common.js", "/static/pz/sharing.js", "/static/pz/keys.js", "/static/pz/sends.js", "/static/pz/sendlink.js", "/static/pz/emergency.js",
     "/ext/popup.js", "/ext/background.js", "/ext/client.js", "/ext/ext.js", "/ext/domain.js"]) {
     try { await import(m); } catch (e) { if (e instanceof SyntaxError) out.syntax.push(m + ": " + e.message); }
   }

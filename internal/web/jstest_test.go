@@ -131,6 +131,7 @@ func TestJavaScriptCrypto(t *testing.T) {
 		JSSealedTo                          string `json:"jsSealedTo"`
 		FileSealed                          string `json:"fileSealed"`
 		FileRoundTrip                       bool   `json:"fileRoundTrip"`
+		Send1, Send2                        bool
 		Recovery, RecoveryParsed            string
 		Fingerprint                         string
 		AccountRoundTrip                    bool
@@ -195,6 +196,9 @@ func TestJavaScriptCrypto(t *testing.T) {
 	}
 	if len(got.Sites)+len(got.Matches) > 0 {
 		t.Errorf("domain matching: %v %v", got.Sites, got.Matches)
+	}
+	if !got.Send1 || !got.Send2 {
+		t.Errorf("secret links: %v %v", got.Send1, got.Send2)
 	}
 	if !got.AccountRoundTrip || !got.GenPassword || !got.GenPhrase || !got.Uniform || !got.UUID {
 		t.Errorf("browser checks: %+v", got)

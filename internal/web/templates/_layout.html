@@ -15,7 +15,7 @@
 </head>{{end}}
 
 {{define "app"}}{{template "head" .}}
-<body class="app" data-lang="{{.Lang}}" data-asset="{{.Asset}}" data-lock="{{.LockMinutes}}" data-clip="{{.ClipboardSeconds}}">
+<body class="app" data-lang="{{.Lang}}" data-asset="{{.Asset}}" data-lock="{{.LockMinutes}}" data-clip="{{.ClipboardSeconds}}" data-email="{{with .User}}{{.Email}}{{end}}">
 <aside class="side" id="side">
   <a class="brand" href="/vault">{{template "logo"}}<span>Pass<b>Zit</b></span></a>
   <nav>
@@ -27,6 +27,7 @@
     <span class="navlabel">{{.T "Administration"}}</span>
     <a href="/users" class="{{if eq .Nav "users"}}on{{end}}">{{template "icon" "users"}}{{.T "Users"}}</a>
     <a href="/groups" class="{{if eq .Nav "groups"}}on{{end}}">{{template "icon" "layers"}}{{.T "Groups"}}</a>
+    <a href="/approvals" class="{{if eq .Nav "approvals"}}on{{end}}">{{template "icon" "check"}}{{.T "Approvals"}}</a>
     <a href="/audit" class="{{if eq .Nav "audit"}}on{{end}}">{{template "icon" "audit"}}{{.T "Audit log"}}</a>
     <a href="/settings/policy" class="{{if eq .Nav "settings"}}on{{end}}">{{template "icon" "settings"}}{{.T "Settings"}}</a>
     {{end}}
