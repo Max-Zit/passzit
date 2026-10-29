@@ -477,7 +477,7 @@ async function deleteFolder() {
 let noShow = false; // "use" rights: secrets may be copied or filled, not shown
 
 function renderDetail() {
-  if (S.editing) return renderEditor();
+  if (S.editing) return S.editing.choose ? renderChooser() : renderEditor();
   const it = S.items.get(S.selected);
   noShow = !!it && useOnly(it);
   curItem = it || null;
@@ -639,14 +639,44 @@ function totpField(secret) {
 
 // ---- editor
 
-function startEdit(it) {
-  const base = it && it.data ? JSON.parse(JSON.stringify(it.data)) : { type: "login", name: "", login: { username: "", password: "", urls: [""] }, notes: "", fields: [], favorite: false, folder: S.view === "folder" ? S.folder : "" };
+// KINDS are the choices for a new item: the type and, for devices, the
+// program that opens the connection.
+const KINDS = [
+  { key: "web", label: "Website login", hint: "User name and password of a website", icon: "link", type: "login" },
+  { key: "rdp", label: "Remote Desktop (RDP)", hint: "Windows computers and servers", icon: "monitor", type: "login", tool: "rdp" },
+  { key: "ssh", label: "SSH with a password", hint: "Linux servers, switches and routers", icon: "terminal", type: "login", tool: "ssh" },
+  { key: "sshkey", label: "SSH key", hint: "A key pair for SSH sign-in", icon: "key", type: "sshkey", tool: "ssh" },
+  { key: "winbox", label: "WinBox (MikroTik)", hint: "MikroTik routers and switches", icon: "router", type: "login", tool: "winbox" },
+  { key: "note", label: "Secure note", hint: "Encrypted text", icon: "note", type: "note" },
+  { key: "card", label: "Card", hint: "Payment card", icon: "card", type: "card" },
+  { key: "identity", label: "Identity", hint: "Name, address and contact details", icon: "user", type: "identity" },
+];
+
+// startEdit opens the editor; a new item first asks what kind it is
+// (kind: one of KINDS), except in the list of one type.
+function startEdit(it, kind) {
+  if (!it && !kind) {
+    const k = KINDS.find((x) => x.type === S.view && x.type !== "login");
+    if (!k) { S.editing = { choose: true }; render(); return; }
+    kind = k;
+  }
+  const base = it && it.data ? JSON.parse(JSON.stringify(it.data)) : { type: kind.type, name: "", login: { username: "", password: "", urls: [""] }, notes: "", fields: [], favorite: false, folder: S.view === "folder" ? S.folder : "" };
+  if (!it && kind.tool) base.connect = { tool: kind.tool, host: "", port: 0 };
   if (!base.login) base.login = { username: "", password: "", urls: [""] };
   if (!base.login.urls || !base.login.urls.length) base.login.urls = [""];
   S.editing = { item: it, data: base };
   render();
-  const first = document.querySelector("#vdetail input[name=name]");
+  const first = document.querySelector(base.connect && base.connect.tool && !it ? "#vdetail input[name=connect_host]" : "#vdetail input[name=name]");
   if (first) first.focus();
+}
+
+function renderChooser() {
+  return el("div", { class: "stack" },
+    el("h2", { text: t("New item") }),
+    el("p", { class: "muted", text: t("What do you want to save?") }),
+    el("div", { class: "kinds" }, ...KINDS.map((k) => el("button", { type: "button", class: "kind", onclick: () => startEdit(null, k) },
+      icon(k.icon), el("span", null, el("b", { text: t(k.label) }), el("small", { text: t(k.hint) }))))),
+    el("div", { class: "row vactions" }, button(t("Cancel"), { class: "ghost", onclick: () => { S.editing = null; render(); } })));
 }
 
 function renderEditor() {
@@ -732,6 +762,8 @@ function renderEditor() {
     el("div", { class: "grid2" }, el("label", null, t("Open with"), cTool), el("label", null, t("Port"), cPort)),
     el("label", null, t("Address"), cHost), cUserRow,
     el("small", { class: "muted", text: t("The browser extension opens it with the PassZit helper on this computer. A monitoring page that names the device (WatchZit) shows its logins too.") }));
+  // A device login may take its address as the name.
+  if (cn.tool) { name.required = false; name.placeholder = t("Empty: the address"); }
   const parts = { login: loginPart, card: cardPart, identity: identityPart, sshkey: sshPart };
   const showParts = () => {
     for (const [key, part] of Object.entries(parts)) part.hidden = d.type !== key;
@@ -763,7 +795,7 @@ function renderEditor() {
     el("div", { class: "grid2" }, el("label", null, t("Type"), type), el("label", null, t("Folder"), folder)),
     el("label", null, t("Name"), name),
     editable.length > 1 ? el("label", null, t("Vault"), vaultSel) : null,
-    loginPart, cardPart, identityPart, sshPart, connectPart,
+    ...(cn.tool ? [connectPart, loginPart] : [loginPart, connectPart]), cardPart, identityPart, sshPart,
     el("label", null, t("Notes"), notes),
     el("div", null, el("label", { text: t("More fields") }), fields, button(t("Add a field"), { class: "ghost sm", icon: "plus", onclick: () => addField({ name: "", value: "", hidden: false }) })),
     el("label", { class: "check" }, fav, " " + t("Favorite")),
@@ -805,6 +837,7 @@ function renderEditor() {
       out.connect = { tool: cTool.value, host, port: +cPort.value || 0 };
       if (out.type === "sshkey" && cUser.value.trim()) out.connect.user = cUser.value.trim();
     }
+    if (!out.name && out.connect) out.name = out.connect.host;
     if (!out.name) { err.textContent = t("Enter a name."); err.hidden = false; return; }
     save.disabled = true;
     try {

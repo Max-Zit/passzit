@@ -404,6 +404,12 @@ input.sep { width: 4em; display: inline-block; }
 .healthscore { font-size: 20px; }
 .vactions { gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .veditor h2 { margin: 0; }
+.kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.kind { display: flex; align-items: center; justify-content: flex-start; width: 100%; gap: 12px; text-align: left; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); cursor: pointer; font: inherit; }
+.kind:hover, .kind:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
+.kind > svg { width: 22px; height: 22px; flex: none; color: var(--accent); }
+.kind b { display: block; font-size: 14px; }
+.kind small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .rows { display: grid; gap: 8px; margin: 4px 0 8px; }
 .rowline { display: flex; gap: 6px; align-items: center; }
 .rowline input { flex: 1; min-width: 0; }
