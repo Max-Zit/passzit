@@ -1,0 +1,39 @@
+[Unit]
+Description=PassZit server (password manager: web vault, console, extension API)
+Documentation=https://github.com/Max-Zit/passzit
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/passzit/server.env
+ExecStart=/usr/bin/passzit-server --data-dir /var/lib/passzit
+User=passzit
+Group=passzit
+StateDirectory=passzit
+StateDirectoryMode=0700
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/passzit
+# Ports below 1024 (e.g. 443), nothing else.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+MemoryDenyWriteExecute=true
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

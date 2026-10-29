@@ -6,6 +6,9 @@
 <meta name="color-scheme" content="light dark">
 <title>{{.T .Title}} · PassZit</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#4f46e5">
+<link rel="apple-touch-icon" href="/static/icon-512.png">
 <link rel="stylesheet" href="/static/app.css?v={{.Asset}}">
 <script src="/static/app.js?v={{.Asset}}" defer></script>
 {{block "scripts" .}}{{end}}
@@ -77,6 +80,8 @@
   <a href="/settings/policy" class="{{if eq .Title "Vault policy"}}on{{end}}">{{template "icon" "vault"}}<span>{{.T "Vault policy"}}<small>{{.T "Auto-lock, clipboard, key derivation"}}</small></span></a>
   <a href="/settings/security" class="{{if eq .Title "Sign-in and security"}}on{{end}}">{{template "icon" "lock"}}<span>{{.T "Sign-in and security"}}<small>{{.T "Sessions, invitations, blocked addresses"}}</small></span></a>
   <a href="/settings/network" class="{{if eq .Title "Network and access"}}on{{end}}">{{template "icon" "network"}}<span>{{.T "Network and access"}}<small>{{.T "Console port, allowed networks, public address"}}</small></span></a>
+  <a href="/settings/backup" class="{{if eq .Title "Console backup"}}on{{end}}">{{template "icon" "disk"}}<span>{{.T "Console backup"}}<small>{{.T "Daily encrypted backups, SFTP copy"}}</small></span></a>
+  <a href="/settings/version" class="{{if eq .Title "Updates and server"}}on{{end}}">{{template "icon" "download"}}<span>{{.T "Updates and server"}}<small>{{.T "New versions, time zone, restart"}}</small></span></a>
 </nav>{{end}}
 
 {{define "qr"}}<svg class="qr" viewBox="0 0 {{.Size}} {{.Size}}" role="img" aria-label="QR"><rect width="{{.Size}}" height="{{.Size}}" fill="#fff"/>{{range .Cells}}<rect x="{{.X}}" y="{{.Y}}" width="1.02" height="1.02" fill="#000"/>{{end}}</svg>{{end}}

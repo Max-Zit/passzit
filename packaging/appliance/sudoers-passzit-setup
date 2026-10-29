@@ -1,0 +1,1 @@
+pzadmin ALL=(root) NOPASSWD: /usr/local/sbin/passzit-setup

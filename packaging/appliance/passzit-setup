@@ -1,0 +1,123 @@
+#!/bin/sh
+# PassZit appliance setup menu (on the server's own screen, as root via
+# sudo). Network and time zone go through the same root helper as the web
+# console, so the checks and the automatic undo are the same.
+DATA=/var/lib/passzit
+HELPER=$DATA/helper
+T="PassZit appliance"
+
+msg() { whiptail --title "$T" --msgbox "$1" 16 74; }
+
+# ask_helper JSON: hands a request to the helper and shows its answer.
+ask_helper() {
+    mkdir -p "$HELPER"
+    before=$(stat -c %Y "$HELPER/result.json" 2>/dev/null || echo 0)
+    printf '%s' "$1" > "$HELPER/request.json.tmp" && mv "$HELPER/request.json.tmp" "$HELPER/request.json"
+    chown passzit:passzit "$HELPER/request.json" 2>/dev/null
+    # The helper starts by itself (passzit-helper.path); run it here too
+    # in case the path unit is not active.
+    /usr/bin/passzit-server --helper --data-dir "$DATA" >/dev/null 2>&1
+    i=0
+    while [ $i -lt 90 ]; do
+        now=$(stat -c %Y "$HELPER/result.json" 2>/dev/null || echo 0)
+        if [ "$now" != "$before" ] && ! grep -q '"status": "running"' "$HELPER/result.json"; then
+            break
+        fi
+        sleep 1
+        i=$((i + 1))
+    done
+    status=$(sed -n 's/.*"status": "\([^"]*\)".*/\1/p' "$HELPER/result.json")
+    text=$(sed -n 's/.*"message": "\(.*\)",*$/\1/p' "$HELPER/result.json")
+    msg "Result: $status
+
+$text"
+}
+
+current_ip() { ip -4 -o addr show scope global | awk '{print $4}' | head -1; }
+
+network() {
+    mode=$(whiptail --title "$T" --menu "Network of the appliance (now $(current_ip))" 14 74 2 \
+        dhcp "Automatic address (DHCP)" static "Fixed address" 3>&1 1>&2 2>&3) || return
+    host=$(hostname)
+    if [ "$mode" = dhcp ]; then
+        ask_helper "{\"action\":\"network\",\"requested_by\":\"setup menu\",\"network\":{\"dhcp\":true,\"hostname\":\"$host\"}}"
+        return
+    fi
+    addr=$(whiptail --title "$T" --inputbox "Address with network size (e.g. 192.168.1.20/24)" 10 74 "$(current_ip)" 3>&1 1>&2 2>&3) || return
+    gw=$(whiptail --title "$T" --inputbox "Gateway" 10 74 "$(ip -4 route show default | awk '{print $3; exit}')" 3>&1 1>&2 2>&3) || return
+    dns=$(whiptail --title "$T" --inputbox "DNS servers (one to three, separated by spaces)" 10 74 "$gw" 3>&1 1>&2 2>&3) || return
+    list=""
+    for d in $dns; do
+        case "$d" in *[!0-9.]*) msg "Not an IPv4 address: $d"; return ;; esac
+        list="$list${list:+,}\"$d\""
+    done
+    case "$addr$gw" in *[!0-9./]*) msg "Use digits, dots and the /size only."; return ;; esac
+    ask_helper "{\"action\":\"network\",\"requested_by\":\"setup menu\",\"network\":{\"dhcp\":false,\"address\":\"$addr\",\"gateway\":\"$gw\",\"dns\":[$list],\"hostname\":\"$host\"}}"
+}
+
+server_name() {
+    name=$(whiptail --title "$T" --inputbox "Server name (letters, digits, hyphens)" 10 74 "$(hostname)" 3>&1 1>&2 2>&3) || return
+    case "$name" in ""|-*|*-|*[!A-Za-z0-9-]*) msg "Use letters, digits and hyphens."; return ;; esac
+    hostnamectl set-hostname "$name" && sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$name/" /etc/hosts
+    msg "The server name is now $name."
+}
+
+time_zone() {
+    z=$(whiptail --title "$T" --inputbox "Time zone (e.g. Europe/Belgrade, Europe/Berlin, UTC)" 10 74 "$(timedatectl show -p Timezone --value)" 3>&1 1>&2 2>&3) || return
+    case "$z" in *[!A-Za-z0-9_/+-]*) msg "Not a time zone: $z"; return ;; esac
+    ask_helper "{\"action\":\"timezone\",\"requested_by\":\"setup menu\",\"timezone\":\"$z\"}"
+}
+
+console_info() {
+    tok=""
+    [ -f "$DATA/setup-token.txt" ] && tok="
+Setup token: $(cat "$DATA/setup-token.txt")
+Open the console, enter the token and create the first administrator."
+    msg "Web console: https://$(current_ip | cut -d/ -f1):8443
+$tok"
+}
+
+
+
+restore_backup() {
+    newest=$(ls -1t "$DATA"/backups/passzit-backup-*.pzb 2>/dev/null | head -1)
+    f=$(whiptail --title "$T" --inputbox "Backup file to restore (copy it to the appliance first, e.g. with scp to /tmp)" 10 74 "$newest" 3>&1 1>&2 2>&3) || return
+    [ -f "$f" ] || { msg "No such file: $f"; return; }
+    pass=$(whiptail --title "$T" --passwordbox "Passphrase of the backup" 10 74 3>&1 1>&2 2>&3) || return
+    whiptail --title "$T" --yesno "Replace the whole console (database, keys, certificates) with this backup?\n\n$f" 12 74 || return
+    work=$(mktemp -d "$DATA/restore.XXXXXX") && chown passzit "$work" && chmod 700 "$work" || { msg "Cannot prepare the restore."; return; }
+    cp "$f" "$work/backup.pzb" && printf '%s' "$pass" > "$work/pass" && chown passzit "$work/backup.pzb" "$work/pass" && chmod 600 "$work/pass"
+    systemctl stop passzit-server
+    if out=$(su passzit -s /bin/sh -c "set -a; . /etc/passzit/server.env; /usr/bin/passzit-server --data-dir $DATA --restore $work/backup.pzb --restore-passphrase-file $work/pass" 2>&1); then
+        rm -rf "$work"; systemctl start passzit-server; msg "$out"
+    else
+        rm -rf "$work"; systemctl start passzit-server; msg "The restore failed:\n\n$(echo "$out" | tail -5)"
+    fi
+}
+
+while true; do
+    c=$(whiptail --title "$T" --menu "Address: $(current_ip)   Console: https://$(current_ip | cut -d/ -f1):8443" 21 74 10 \
+        1 "Network (DHCP or fixed address)" \
+        2 "Server name" \
+        3 "Time zone" \
+        4 "Console address and setup token" \
+        5 "Allow the console from all private networks again" \
+        6 "Restart PassZit" \
+        7 "Restore a backup" \
+        8 "Command line" \
+        9 "Restart the appliance" \
+        10 "Shut down the appliance" 3>&1 1>&2 2>&3) || exit 0
+    case "$c" in
+    1) network ;;
+    2) server_name ;;
+    3) time_zone ;;
+    4) console_info ;;
+    5) su passzit -s /bin/sh -c "set -a; . /etc/passzit/server.env; /usr/bin/passzit-server --data-dir $DATA --reset-allowlist" >/dev/null 2>&1 &&
+           systemctl restart passzit-server && msg "The console allows the private networks again." || msg "That did not work; see journalctl -u passzit-server." ;;
+    6) systemctl restart passzit-server && msg "PassZit restarted." ;;
+    7) restore_backup ;;
+    8) exit 0 ;;
+    9) whiptail --title "$T" --yesno "Restart the appliance now?" 8 60 && systemctl reboot ;;
+    10) whiptail --title "$T" --yesno "Shut down the appliance now?" 8 60 && systemctl poweroff ;;
+    esac
+done

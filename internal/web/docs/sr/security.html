@@ -1,0 +1,39 @@
+<h1>Kako PassZit štiti vaše lozinke</h1>
+<p class="lead">PassZit je napravljen tako da ukraden server, baza ili rezervna kopija ne otkriju ništa: server čuva samo šifrovane podatke i nikada ne dobija vašu glavnu lozinku niti ključ koji bi mogao da iskoristi.</p>
+
+<h2 id="e2e">Šifrovanje s kraja na kraj</h2>
+<ol>
+  <li>Vaš pregledač od glavne lozinke pravi <b>glavni ključ</b> pomoću <b>Argon2id</b> (podrazumevano 64 MiB memorije i 3 prolaza — namerno sporo, da bi i pogađanje bilo sporo). Nasumična so za svaki nalog čini svaki rezultat jedinstvenim.</li>
+  <li>Iz glavnog ključa pregledač izvodi dva različita ključa: <b>ključ za prijavu</b>, koji se šalje serveru kao dokaz da znate lozinku, i <b>ključ za omotavanje</b>, koji nikada ne napušta pregledač.</li>
+  <li>Ključ za omotavanje otvara vaš <b>ključ naloga</b> — nasumičan 256-bitni ključ koji server čuva samo šifrovan. Ključ naloga otvara ključ vašeg <b>trezora</b>, a ključ trezora šifruje svaku <b>stavku</b> algoritmom AES-256-GCM.</li>
+  <li>Sve u vezi sa stavkom je šifrovano: naziv, korisničko ime, lozinka, sajtovi, beleške, polja, fascikla i istorija. Server vidi samo da stavka postoji, njenu veličinu i kada je menjana.</li>
+</ol>
+<p>Server ključ za prijavu još jednom heširuje argon2id-om pre čuvanja. Čak ni ključ za prijavu ne pomaže napadaču: iz njega se ne može izračunati ključ za omotavanje.</p>
+<p>Svaki nalog ima i X25519 par ključeva; služiće za deljenje trezora sa drugim korisnicima (u narednim verzijama), a da server ne može da pročita deljene ključeve.</p>
+
+<h2 id="recovery">Zaboravljena glavna lozinka</h2>
+<p>Pošto server nikada ne zna glavnu lozinku, niko je ne može resetovati. Postoje dva puta nazad u trezor:</p>
+<ul>
+  <li><b>Ključ za oporavak</b> (32 slova i cifre). Otvara drugu kopiju ključa naloga i omogućava da izaberete novu glavnu lozinku. Napravite ga u delu <i>Moj nalog</i>, odštampajte ili zapišite i čuvajte van računara. Za oporavak je potreban i drugi faktor.</li>
+  <li>Bez ključa za oporavak trezor je izgubljen. Administrator može da obriše nalog i ponovo vas pozove — sa praznim trezorom.</li>
+</ul>
+
+<h2 id="2fa">Prijava u dva koraka</h2>
+<p>Svaki nalog mora da ima aplikaciju za autentifikaciju (TOTP). Ukradena glavna lozinka sama ne prijavljuje nikoga. Sačuvajte deset kodova za oporavak: svaki jednom zamenjuje aplikaciju. Administrator može da resetuje drugi faktor korisniku koji je izgubio i jedno i drugo.</p>
+
+<h2 id="browser">U pregledaču</h2>
+<ul>
+  <li>Otključani ključevi se čuvaju samo u memoriji i, šifrovani ključem koji zna samo sesija na serveru, u memoriji sesije ove kartice. Zaključavanje, odjava ili kraj sesije ih čine neupotrebljivim.</li>
+  <li>Trezor se zaključava posle vremena neaktivnosti iz pravila; kopirane lozinke se brišu iz klipborda posle 30 sekundi (podrazumevano).</li>
+  <li>Stranice koriste strogu politiku sadržaja (CSP): izvršavaju se samo PassZit-ove skripte, ništa se ne učitava sa drugih servera.</li>
+</ul>
+
+<h2 id="limits">Iskrene granice</h2>
+<ul>
+  <li>JavaScript web trezora dolazi sa vašeg servera. Neko ko potpuno kontroliše server mogao bi da pošalje izmenjen kod i uhvati glavne lozinke koje se posle toga unesu. Štitite server kao svaki drugi kritičan sistem; ekstenzije pregledača donose sopstveni kod koji server ne može da menja.</li>
+  <li>Zlonamerni softver na vašem računaru može da pročita šta kucate i šta pregledač prikazuje. Održavajte uređaje ažurnim.</li>
+  <li>Slaba glavna lozinka može da se pogodi iz ukradene baze — sporo, ali može. Koristite dugu frazu.</li>
+</ul>
+
+<h2 id="server">Zaštita servera</h2>
+<p>Samo HTTPS, nalozi samo uz pozivnicu, blokiranje adresa posle neuspelih prijava, kratke sesije, lista dozvoljenih mreža, dnevnik revizije povezan heševima koji pokazuje svaku izmenu i kolačići koje skripte ne mogu da pročitaju niti drugi sajtovi da pošalju.</p>

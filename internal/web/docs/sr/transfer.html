@@ -1,0 +1,31 @@
+<h1>Uvoz i izvoz</h1>
+<p class="lead">Prelazak na PassZit ili prenos podataka negde drugde: fajlovi se čitaju i pišu u vašem pregledaču. Server uvek dobija samo šifrovane stavke.</p>
+
+<h2 id="import">Uvoz</h2>
+<ol>
+  <li>Izvezite lozinke iz starog programa (vidi ispod).</li>
+  <li>U trezoru izaberite <b>Alati → Uvoz</b> i izaberite fajl. PassZit prepoznaje format i pokazuje koliko je stavki i fascikli pronašao i koliko ih već postoji u vašem trezoru.</li>
+  <li>Izaberite da li zadržavate fascikle iz fajla ili sve stavljate u novu fasciklu, i da li preskačete stavke koje već postoje u trezoru. Zatim <b>Uvoz</b>.</li>
+  <li><b>Obrišite izvezeni fajl</b> starog programa — u njemu su vaše lozinke nešifrovane.</li>
+</ol>
+<table>
+  <tr><th>Odakle</th><th>Kako se tamo izvozi</th></tr>
+  <tr><td>Chrome, Edge, Brave, Opera, Vivaldi</td><td>Menadžer lozinki → Podešavanja → Izvoz lozinki (CSV)</td></tr>
+  <tr><td>Firefox</td><td>about:logins → … → Izvoz lozinki (CSV)</td></tr>
+  <tr><td>Safari</td><td>File → Export → Passwords (CSV)</td></tr>
+  <tr><td>Bitwarden</td><td>Tools → Export vault → <i>.json</i> ili <i>.csv</i>, <b>ne</b> šifrovana varijanta</td></tr>
+  <tr><td>KeePass 2</td><td>File → Export → KeePass XML (2.x)</td></tr>
+  <tr><td>KeePassXC</td><td>Database → Export → CSV file (ili XML)</td></tr>
+  <tr><td>1Password</td><td>File → Export → CSV</td></tr>
+  <tr><td>LastPass</td><td>Advanced options → Export (CSV)</td></tr>
+  <tr><td>Drugi programi</td><td>CSV fajl sa nazivima kolona kao što su <i>name, url, username, password, notes</i> obično radi.</td></tr>
+</table>
+<p>Preuzimaju se prijave, bezbedne beleške, sajtovi, sopstvena polja, fascikle (i ugnežđene fascikle KeePass-a), omiljene stavke i TOTP tajne; iz Bitwardena i kartice, identiteti i SSH ključevi. Priloženi fajlovi nisu deo ovih izvoza: priložite ih ponovo u PassZit-u.</p>
+
+<h2 id="export">Izvoz</h2>
+<p><b>Alati → Izvoz</b> traži vašu glavnu lozinku i nudi dva formata:</p>
+<ul>
+  <li><b>Šifrovana PassZit datoteka (preporučeno)</b> — zaštićena lozinkom koju sami birate (Argon2id i AES-256-GCM, kao trezor). Koristite je kao sopstvenu rezervnu kopiju; može se ponovo uvesti u PassZit. Bez njene lozinke fajl se ne može otvoriti.</li>
+  <li><b>CSV, nešifrovano</b> — za prelazak na drugi program. Svako ko dobije ovaj fajl može da pročita sve lozinke: obrišite ga odmah posle prelaska.</li>
+</ul>
+<p>Uvozi i izvozi se beleže u dnevniku revizije (broj stavki, nikada njihov sadržaj); nešifrovani izvoz je posebno označen.</p>

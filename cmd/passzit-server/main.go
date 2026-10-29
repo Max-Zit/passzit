@@ -18,12 +18,15 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 
 	"github.com/max-zit/passzit/internal/auth"
+	"github.com/max-zit/passzit/internal/backup"
+	"github.com/max-zit/passzit/internal/helper"
 	"github.com/max-zit/passzit/internal/logfile"
 	"github.com/max-zit/passzit/internal/netacl"
 	"github.com/max-zit/passzit/internal/store"
@@ -59,6 +62,9 @@ func run() error {
 	resetACL := flag.Bool("reset-allowlist", false, "allow the console again from the private networks (10/8, 172.16/12, 192.168/16, fc00::/7) and exit")
 	unblock := flag.String("unblock-ip", "", "lift the sign-in block of an address (or \"all\") and exit")
 	showVersion := flag.Bool("version", false, "print the version and exit")
+	runHelper := flag.Bool("helper", false, "root helper: handle a request of the console (updates, time zone, network) and exit; started by passzit-helper.service")
+	restoreFile := flag.String("restore", "", "restore this backup file (database and data files) and exit; stop the server first")
+	restorePass := flag.String("restore-passphrase-file", "", "file with the passphrase of the backup (or set PASSZIT_BACKUP_PASSPHRASE)")
 	flag.Parse()
 
 	if *showVersion {
@@ -70,6 +76,19 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if *runHelper {
+		// Its own log in a directory only root can write.
+		out := io.Writer(os.Stdout)
+		if lw, err := logfile.Open("/var/log/passzit-helper/helper.log", 0o644); err == nil {
+			_ = os.Chmod("/var/log/passzit-helper", 0o755) // #nosec G302 -- the console reads it, only root writes
+			defer lw.Close()
+			out = io.MultiWriter(os.Stdout, lw)
+		}
+		hlog := slog.New(slog.NewTextHandler(out, nil))
+		h := &helper.Helper{DataDir: *dataDir, CacheDir: "/var/cache/passzit", EnvFile: "/etc/passzit/server.env", Binary: "/usr/bin/passzit-server",
+			Run: helper.RunCommand, Log: func(format string, args ...any) { hlog.Info(fmt.Sprintf(format, args...)) }}
+		return h.Handle(ctx)
+	}
 
 	if err := os.MkdirAll(*dataDir, 0o700); err != nil {
 		return err
@@ -92,6 +111,9 @@ func run() error {
 	}
 	if *dbURL == "" {
 		return errors.New("database URL required (--db or PASSZIT_DB)")
+	}
+	if *restoreFile != "" {
+		return restoreBackup(ctx, *restoreFile, *restorePass, *dataDir, *dbURL)
 	}
 	st, err := store.Open(ctx, *dbURL)
 	if err != nil {
@@ -193,9 +215,15 @@ func run() error {
 		go func() { errc <- dh.ListenAndServe() }()
 		log.Warn("development HTTP console (no TLS)", "addr", *devHTTP)
 	}
+	if err := helper.WriteServerInfo(*dataDir, helper.ServerInfo{Version: version, MgmtListen: net0.MgmtListen}); err != nil {
+		log.Warn("cannot write the server information for the helper", "err", err)
+	}
 	log.Info("PassZit server started", "version", version)
 
 	go srv.RunHousekeeping(ctx)
+	if !*devDB {
+		go srv.RunUpdates(ctx)
+	}
 
 	select {
 	case <-ctx.Done():
@@ -241,4 +269,32 @@ func startEmbeddedDB(dir string) (*embeddedpostgres.EmbeddedPostgres, string, er
 		return nil, "", err
 	}
 	return pg, fmt.Sprintf("postgres://postgres:postgres@127.0.0.1:%d/passzit?sslmode=disable", port), nil
+}
+
+// restoreBackup puts a backup back (server stopped): the database in one
+// transaction, then the data files. The server migrates to its own version
+// when it starts.
+func restoreBackup(ctx context.Context, file, passFile, dataDir, dbURL string) error {
+	pass := os.Getenv("PASSZIT_BACKUP_PASSPHRASE")
+	if passFile != "" {
+		b, err := os.ReadFile(passFile) // #nosec G304 -- the administrator names the file
+		if err != nil {
+			return err
+		}
+		pass = strings.TrimRight(string(b), "\r\n")
+	}
+	f, err := os.Open(file) // #nosec G304 -- the administrator names the file
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	m, err := backup.Restore(ctx, f, pass, dataDir, func(ctx context.Context, r io.Reader) error {
+		return store.RestoreDump(ctx, dbURL, r)
+	})
+	if err != nil {
+		return fmt.Errorf("restore: %w", err)
+	}
+	fmt.Printf("Restored the backup of %s (PassZit %s, %d files). Start the server now.\n",
+		m.Created.Local().Format("2006-01-02 15:04"), m.ServerVersion, len(m.Files))
+	return nil
 }

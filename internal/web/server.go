@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
@@ -46,6 +47,10 @@ type Server struct {
 	setupToken string
 	// DataDir is the server's data directory.
 	DataDir string
+	// HelperAvailable replaces the check for the root helper (tests).
+	HelperAvailable func() bool
+	upd             updateState
+	backups         backupRunner
 }
 
 // New creates the server; settings are loaded from the database.
@@ -296,6 +301,16 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	sub, _ := fs.Sub(staticFS, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(gzipStatic(sub, http.FileServer(http.FS(sub))))))
+	mux.HandleFunc("GET /sw.js", func(w http.ResponseWriter, r *http.Request) {
+		b, err := fs.ReadFile(sub, "sw.js")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write(b)
+	})
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/static/favicon.svg", http.StatusMovedPermanently)
 	})
@@ -376,6 +391,19 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /settings/policy", s.handlePolicySave)
 	admin("GET /settings/network", s.handleNetwork)
 	admin("POST /settings/network", s.handleNetworkSave)
+	admin("GET /settings/version", s.handleVersion)
+	admin("POST /settings/version/check", s.handleVersionCheck)
+	admin("POST /settings/version/install", s.handleVersionInstall)
+	admin("POST /settings/version/settings", s.handleVersionSettings)
+	admin("POST /settings/timezone", s.handleTimeZone)
+	admin("POST /settings/restart", s.handleRestart)
+	admin("POST /settings/server-network", s.handleServerNetwork)
+	admin("GET /settings/backup", s.handleBackupSettings)
+	admin("POST /settings/backup", s.handleBackupSave)
+	admin("POST /settings/backup/run", s.handleBackupRun)
+	admin("POST /settings/backup/test", s.handleBackupTest)
+	admin("POST /settings/backup/delete", s.handleBackupDelete)
+	admin("GET /settings/backup/file/{name}", s.handleBackupDownload)
 	admin("GET /settings/security", s.handleSecurity)
 	admin("POST /settings/security", s.handleSecuritySave)
 	admin("POST /settings/security/unblock", s.handleUnblock)
@@ -399,7 +427,7 @@ func cacheStatic(next http.Handler) http.Handler {
 
 // csp allows only the server's own files; 'wasm-unsafe-eval' lets the page
 // compile the Argon2id WebAssembly module (it does not allow eval).
-const csp = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+const csp = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
 
 // secure sets the security headers of every response.
 func (s *Server) secure(next http.Handler) http.Handler {
@@ -531,11 +559,23 @@ func storeErr(err error) string {
 	return err.Error()
 }
 
-// RunHousekeeping empties old trash and forgets old removals, hourly.
+// RunHousekeeping empties old trash, forgets old removals and starts the
+// scheduled console backup.
 func (s *Server) RunHousekeeping(ctx context.Context) {
-	t := time.NewTicker(time.Hour)
+	t := time.NewTicker(5 * time.Minute)
 	defer t.Stop()
-	for {
+	// Backups are checked every 5 minutes, the trash and sessions hourly
+	// (and at the start).
+	for first := true; ; first = false {
+		s.RunBackups(ctx)
+		if !first && s.now().Minute() >= 5 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+			continue
+		}
 		days := s.policy(ctx).TrashDays
 		if n, err := s.store.Housekeeping(ctx, s.now().AddDate(0, 0, -days)); err != nil {
 			s.log.Warn("housekeeping failed", "err", err)
@@ -555,3 +595,8 @@ func (s *Server) RunHousekeeping(ctx context.Context) {
 type uiMsg string
 
 func (m uiMsg) Error() string { return string(m) }
+
+func init() {
+	// Not in Go's built-in list; browsers want it for the app manifest.
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
+}

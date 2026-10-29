@@ -1,0 +1,34 @@
+<h1>Prvi koraci</h1>
+<p class="lead">PassZit je menadžer lozinki koji držite na svom serveru. Svaki korisnik ima šifrovani trezor za prijave, bezbedne beleške, kartice, identitete, SSH ključeve i fajlove; sve se šifruje i dešifruje u pregledaču samog korisnika, pa server — i svako ko ga ukrade — nikada ne vidi nijednu lozinku.</p>
+
+<h2 id="what">Šta PassZit radi</h2>
+<table>
+  <tr><th>Oblast</th><th>Šta dobijate</th></tr>
+  <tr><td>Trezor</td><td>Prijave (korisničko ime, lozinka, sajtovi, jednokratni kodovi), bezbedne beleške, kartice, identiteti, SSH ključevi, priloženi fajlovi, sopstvena polja, fascikle, omiljeno, pretraga, korpa, istorija lozinki i izveštaj o zdravlju lozinki. <a href="/docs/vault">Rad sa trezorom</a></td></tr>
+  <tr><td>Generator</td><td>Nasumične lozinke i fraze koje se lako kucaju, napravljene u vašem pregledaču.</td></tr>
+  <tr><td>Bezbednost</td><td>Šifrovanje s kraja na kraj glavnom lozinkom koju znate samo vi, obavezna prijava u dva koraka, ključ za oporavak, automatsko zaključavanje. <a href="/docs/security">Kako PassZit štiti vaše lozinke</a></td></tr>
+  <tr><td>Administracija</td><td>Nalozi samo uz pozivnicu, uloge, dnevnik revizije koji otkriva svaku izmenu, pravila za zaključavanje, klipbord i izvođenje ključa. <a href="/docs/admin">Korisnici, pozivnice i podešavanja</a></td></tr>
+  <tr><td>Ekstenzije pregledača</td><td>Chrome, Edge, Opera, Brave, Vivaldi i Firefox popunjavaju i čuvaju prijave. <a href="/docs/extension">Ekstenzija pregledača</a></td></tr>
+  <tr><td>Uvoz i izvoz</td><td>Iz Chrome-a, Edge-a, Firefox-a, Bitwardena, KeePass-a, 1Password-a, LastPass-a i CSV-a; šifrovani izvoz. <a href="/docs/transfer">Uvoz i izvoz</a></td></tr>
+  <tr><td>Rad servera</td><td>Instalacija jednom komandom, Linux paketi, appliance image-i, potpisana samoažuriranja i šifrovane dnevne rezervne kopije. <a href="/docs/install">Instalacija servera</a></td></tr>
+</table>
+
+<h2 id="first">Prvi koraci</h2>
+<ol>
+  <li><b>Instalirajte server</b> i otvorite njegovu adresu u pregledaču (<a href="/docs/install">Instalacija servera</a>).</li>
+  <li><b>Podesite PassZit:</b> unesite token za podešavanje iz direktorijuma podataka servera, svoju e-mail adresu i glavnu lozinku. Pregledač pravi vaše ključeve — to traje sekundu.</li>
+  <li><b>Podesite prijavu u dva koraka</b> aplikacijom za autentifikaciju i sačuvajte kodove za oporavak.</li>
+  <li><b>Napravite ključ za oporavak</b> i čuvajte ga van računara. To je jedini put nazad ako zaboravite glavnu lozinku.</li>
+  <li><b>Dodajte prvu prijavu</b> preko <i>Nova stavka</i> i <b>pozovite kolege</b> u delu <i>Korisnici</i>.</li>
+</ol>
+
+<div class="callout warn"><p><b>Zapamtite glavnu lozinku.</b> PassZit je nikada ne zna. Niko — ni administrator, ni MaxZit — ne može da otvori vaš trezor bez glavne lozinke ili vašeg ključa za oporavak.</p></div>
+
+<h2 id="screens">Ekrani</h2>
+<ul>
+  <li><b>Trezor</b> — vaše stavke. Levo filteri (sve, omiljeno, tipovi, fascikle, korpa), u sredini lista sa pretragom, desno izabrana stavka.</li>
+  <li><b>Generator lozinki</b> — napravite lozinku bez čuvanja.</li>
+  <li><b>Moj nalog</b> — ime, vreme zaključavanja i klipborda, glavna lozinka, ključ za oporavak, kodovi za oporavak i vaše sesije.</li>
+  <li><b>Korisnici, Dnevnik revizije, Podešavanja</b> — za administratore.</li>
+</ul>
+<p>Dugme <b>Zaključaj</b> na vrhu odmah zaključava trezor; on se zaključava i sam posle vremena neaktivnosti koje je odredio administrator (podrazumevano 15 minuta).</p>

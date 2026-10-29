@@ -1,33 +1,63 @@
 <h1>Installing the server</h1>
-<p class="lead">PassZit is one program, <code>passzit-server</code>, with a PostgreSQL database. Packages for Debian/Ubuntu and RHEL, a one-line installer and ready appliance images follow with version 0.5; until then the server is built from source.</p>
+<p class="lead">PassZit is one program, <code>passzit-server</code>, with a PostgreSQL database. Install it with the one-line installer, from the Linux packages, or as a ready appliance image.</p>
 
 <h2 id="requirements">Requirements</h2>
 <ul>
-  <li>Linux (Debian 12, Ubuntu 22.04/24.04, RHEL 9 or compatible), 1 CPU, 1 GB RAM, a few GB of disk.</li>
-  <li>PostgreSQL 14 or newer.</li>
-  <li>A name and a certificate the browsers trust — browser extensions refuse self-signed certificates. Built-in Let's Encrypt support follows later.</li>
+  <li>Linux: Debian 12+, Ubuntu 22.04+, AlmaLinux or Rocky Linux 9+ — x86_64 or arm64; 1 CPU, 1 GB RAM, a few GB of disk.</li>
+  <li>PostgreSQL 14 or newer (the installer sets it up on the same server).</li>
+  <li>For browser extensions and phones: a name and a certificate the browsers trust — extensions refuse self-signed certificates. Put PassZit behind your reverse proxy with a certificate, or replace the files in <code>/var/lib/passzit/tls</code>.</li>
 </ul>
+
+<h2 id="installer">One-line installer</h2>
+<p>As root on a fresh server:</p>
+<pre>curl -fsSL https://github.com/Max-Zit/passzit/releases/latest/download/install.sh | sudo sh</pre>
+<p>It installs PostgreSQL, downloads the newest release, <b>checks its signature</b> (only releases signed with the PassZit release key are installed), creates a database with a random password, starts the service and prints the address and the <b>setup token</b>. Open <code>https://SERVER:8443</code>, enter the token and create the first administrator with two-factor sign-in.</p>
+<p>Options (<code>sh -s -- OPTIONS</code> when piped): <code>--version X</code> a certain release, <code>--db URL</code> an existing PostgreSQL database, <code>--no-auto-updates</code> leave the operating system's automatic security updates off, <code>--source URL</code> a mirror. Running the installer again updates PassZit and keeps all data.</p>
+
+<h2 id="packages">Linux packages</h2>
+<p>Every release has <code>.deb</code> and <code>.rpm</code> packages for amd64 and arm64. They install the program, a hardened systemd service <code>passzit-server</code> (own user, read-only system, no extra privileges), the root helper for updates and <code>/etc/passzit/server.env</code>. Set <code>PASSZIT_DB</code> there and start the service:</p>
+<pre>sudo apt install ./passzit-server_VERSION_amd64.deb
+sudo nano /etc/passzit/server.env      # PASSZIT_DB=postgres://…
+sudo systemctl start passzit-server</pre>
+
+<h2 id="appliance">Appliance</h2>
+<p>The appliance images (OVA for VMware, QCOW2 for Proxmox/KVM, VHDX for Hyper-V, ISO for any machine) contain Debian, PostgreSQL and PassZit, ready to start. Sign in on the VM's console as <code>pzadmin</code> (first password <code>passzit</code>, changed at the first sign-in): a menu sets the network, the server name and the time zone, shows the setup token and restores backups. Only ports 22 (SSH) and 8443 are open.</p>
+
+<h2 id="updates">Updates</h2>
+<p><b>Settings → Updates and server</b> shows the running and the newest version. <b>Install</b> hands the update to the root helper: it checks the signature again, backs up the database and the program, installs the package and checks that the server comes back — if not, it puts the old version and the database back by itself. Automatic installation in a chosen hour can be switched on there.</p>
+<p>The <b>update channel</b> is <i>Stable</i> (the newest release) or <i>Testing</i>, which also offers release candidates before they become stable — use it on a test server. A mirror or a local folder can be set with <code>PASSZIT_UPDATE_SOURCE</code> in <code>server.env</code>; its releases must still carry the signature.</p>
+
+<h2 id="backup">Backup and restore</h2>
+<p><b>Settings → Console backup</b> writes a backup every day (and on request) to <code>/var/lib/passzit/backups</code>: the database with all vaults, the secret key of the server and the console certificate. A backup is <b>always encrypted</b> with a passphrase you set (AES-256) — keep it somewhere else. Each backup can also be copied to an SFTP folder on another server; the first test of the connection shows the server's key fingerprint to trust.</p>
+<p>To restore, stop the service and run the restore on the new or repaired server (the appliance menu does it for you):</p>
+<pre>sudo systemctl stop passzit-server
+sudo -u passzit sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit -restore /path/passzit-backup-….pzb -restore-passphrase-file /path/pass.txt'
+sudo systemctl start passzit-server</pre>
+<p>The restore replaces the whole database in one step — if anything fails nothing changes. A newer PassZit migrates the restored database when it starts.</p>
+
+<h2 id="app">Using the web vault as an app</h2>
+<p>Browsers offer to <b>install</b> the web vault (Chrome, Edge: the install icon in the address bar; phones: <i>Add to home screen</i>). It then opens in its own window. Nothing of the vault is stored for offline use: without the server you see a short "offline" page.</p>
 
 <h2 id="build">Building from source</h2>
 <pre>git clone https://github.com/Max-Zit/passzit
 cd passzit
 go run ./tools/buildwasm          # Argon2id for the browser
-go build -o passzit-server ./cmd/passzit-server</pre>
-
-<h2 id="run">Running</h2>
-<pre>export PASSZIT_DB=postgres://passzit:SECRET@localhost/passzit
+go build -o passzit-server ./cmd/passzit-server
+export PASSZIT_DB=postgres://passzit:SECRET@localhost/passzit
 ./passzit-server --data-dir /var/lib/passzit --listen :8443</pre>
-<p>On the first start the server creates its secret key (<code>secret.key</code>), a certificate and a <b>setup token</b> (<code>setup-token.txt</code>) in the data directory. Open <code>https://SERVER:8443</code>, enter the token and create the first administrator.</p>
-<div class="callout warn"><p>Back up the database <b>and</b> <code>secret.key</code>. The vaults are encrypted by the users' keys, but the server's own secrets (second factors, session keys) need <code>secret.key</code>.</p></div>
+<p>On the first start the server creates its secret key (<code>secret.key</code>), a certificate and a <b>setup token</b> (<code>setup-token.txt</code>) in the data directory.</p>
+<div class="callout warn"><p>Without the console backup, back up the database <b>and</b> <code>secret.key</code> yourself. The vaults are encrypted by the users' keys, but the server's own secrets (second factors, session keys) need <code>secret.key</code>.</p></div>
 
 <h2 id="options">Command-line options</h2>
 <table>
   <tr><th>Option</th><th>Meaning</th></tr>
-  <tr><td><code>--data-dir</code></td><td>certificates, secret key, logs (default <code>/var/lib/passzit</code>)</td></tr>
+  <tr><td><code>--data-dir</code></td><td>certificates, secret key, backups, logs (default <code>/var/lib/passzit</code>)</td></tr>
   <tr><td><code>--db</code></td><td>PostgreSQL URL (or <code>PASSZIT_DB</code>)</td></tr>
   <tr><td><code>--listen</code></td><td>address and port, overriding the saved setting</td></tr>
+  <tr><td><code>--restore FILE</code></td><td>restore a console backup and exit (service stopped); passphrase in <code>PASSZIT_BACKUP_PASSPHRASE</code> or <code>--restore-passphrase-file</code></td></tr>
   <tr><td><code>--reset-allowlist</code></td><td>allow the private networks again and exit</td></tr>
   <tr><td><code>--unblock-ip</code></td><td>release a blocked address (or <code>all</code>) and exit</td></tr>
+  <tr><td><code>--version</code></td><td>print the version and exit</td></tr>
   <tr><td><code>--dev-embedded-db</code></td><td>a private PostgreSQL in the data directory — for tests and demos only</td></tr>
   <tr><td><code>--dev-no-2fa</code></td><td>sign in without the second factor — test and demo servers only, needs <code>--dev-embedded-db</code>; every page shows a warning</td></tr>
 </table>

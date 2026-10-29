@@ -1,0 +1,45 @@
+<h1>Korisnici, pozivnice i podešavanja</h1>
+<p class="lead">Administratori upravljaju nalozima i pravilima servera. Imaju trezor kao i svi ostali — i, kao i svi ostali, ne mogu da čitaju tuđe trezore.</p>
+
+<h2 id="roles">Uloge</h2>
+<table>
+  <tr><th>Uloga</th><th>Sme da</th></tr>
+  <tr><td>Korisnik</td><td>koristi sopstveni trezor</td></tr>
+  <tr><td>Administrator</td><td>uz to poziva korisnike i upravlja njima, čita dnevnik revizije i menja podešavanja</td></tr>
+</table>
+
+<h2 id="invite">Pozivanje korisnika</h2>
+<p>Nalozi se prave <b>samo uz pozivnicu</b>. U delu <b>Korisnici → Pozovi korisnika</b> unesite e-mail adresu i ulogu. PassZit jednom prikazuje link pozivnice; pošaljite ga toj osobi. Link radi jednom i onoliko dana koliko je podešeno u <i>Prijava i bezbednost</i> (podrazumevano 7). Pozvana osoba bira glavnu lozinku i podešava prijavu u dva koraka. Otvorene pozivnice se mogu povući.</p>
+
+<h2 id="manage">Upravljanje korisnicima</h2>
+<ul>
+  <li><b>Onemogućite</b> korisnika da biste odmah zaustavili sve prijave (otvorene sesije se završavaju). Ponovno omogućavanje vraća sve.</li>
+  <li><b>Resetujte prijavu u dva koraka</b> korisniku koji je izgubio telefon i kodove za oporavak.</li>
+  <li><b>Obriši nalog</b> trajno uklanja korisnika sa ličnim trezorom — za potvrdu ukucajte adresu.</li>
+</ul>
+<p>Administratori ne mogu da vide niti resetuju glavne lozinke. Korisnik koji ju je zaboravio, a nema ključ za oporavak, može samo da počne iznova sa praznim trezorom: obrišite nalog i pozovite ga ponovo. Lista korisnika pokazuje ko je napravio ključ za oporavak.</p>
+
+<h2 id="policy">Pravila trezora</h2>
+<ul>
+  <li><b>Zaključavanje trezora posle neaktivnosti</b> (15 minuta) i <b>brisanje kopiranih lozinki</b> (30 sekundi) — korisnici mogu da izaberu kraća vremena.</li>
+  <li><b>Najmanja dužina glavne lozinke</b> (12) za nove naloge i promenjene lozinke.</li>
+  <li><b>Pražnjenje korpe</b> posle određenog broja dana (30).</li>
+  <li><b>Fajlovi:</b> najveći priloženi fajl (10 MB) i prostor za fajlove po korisniku (500 MB). Fajlovi se šifruju u pregledaču; server ne može da ih pročita.</li>
+  <li><b>Provera curenja</b> (podrazumevano isključena): omogućava korisnicima da uporede lozinke sa listom Have I Been Pwned. Server tada pita api.pwnedpasswords.com sa prefiksom heša od pet znakova i dopunom — za to mu treba pristup internetu, a nijedna strana ne saznaje lozinku.</li>
+  <li><b>Izvođenje ključa (Argon2id):</b> memorija, prolazi i trake. Jača podešavanja otežavaju napad na ukradene podatke, ali usporavaju svako otključavanje; nalozi prelaze na nova podešavanja pri sledećem otključavanju.</li>
+</ul>
+
+<h2 id="security">Prijava i bezbednost</h2>
+<p>Trajanje sesije i istek zbog neaktivnosti, koliko neuspelih prijava blokira adresu i na koliko dugo (dvostruko za ponovljena blokiranja) i koliko dugo važe pozivnice. Blokirane adrese se oslobađaju ovde ili na serveru komandom <code>passzit-server --unblock-ip ADRESA</code>.</p>
+
+<h2 id="network">Mreža i pristup</h2>
+<p>Adresa na kojoj server sluša, mreže kojima je dozvoljeno povezivanje (ostale se odbijaju pre TLS-a) i javna adresa koja se koristi u linkovima pozivnica. Ako sebi zaključate pristup, pokrenite <code>passzit-server --reset-allowlist</code> na serveru.</p>
+
+<h2 id="audit">Dnevnik revizije</h2>
+<p>Prijave, neuspeli pokušaji, blokiranja, pozivnice, izmene korisnika, podešavanja, promene glavne lozinke i oporavci beleže se sa vremenom, korisnikom i adresom. Svaki unos sadrži heš prethodnog; stranica pokazuje da li je lanac netaknut. Dnevnik nikada ne sadrži lozinke ni sadržaj stavki.</p>
+
+<h2 id="backup">Rezervna kopija konzole</h2>
+<p>Dnevne, uvek šifrovane rezervne kopije celog servera, uz opcionu kopiju u SFTP folder; preuzimanje, brisanje i vraćanje opisani su u <a href="/docs/install#backup">Instalaciji servera</a>. Svaka rezervna kopija, preuzimanje i izmena upisuju se u dnevnik revizije.</p>
+
+<h2 id="updates">Ažuriranja i server</h2>
+<p>Nove verzije (samo potpisana izdanja), kanal ažuriranja (Stabilni ili Testni), automatska instalacija u izabranom satu, vremenska zona i restart servisa. Na appliance-u se ovde podešava i mreža servera. Detalji: <a href="/docs/install#updates">Instalacija servera</a>.</p>

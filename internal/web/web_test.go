@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -19,8 +20,11 @@ import (
 	"time"
 
 	"github.com/max-zit/passzit/internal/auth"
+	"github.com/max-zit/passzit/internal/backup"
+	"github.com/max-zit/passzit/internal/helper"
 	"github.com/max-zit/passzit/internal/store"
 	"github.com/max-zit/passzit/internal/testdb"
+	"github.com/max-zit/passzit/internal/update"
 	"github.com/max-zit/passzit/internal/vaultcrypto"
 )
 
@@ -598,7 +602,7 @@ func TestPagesRender(t *testing.T) {
 		t.Fatalf("setup page: %d", code)
 	}
 	admin := e.setupAdmin()
-	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/docs"}
+	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/settings/version", "/settings/backup", "/docs"}
 	for _, p := range DocPages {
 		pages = append(pages, "/docs/"+p.Slug)
 	}
@@ -970,4 +974,108 @@ func (e *env) inviteUser(admin *client, email, pw string) *client {
 	u.must("POST", "/api/invite", body, nil)
 	u.enroll()
 	return u
+}
+
+func TestConsoleBackupRestore(t *testing.T) {
+	e := newEnv(t)
+	e.srv.DataDir = t.TempDir()
+	_ = os.WriteFile(filepath.Join(e.srv.DataDir, store.SecretKeyFile), bytes.Repeat([]byte{7}, 32), 0o600)
+	admin := e.setupAdmin()
+	avid := admin.personal()
+	item := newUUID()
+	admin.must("PUT", "/api/items/"+item, putItemReq{VaultID: avid, Data: admin.sealItem(avid, item, map[string]any{"name": "backed up"})}, nil)
+	// no passphrase: no backup
+	ctx := context.Background()
+	e.srv.runBackup(ctx, "test")
+	if b := e.srv.backupSettings(ctx); b.LastOK || !strings.Contains(b.LastError, "passphrase") {
+		t.Fatalf("backup without passphrase: %+v", b)
+	}
+	if code, _ := admin.form("/settings/backup", url.Values{"hour": {"2"}, "keep": {"3"}, "passphrase": {"short"}, "passphrase2": {"short"}}); code != http.StatusSeeOther {
+		t.Fatalf("short passphrase: %d", code)
+	}
+	if b := e.srv.backupSettings(ctx); b.Passphrase != "" {
+		t.Fatal("short passphrase saved")
+	}
+	pass := "backup passphrase 42"
+	admin.form("/settings/backup", url.Values{"enabled": {"1"}, "hour": {"2"}, "keep": {"3"}, "passphrase": {pass}, "passphrase2": {pass}})
+	b := e.srv.backupSettings(ctx)
+	if b.Passphrase == "" || strings.Contains(b.Passphrase, pass) {
+		t.Fatalf("passphrase not sealed: %q", b.Passphrase)
+	}
+	e.srv.runBackup(ctx, "test")
+	b = e.srv.backupSettings(ctx)
+	if !b.LastOK || b.LastFile == "" {
+		t.Fatalf("backup: %+v", b)
+	}
+	files := e.srv.localBackups()
+	if len(files) != 1 || !files[0].Encrypted {
+		t.Fatalf("backups %+v", files)
+	}
+	code, raw := admin.raw("GET", "/settings/backup/file/"+files[0].Name, nil)
+	if code != http.StatusOK || !bytes.HasPrefix(raw, []byte("PZENC1\n")) {
+		t.Fatalf("download: %d", code)
+	}
+	if code, _ := admin.raw("GET", "/settings/backup/file/..%2Fsecret.key", nil); code == http.StatusOK {
+		t.Fatal("a file outside the backups was served")
+	}
+	// restore into an empty database and data directory
+	dst := t.TempDir()
+	url2 := testdb.URL(t)
+	// the target already has a schema (a server that ran before)
+	if pre, err := store.Open(ctx, url2); err != nil {
+		t.Fatal(err)
+	} else {
+		pre.Close()
+	}
+	if _, err := backup.Restore(ctx, bytes.NewReader(raw), "wrong passphrase", dst, func(ctx context.Context, r io.Reader) error { return store.RestoreDump(ctx, url2, r) }); err == nil {
+		t.Fatal("wrong passphrase restored")
+	}
+	m, err := backup.Restore(ctx, bytes.NewReader(raw), pass, dst, func(ctx context.Context, r io.Reader) error { return store.RestoreDump(ctx, url2, r) })
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if k, _ := os.ReadFile(filepath.Join(dst, store.SecretKeyFile)); !bytes.Equal(k, bytes.Repeat([]byte{7}, 32)) || m.Product != "PassZit" {
+		t.Fatalf("secret key not restored (%s)", m.Product)
+	}
+	st2, err := store.Open(ctx, url2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st2.Close()
+	if n, _ := st2.UserCount(ctx); n != 1 {
+		t.Fatalf("restored users: %d", n)
+	}
+	var items int
+	if err := st2.Pool().QueryRow(ctx, `SELECT count(*) FROM items WHERE id=$1`, item).Scan(&items); err != nil || items != 1 {
+		t.Fatalf("restored item: %d %v", items, err)
+	}
+	admin.form("/settings/backup/delete", url.Values{"name": {files[0].Name}})
+	if len(e.srv.localBackups()) != 0 {
+		t.Fatal("backup not deleted")
+	}
+}
+
+func TestUpdatePage(t *testing.T) {
+	e := newEnv(t)
+	e.srv.DataDir = t.TempDir()
+	e.srv.HelperAvailable = func() bool { return true }
+	admin := e.setupAdmin()
+	admin.form("/settings/version/settings", url.Values{"auto": {"1"}, "hour": {"4"}, "channel": {"testing"}})
+	var u UpdateSettings
+	_ = e.st.GetSetting(context.Background(), settingUpdates, &u)
+	if !u.Auto || u.Hour != 4 || u.Channel != update.ChannelTesting {
+		t.Fatalf("update settings %+v", u)
+	}
+	// nothing newer known: no installation
+	if code, _ := admin.form("/settings/version/install", url.Values{"version": {"9.9.9"}}); code != http.StatusSeeOther || helper.Pending(e.srv.DataDir) {
+		t.Fatal("an unknown version was handed to the helper")
+	}
+	e.srv.upd.latest = &update.Manifest{Product: "passzit", Version: "9.9.9"}
+	admin.form("/settings/version/install", url.Values{"version": {"9.9.9"}})
+	if !helper.Pending(e.srv.DataDir) {
+		t.Fatal("the installation was not handed to the helper")
+	}
+	if code, page := admin.get("/settings/version"); code != http.StatusOK || !strings.Contains(page, "9.9.9") {
+		t.Fatalf("version page: %d", code)
+	}
 }

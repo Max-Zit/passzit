@@ -52,7 +52,7 @@ function hostName(u) {
 function finish(it) {
   it.name = (it.name || "").trim() || hostName(it.login.urls[0] || "") || it.login.username || "(no name)";
   it.login.urls = it.login.urls.map((u) => u.trim()).filter(Boolean);
-  if (it.type === "note") it.login = { username: "", password: "", urls: [], totp: "" };
+  if (it.type !== "login") it.login = { username: "", password: "", urls: [], totp: "" };
   return it;
 }
 
@@ -119,8 +119,10 @@ export function fromBitwarden(data) {
   for (const f of data.folders || []) folders[f.id] = f.name;
   const items = [];
   for (const b of data.items || []) {
-    if (b.type !== 1 && b.type !== 2) continue; // logins and secure notes
-    const it = blankItem(b.type === 2 ? "note" : "login");
+    // 1 login, 2 secure note, 3 card, 4 identity, 5 SSH key
+    const type = { 1: "login", 2: "note", 3: "card", 4: "identity", 5: "sshkey" }[b.type];
+    if (!type) continue;
+    const it = blankItem(type);
     it.name = b.name || "";
     it.notes = b.notes || "";
     it.favorite = !!b.favorite;
@@ -130,6 +132,20 @@ export function fromBitwarden(data) {
       it.login.password = b.login.password || "";
       it.login.totp = b.login.totp || "";
       it.login.urls = (b.login.uris || []).map((u) => u.uri || "").filter(Boolean);
+    }
+    const s = (v) => (v == null ? "" : String(v));
+    if (type === "card" && b.card) {
+      const c = b.card;
+      it.card = { holder: s(c.cardholderName), number: s(c.number), expMonth: s(c.expMonth), expYear: s(c.expYear), code: s(c.code), brand: s(c.brand) };
+    }
+    if (type === "identity" && b.identity) {
+      const p = b.identity;
+      it.identity = { first: s(p.firstName), last: s(p.lastName), email: s(p.email), phone: s(p.phone), company: s(p.company), username: s(p.username),
+        address1: s(p.address1), address2: [p.address2, p.address3].filter(Boolean).join(", "), postal: s(p.postalCode), city: s(p.city), state: s(p.state), country: s(p.country) };
+    }
+    if (type === "sshkey" && b.sshKey) {
+      const k = b.sshKey;
+      it.ssh = { privateKey: s(k.privateKey), publicKey: s(k.publicKey), passphrase: "", fingerprint: s(k.keyFingerprint) };
     }
     for (const f of b.fields || []) it.fields.push({ name: f.name || "", value: f.value || "", hidden: f.type === 1 });
     items.push(finish(it));

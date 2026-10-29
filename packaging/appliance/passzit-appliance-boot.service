@@ -1,0 +1,11 @@
+[Unit]
+Description=PassZit appliance start (disk size, login screen)
+After=local-fs.target passzit-server.service
+Before=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/passzit-appliance-boot
+
+[Install]
+WantedBy=multi-user.target

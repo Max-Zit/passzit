@@ -1,0 +1,42 @@
+<h1>Rad sa trezorom</h1>
+<p class="lead">Trezor čuva vaše prijave, bezbedne beleške, kartice, identitete i SSH ključeve. Otvara se posle prijave, a posle zaključavanja ponovo glavnom lozinkom.</p>
+
+<h2 id="items">Stavke</h2>
+<ul>
+  <li><b>Prijava</b> — naziv, korisničko ime, lozinka, jedan ili više sajtova, beleške i sopstvena polja.</li>
+  <li><b>Bezbedna beleška</b> — naziv i tekst, za licencne ključeve, Wi-Fi lozinke, PIN-ove i slično.</li>
+  <li><b>Kartica</b> — vlasnik, broj, rok važenja i sigurnosni kod. Broj se prikazuje sa vrstom kartice i skriven je dok ne kliknete na oko.</li>
+  <li><b>Identitet</b> — ime, adresa, e-mail, telefon i firma, za formulare koje popunjavate iznova.</li>
+  <li><b>SSH ključ</b> — privatni i javni ključ sa opcionom lozinkom. <i>Generiši Ed25519 ključ</i> pravi novi ključ u pregledaču; javni ključ nalepite u <code>~/.ssh/authorized_keys</code> na serveru.</li>
+</ul>
+<p>Kliknite <b>Nova stavka</b>, popunite polja i <b>Sačuvaj</b>. Dugme sa kockicom pored lozinke otvara generator; <i>Koristi ovu lozinku</i> stavlja rezultat u stavku. <i>Dodatna polja</i> dodaju sopstvena polja — za tajne ih označite kao <i>Skriveno</i>.</p>
+<p>U prikazu stavke dugmad za kopiranje kopiraju korisničko ime ili lozinku; kopirane lozinke nestaju iz klipborda posle vremena iz podešavanja naloga. Oko prikazuje skrivenu vrednost. Sajtovi se otvaraju u novoj kartici.</p>
+
+<h2 id="totp">Jednokratni kodovi (prijava u dva koraka)</h2>
+<p>Prijava može da sadrži <i>Ključ autentifikatora (TOTP)</i> koji sajt pokaže kada uključite njegovu prijavu u dva koraka — nalepite tajni ključ ili celu <code>otpauth://</code> adresu. Stavka tada prikazuje trenutni šestocifreni kod i koliko sekundi još važi, spreman za kopiranje. Imajte na umu: ko otvori trezor, tada ima oba faktora; za najvažnije naloge odvojena aplikacija za autentifikaciju ih drži razdvojenim.</p>
+
+<h2 id="files">Priloženi fajlovi</h2>
+<p><b>Priloži fajl</b> u prikazu stavke dodaje fajlove kao što su ključevi, sertifikati ili skenirani dokumenti. Svaki fajl se šifruje u pregledaču sopstvenim ključem, koji se čuva u šifrovanoj stavci — server čuva samo bajtove koje ne može da pročita. Administrator određuje najveći fajl (10 MB) i prostor po korisniku (500 MB). <b>Preuzmi</b> dešifruje fajl u pregledaču; trajnim brisanjem stavke brišu se i njeni fajlovi.</p>
+
+<h2 id="health">Zdravlje lozinki</h2>
+<p><b>Zdravlje lozinki</b> u delu <i>Alati</i> prikazuje prijave sa <b>slabim</b> lozinkama, lozinke <b>ponovljene</b> na više sajtova i lozinke <b>koje nisu menjane godinu dana</b>, uz ocenu koliko je prijava u redu. Provera se izvršava u potpunosti u pregledaču.</p>
+<p>Ako ju je administrator uključio, <b>Poznata curenja podataka</b> proverava vaše lozinke na listi procurelih lozinki Have I Been Pwned. Šalje se samo prvih pet znakova SHA-1 heša svake lozinke; odgovor sadrži stotine heševa, a poklapanje se traži u pregledaču, pa ni PassZit server ni taj servis ne saznaju nijednu lozinku.</p>
+
+<h2 id="history">Istorija lozinki</h2>
+<p>Kada promenite lozinku prijave, stara se čuva u <i>Istoriji lozinki</i> stavke (poslednjih deset), šifrovana kao i sve ostalo. Stavka pokazuje kada je lozinka poslednji put promenjena.</p>
+
+<h2 id="organise">Fascikle, omiljeno, pretraga</h2>
+<ul>
+  <li><b>Fascikle:</b> + pored <i>Fascikle</i> pravi novu fasciklu; fasciklu birate u uređivaču stavke. Brisanjem fascikle stavke ostaju.</li>
+  <li><b>Omiljeno:</b> zvezdica u prikazu stavke. Omiljene stavke imaju svoj filter.</li>
+  <li><b>Pretraga</b> pretražuje nazive, korisnička imena, sajtove i beleške — u vašem pregledaču, jer samo on može da ih pročita.</li>
+</ul>
+
+<h2 id="trash">Korpa</h2>
+<p><i>Premesti u korpu</i> sklanja stavku; u <b>Korpi</b> je možete vratiti ili trajno obrisati. Stavke u korpi se automatski brišu posle broja dana iz pravila (podrazumevano 30).</p>
+
+<h2 id="devices">Više uređaja i kartica</h2>
+<p>Trezor svakih 30 sekundi proverava da li ima izmena i učitava ih. Ako je stavka izmenjena na drugom uređaju dok ste je uređivali, čuvanje se odbija uz poruku: učitajte ponovo i ponovite izmenu — ništa se ne prepisuje bez upozorenja.</p>
+
+<h2 id="generator">Generator lozinki</h2>
+<p><b>Lozinka</b> pravi nasumične znakove (dužina 8–64, sa ili bez velikih slova, cifara i simbola; znakovi koji liče jedan na drugi, kao l, 1, I, O i 0, izostavljaju se osim ako ih želite). <b>Fraza</b> spaja nasumične reči sa liste od 7 776 reči — pet reči daje oko 65 bita i mnogo se lakše kucaju. Prikazana jačina je stvarna nasumičnost rezultata.</p>

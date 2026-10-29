@@ -1,0 +1,63 @@
+<h1>Instalacija servera</h1>
+<p class="lead">PassZit je jedan program, <code>passzit-server</code>, sa PostgreSQL bazom. Instalirajte ga jednom komandom, iz Linux paketa ili kao gotov appliance image.</p>
+
+<h2 id="requirements">Zahtevi</h2>
+<ul>
+  <li>Linux: Debian 12+, Ubuntu 22.04+, AlmaLinux ili Rocky Linux 9+ — x86_64 ili arm64; 1 CPU, 1 GB RAM-a, nekoliko GB diska.</li>
+  <li>PostgreSQL 14 ili noviji (instalaciona skripta ga podešava na istom serveru).</li>
+  <li>Za ekstenzije pregledača i telefone: ime i sertifikat kome pregledači veruju — ekstenzije odbijaju samopotpisane sertifikate. Postavite PassZit iza svog reverse proxy-ja sa sertifikatom ili zamenite fajlove u <code>/var/lib/passzit/tls</code>.</li>
+</ul>
+
+<h2 id="installer">Instalacija jednom komandom</h2>
+<p>Kao root na novom serveru:</p>
+<pre>curl -fsSL https://github.com/Max-Zit/passzit/releases/latest/download/install.sh | sudo sh</pre>
+<p>Skripta instalira PostgreSQL, preuzima najnovije izdanje, <b>proverava njegov potpis</b> (instaliraju se samo izdanja potpisana PassZit ključem za izdanja), pravi bazu sa nasumičnom lozinkom, pokreće servis i ispisuje adresu i <b>token za podešavanje</b>. Otvorite <code>https://SERVER:8443</code>, unesite token i napravite prvog administratora sa prijavom u dva koraka.</p>
+<p>Opcije (<code>sh -s -- OPCIJE</code> kada se prosleđuje kroz cev): <code>--version X</code> određeno izdanje, <code>--db URL</code> postojeća PostgreSQL baza, <code>--no-auto-updates</code> ne uključuje automatska bezbednosna ažuriranja operativnog sistema, <code>--source URL</code> mirror. Ponovno pokretanje skripte ažurira PassZit i čuva sve podatke.</p>
+
+<h2 id="packages">Linux paketi</h2>
+<p>Svako izdanje ima <code>.deb</code> i <code>.rpm</code> pakete za amd64 i arm64. Oni instaliraju program, ojačan systemd servis <code>passzit-server</code> (sopstveni korisnik, sistem samo za čitanje, bez dodatnih privilegija), root helper za ažuriranja i <code>/etc/passzit/server.env</code>. Tamo podesite <code>PASSZIT_DB</code> i pokrenite servis:</p>
+<pre>sudo apt install ./passzit-server_VERZIJA_amd64.deb
+sudo nano /etc/passzit/server.env      # PASSZIT_DB=postgres://…
+sudo systemctl start passzit-server</pre>
+
+<h2 id="appliance">Appliance</h2>
+<p>Appliance image-i (OVA za VMware, QCOW2 za Proxmox/KVM, VHDX za Hyper-V, ISO za bilo koju mašinu) sadrže Debian, PostgreSQL i PassZit, spremne za pokretanje. Prijavite se na konzoli VM-a kao <code>pzadmin</code> (prva lozinka <code>passzit</code>, menja se pri prvoj prijavi): meni podešava mrežu, ime servera i vremensku zonu, prikazuje token za podešavanje i vraća rezervne kopije. Otvoreni su samo portovi 22 (SSH) i 8443.</p>
+
+<h2 id="updates">Ažuriranja</h2>
+<p><b>Podešavanja → Ažuriranja i server</b> pokazuje verziju koja radi i najnoviju verziju. <b>Instaliraj</b> predaje ažuriranje root helperu: on ponovo proverava potpis, pravi rezervnu kopiju baze i programa, instalira paket i proverava da li se server vratio — ako nije, sam vraća staru verziju i bazu. Tu se može uključiti i automatska instalacija u izabranom satu.</p>
+<p><b>Kanal ažuriranja</b> je <i>Stabilni</i> (najnovije izdanje) ili <i>Testni</i>, koji nudi i kandidate za izdanje pre nego što postanu stabilni — koristite ga na test serveru. Mirror ili lokalni folder podešava se sa <code>PASSZIT_UPDATE_SOURCE</code> u <code>server.env</code>; i njegova izdanja moraju imati potpis.</p>
+
+<h2 id="backup">Rezervna kopija i vraćanje</h2>
+<p><b>Podešavanja → Rezervna kopija konzole</b> svaki dan (i na zahtev) pravi rezervnu kopiju u <code>/var/lib/passzit/backups</code>: bazu sa svim trezorima, tajni ključ servera i sertifikat konzole. Rezervna kopija je <b>uvek šifrovana</b> lozinkom koju sami postavite (AES-256) — čuvajte je na drugom mestu. Svaka rezervna kopija može se i kopirati u SFTP folder na drugom serveru; prvi test veze pokazuje otisak ključa servera kome treba verovati.</p>
+<p>Za vraćanje zaustavite servis i pokrenite vraćanje na novom ili popravljenom serveru (appliance meni to radi umesto vas):</p>
+<pre>sudo systemctl stop passzit-server
+sudo -u passzit sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit -restore /putanja/passzit-backup-….pzb -restore-passphrase-file /putanja/lozinka.txt'
+sudo systemctl start passzit-server</pre>
+<p>Vraćanje zamenjuje celu bazu u jednom koraku — ako bilo šta ne uspe, ništa se ne menja. Novija verzija PassZit-a migrira vraćenu bazu pri pokretanju.</p>
+
+<h2 id="app">Web trezor kao aplikacija</h2>
+<p>Pregledači nude da <b>instalirate</b> web trezor (Chrome, Edge: ikona za instalaciju u adresnoj traci; telefoni: <i>Dodaj na početni ekran</i>). Tada se otvara u sopstvenom prozoru. Ništa iz trezora se ne čuva za rad bez mreže: bez servera vidite kratku stranicu „offline“.</p>
+
+<h2 id="build">Pravljenje iz izvornog koda</h2>
+<pre>git clone https://github.com/Max-Zit/passzit
+cd passzit
+go run ./tools/buildwasm          # Argon2id za pregledač
+go build -o passzit-server ./cmd/passzit-server
+export PASSZIT_DB=postgres://passzit:TAJNA@localhost/passzit
+./passzit-server --data-dir /var/lib/passzit --listen :8443</pre>
+<p>Pri prvom pokretanju server u direktorijumu podataka pravi svoj tajni ključ (<code>secret.key</code>), sertifikat i <b>token za podešavanje</b> (<code>setup-token.txt</code>).</p>
+<div class="callout warn"><p>Bez rezervne kopije konzole sami čuvajte kopiju baze <b>i</b> fajla <code>secret.key</code>. Trezori su šifrovani ključevima korisnika, ali sopstvene tajne servera (drugi faktori, ključevi sesija) zahtevaju <code>secret.key</code>.</p></div>
+
+<h2 id="options">Opcije komandne linije</h2>
+<table>
+  <tr><th>Opcija</th><th>Značenje</th></tr>
+  <tr><td><code>--data-dir</code></td><td>sertifikati, tajni ključ, rezervne kopije, logovi (podrazumevano <code>/var/lib/passzit</code>)</td></tr>
+  <tr><td><code>--db</code></td><td>PostgreSQL URL (ili <code>PASSZIT_DB</code>)</td></tr>
+  <tr><td><code>--listen</code></td><td>adresa i port, zamenjuje sačuvano podešavanje</td></tr>
+  <tr><td><code>--restore FAJL</code></td><td>vraća rezervnu kopiju konzole i izlazi (servis zaustavljen); lozinka u <code>PASSZIT_BACKUP_PASSPHRASE</code> ili <code>--restore-passphrase-file</code></td></tr>
+  <tr><td><code>--reset-allowlist</code></td><td>ponovo dozvoljava privatne mreže i izlazi</td></tr>
+  <tr><td><code>--unblock-ip</code></td><td>oslobađa blokiranu adresu (ili <code>all</code>) i izlazi</td></tr>
+  <tr><td><code>--version</code></td><td>ispisuje verziju i izlazi</td></tr>
+  <tr><td><code>--dev-embedded-db</code></td><td>privatni PostgreSQL u direktorijumu podataka — samo za testove i demo</td></tr>
+  <tr><td><code>--dev-no-2fa</code></td><td>prijava bez drugog faktora — samo test i demo serveri, zahteva <code>--dev-embedded-db</code>; svaka stranica prikazuje upozorenje</td></tr>
+</table>

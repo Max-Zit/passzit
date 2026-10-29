@@ -1,0 +1,65 @@
+name: passzit-server
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: admin
+priority: optional
+maintainer: MaxZit <office@maxzit.com>
+description: |
+  PassZit server: a self-hosted password manager with end-to-end encryption.
+  It stores the encrypted vaults of its users and serves the web vault, the
+  console and the API of the browser extensions; it never sees a master
+  password or a decrypted item.
+vendor: MaxZit
+homepage: https://github.com/Max-Zit/passzit
+license: AGPL-3.0-only
+overrides:
+  deb:
+    depends:
+      - postgresql-client
+    recommends:
+      - postgresql
+  rpm:
+    depends:
+      - postgresql
+    recommends:
+      - postgresql-server
+contents:
+  - src: ./LICENSE
+    dst: /usr/share/doc/passzit-server/copyright
+  - src: ./THIRD_PARTY_LICENSES.md
+    dst: /usr/share/doc/passzit-server/THIRD_PARTY_LICENSES.md
+  - src: ./bin/pkg/passzit-server
+    dst: /usr/bin/passzit-server
+    file_info:
+      mode: 0755
+  - src: ./packaging/linux/passzit-server.service
+    dst: /usr/lib/systemd/system/passzit-server.service
+  - src: ./packaging/linux/passzit-helper.path
+    dst: /usr/lib/systemd/system/passzit-helper.path
+  - src: ./packaging/linux/passzit-helper.service
+    dst: /usr/lib/systemd/system/passzit-helper.service
+  - src: ./packaging/appliance/passzit-setup
+    dst: /usr/share/passzit/appliance/passzit-setup
+    file_info:
+      mode: 0755
+  - src: ./packaging/appliance/passzit-appliance-boot
+    dst: /usr/share/passzit/appliance/passzit-appliance-boot
+    file_info:
+      mode: 0755
+  - src: ./packaging/appliance/passzit-appliance-boot.service
+    dst: /usr/share/passzit/appliance/passzit-appliance-boot.service
+  - src: ./packaging/appliance/passzit-menu.sh
+    dst: /usr/share/passzit/appliance/passzit-menu.sh
+  - src: ./packaging/appliance/sudoers-passzit-setup
+    dst: /usr/share/passzit/appliance/sudoers-passzit-setup
+  - src: ./packaging/appliance/sshd-passzit.conf
+    dst: /usr/share/passzit/appliance/sshd-passzit.conf
+  - src: ./packaging/linux/server.env
+    dst: /etc/passzit/server.env
+    type: config|noreplace
+    file_info:
+      mode: 0640
+scripts:
+  postinstall: ./packaging/linux/server-postinstall.sh
+  preremove: ./packaging/linux/server-preremove.sh

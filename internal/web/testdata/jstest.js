@@ -62,8 +62,11 @@ try {
   expect("lastpass", r.items.length === 2 && r.items[0].type === "note" && r.items[0].notes === "Wifi key 42" && r.items[0].favorite && r.items[1].folder === "Work/Sub", r.items);
   r = tr.detect(JSON.stringify({ encrypted: false, folders: [{ id: "f1", name: "Bank" }], items: [
     { type: 1, name: "B", folderId: "f1", favorite: true, login: { username: "u", password: "p", totp: "JBSWY3DP", uris: [{ uri: "https://b.com" }] }, fields: [{ name: "PIN", value: "1234", type: 1 }] },
-    { type: 2, name: "N", notes: "secret note" }, { type: 3, name: "card is skipped" }] }));
-  expect("bitwarden", r.items.length === 2 && r.items[0].folder === "Bank" && r.items[0].login.totp === "JBSWY3DP" && r.items[0].fields[0].hidden && r.items[1].type === "note", r.items);
+    { type: 2, name: "N", notes: "secret note" },
+    { type: 3, name: "Visa", card: { cardholderName: "Ana", brand: "Visa", number: "4111111111111111", expMonth: "7", expYear: "2030", code: "123" } },
+    { type: 4, name: "Me", identity: { firstName: "Ana", lastName: "Petrović", city: "Beograd", address2: "Sprat 2", address3: "Stan 5" } },
+    { type: 99, name: "unknown is skipped" }] }));
+  expect("bitwarden", r.items.length === 4 && r.items[0].folder === "Bank" && r.items[0].login.totp === "JBSWY3DP" && r.items[0].fields[0].hidden && r.items[1].type === "note" && r.items[2].card.number === "4111111111111111" && r.items[2].card.expYear === "2030" && r.items[2].login.username === "" && r.items[3].identity.last === "Petrović" && r.items[3].identity.address2 === "Sprat 2, Stan 5", r.items);
   r = tr.detect('<?xml version="1.0"?><KeePassFile><Meta><RecycleBinUUID>RB</RecycleBinUUID></Meta><Root><Group><UUID>R</UUID><Name>Root</Name>' +
     '<Entry><String><Key>Title</Key><Value>Top</Value></String><String><Key>Password</Key><Value ProtectInMemory="True">t</Value></String></Entry>' +
     '<Group><UUID>G</UUID><Name>Servers</Name><Entry><String><Key>Title</Key><Value>pve</Value></String><String><Key>UserName</Key><Value>root</Value></String>' +

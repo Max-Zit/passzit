@@ -1,0 +1,28 @@
+<h1>Rešavanje problema i česta pitanja</h1>
+
+<h2 id="forgot">Zaboravio sam glavnu lozinku</h2>
+<p>Iskoristite ključ za oporavak: <i>Zaboravili ste glavnu lozinku?</i> na stranici za prijavu. Bez ključa za oporavak trezor niko ne može da otvori; zamolite administratora da obriše nalog i ponovo vas pozove.</p>
+
+<h2 id="phone">Izgubio sam telefon sa aplikacijom za autentifikaciju</h2>
+<p>Prijavite se jednim od kodova za oporavak umesto koda iz aplikacije. Bez kodova administrator resetuje vaš drugi faktor; vaš trezor time nije pogođen.</p>
+
+<h2 id="blocked">„Previše neuspelih pokušaja“</h2>
+<p>Vaša adresa je blokirana posle neuspelih prijava. Sačekajte do prikazanog vremena ili zamolite administratora da je oslobodi (<i>Podešavanja → Prijava i bezbednost</i>, ili <code>passzit-server --unblock-ip ADRESA</code> na serveru).</p>
+
+<h2 id="locked">Trezor se prečesto zaključava</h2>
+<p>Zaključava se posle vremena neaktivnosti iz pravila. Administratori ga mogu povećati u <i>Podešavanja → Pravila trezora</i>; korisnici mogu da izaberu samo kraće vreme.</p>
+
+<h2 id="slow">Otključavanje traje nekoliko sekundi</h2>
+<p>To izvođenje ključa radi kako treba — ono usporava pogađanje glavnih lozinki. Na starim računarima i telefonima administrator može da smanji memoriju u pravilima (ne ispod 19 MiB).</p>
+
+<h2 id="changed">„Ovo je u međuvremenu izmenjeno na drugom uređaju“</h2>
+<p>Stavka je sačuvana negde drugde dok ste je uređivali. Kliknite <i>Učitaj ponovo</i> i ponovite izmenu.</p>
+
+<h2 id="decrypt">„Ova stavka ne može da se dešifruje“</h2>
+<p>Sačuvani podaci su oštećeni ili su izmenjeni van PassZit-a. Autentifikovano šifrovanje odbija da prikaže izmenjene podatke. Vratite stavku iz rezervne kopije baze.</p>
+
+<h2 id="js">Stranica kaže da joj treba JavaScript</h2>
+<p>Sve šifrovanje se odvija u pregledaču, pa PassZit ne može da radi bez JavaScript-a. Dozvolite skripte za PassZit adresu.</p>
+
+<h2 id="update">Ažuriranje nije uspelo</h2>
+<p>Ako nova verzija ne proradi, helper sam vraća prethodnu verziju i bazu; poruka u <i>Podešavanja → Ažuriranja i server</i> kaže šta se desilo. Detalji su u <code>/var/log/passzit-helper/helper.log</code>, a rezervne kopije iz ažuriranja u <code>/var/cache/passzit/backups</code>.</p>

@@ -8,19 +8,19 @@
 
 ## What works today
 
-- **End-to-end encryption, zero knowledge:** the browser derives keys from the master password with Argon2id (64 MiB, 3 passes), encrypts every item — name, user name, password, websites, notes — with AES-256-GCM and sends only ciphertext. The server stores an argon2id hash of a separate auth key and never sees the master password or any key it could use. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- **Web vault:** logins and secure notes, own fields, folders, favourites, search, trash, password history, auto-lock and clipboard clearing.
+- **End-to-end encryption, zero knowledge:** the browser derives keys from the master password with Argon2id (64 MiB, 3 passes), encrypts every item — name, user name, password, websites, notes, files — with AES-256-GCM and sends only ciphertext. The server stores an argon2id hash of a separate auth key and never sees the master password or any key it could use. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Web vault:** logins with one-time codes (TOTP), secure notes, cards, identities, SSH keys (Ed25519 generated in the browser), encrypted file attachments, own fields, folders, favourites, search, trash, password history, password health report with an optional breach check (k-anonymity, the password never leaves the browser), auto-lock and clipboard clearing; installable as an app.
+- **Browser extensions** for Chrome, Edge, Opera, Brave, Vivaldi and Firefox: fill logins only on the matching site (Public Suffix List), offer to save new and changed logins, generator, search, auto-lock.
+- **Import and export:** Chrome, Edge, Firefox, Safari, Bitwarden, KeePass/KeePassXC, 1Password, LastPass and generic CSV; encrypted PassZit export.
 - **Password generator:** random passwords and passphrases from the EFF word list.
 - **Accounts:** only by invitation; mandatory two-factor sign-in (TOTP + recovery codes); recovery key for a forgotten master password; master-password change without re-encrypting the items.
-- **Administration:** roles, vault policy (lock time, clipboard, key derivation, minimum length, trash), sessions and sign-in blocks, IP allow-list, hash-chained audit log, built-in user guide; 14 languages.
+- **Administration:** roles, vault policy (lock time, clipboard, key derivation, minimum length, trash, file limits, breach check), sessions and sign-in blocks, IP allow-list, hash-chained audit log, built-in user guide; 14 languages.
+- **Operation:** one-line installer with signature check, deb/rpm packages (amd64, arm64), appliance images (OVA, QCOW2, VHDX, ISO), signed self-update with rollback and Stable/Testing channels, encrypted daily console backups with SFTP copy and restore.
 
 ## Planned
 
-- **Browser extensions** that fill and save logins, generate strong passwords and work with the web vault (next).
-- Import from browsers and other password managers, encrypted export.
-- Cards, identities, SSH keys, TOTP codes, encrypted attachments, password health with a breach check that never sends the password.
-- **Shared vaults** for teams with per-user rights (view, use, edit, manage), **time-limited and one-time access**, secret links, emergency access.
-- Linux packages, appliance images, signed self-update, built-in Let's Encrypt, WebAuthn/passkeys, LDAP/SSO sign-in.
+- **Shared vaults** for teams with per-user rights (view, use, edit, manage), groups, LDAP/SSO sign-in, WebAuthn/passkeys.
+- **Time-limited and one-time access**, secret links, emergency access, per-item access log, four-eyes approval.
 - Opening devices from [WatchZit](https://github.com/Max-Zit/watchzit) with stored credentials.
 
 ## Building

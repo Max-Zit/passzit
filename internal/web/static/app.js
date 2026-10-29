@@ -176,3 +176,11 @@ document.addEventListener("change", function (ev) {
   ev.target.form.querySelectorAll('input[type=checkbox][name="' + name + '"]').forEach(function (c) { c.checked = ev.target.checked; });
 });
 
+
+// Pages with data-autorefresh (a running backup) reload until it is done.
+if (document.querySelector("[data-autorefresh]")) setTimeout(function () { location.reload(); }, 5000);
+
+// The service worker makes the web vault installable as an app (HTTPS only).
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("/sw.js").catch(function () { /* not essential */ });
+}

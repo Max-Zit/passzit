@@ -37,3 +37,9 @@
 
 <h2 id="audit">Audit log</h2>
 <p>Sign-ins, failed attempts, blocks, invitations, user changes, settings, master-password changes and recovery are recorded with time, user and address. Every entry contains a hash of the previous one; the page shows whether the chain is intact. The log never contains passwords or item contents.</p>
+
+<h2 id="backup">Console backup</h2>
+<p>Daily, always encrypted backups of the whole server with an optional copy to an SFTP folder; download, delete and restore are described in <a href="/docs/install#backup">Installing the server</a>. Every backup, download and change is in the audit log.</p>
+
+<h2 id="updates">Updates and server</h2>
+<p>New versions (only signed releases), the update channel (Stable or Testing), automatic installation in a chosen hour, the time zone and a restart of the service. On the appliance the server's network is set here as well. Details: <a href="/docs/install#updates">Installing the server</a>.</p>

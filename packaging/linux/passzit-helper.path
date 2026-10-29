@@ -1,0 +1,9 @@
+[Unit]
+Description=Hand requests of the PassZit console (updates, time zone, network) to the root helper
+
+[Path]
+PathExists=/var/lib/passzit/helper/request.json
+Unit=passzit-helper.service
+
+[Install]
+WantedBy=multi-user.target
