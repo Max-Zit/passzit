@@ -30,6 +30,13 @@ async function attempt(name, fn) {
 }
 
 try {
+  // A freshly installed Firefox add-on gets its host permissions a moment later.
+  let granted = false;
+  for (let i = 0; i < 100 && !granted; i++) {
+    granted = await api.permissions.contains({ origins: [new URL(site).origin + "/*"] });
+    if (!granted) await sleep(100);
+  }
+  step("host permission", granted);
   // wrong password first: refused, nothing stored
   await attempt("wrong password refused", async () => {
     try { await signIn(server, email, pw + "x", "Harness"); } catch (e) { return e.message; }

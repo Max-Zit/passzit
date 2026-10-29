@@ -179,6 +179,23 @@ async function activeTab() {
   return tab;
 }
 
+// tabURL is the address of a tab's page. Firefox gives tabs.get no URL
+// without the "tabs" permission; then the page itself tells it (the same
+// script access the filling needs).
+async function tabURL(tab) {
+  if (!tab) return "";
+  if (tab.url) return tab.url;
+  // Right after a page loads, Firefox may not run scripts in it yet: retry briefly.
+  for (let i = 0; i < 5; i++) {
+    try {
+      const [r] = await api.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, func: () => location.href });
+      if (r && typeof r.result === "string" && r.result) return r.result;
+    } catch (e) { /* not yet */ }
+    await new Promise((res) => setTimeout(res, 200));
+  }
+  return "";
+}
+
 // ---- filling: a function that runs in the page's isolated world. It
 // checks that the page is still the one the login was chosen for, fills
 // only visible, editable fields, and reports what it did.
@@ -220,10 +237,10 @@ async function fill(id, tabId) {
   const it = S.items.get(id);
   if (!it || !it.data || !it.data.login) throw new Error(t("Not found."));
   const tab = tabId ? await api.tabs.get(tabId) : await activeTab();
-  if (!tab || !tab.url) throw new Error(t("This page cannot be filled."));
-  const page = parse(tab.url);
+  const url = await tabURL(tab);
+  const page = parse(url);
   if (!page) throw new Error(t("This page cannot be filled."));
-  const fits = (it.data.login.urls || []).some((u) => match(u, tab.url));
+  const fits = (it.data.login.urls || []).some((u) => match(u, url));
   if (!fits) throw new Error(t("This login does not belong to this website."));
   const [res] = await api.scripting.executeScript({
     target: { tabId: tab.id, frameIds: [0] },
@@ -272,12 +289,13 @@ async function syncCapture() {
 
 async function capture(msg, sender) {
   if (!sender.tab || sender.frameId !== 0 || !msg.password || msg.password.length > 1000) return;
-  const page = parse(sender.tab.url || msg.url);
+  const pageURL = sender.url || sender.tab.url || "";
+  const page = parse(pageURL);
   if (!page) return;
   const username = String(msg.username || "").slice(0, 500);
   let update = "";
   if (S.keys) {
-    for (const m of matchesFor(sender.tab.url)) {
+    for (const m of matchesFor(pageURL)) {
       const it = S.items.get(m.id);
       if ((it.data.login.username || "") === username) {
         if (it.data.login.password === msg.password) return; // already saved
@@ -351,8 +369,7 @@ const handlers = {
     if (!S.keys) return { locked: true };
     armLock();
     await maybeSync();
-    const tab = await activeTab();
-    const url = tab && tab.url || "";
+    const url = await tabURL(await activeTab());
     const p = parse(url);
     return { url, host: p ? p.hostname : "", secure: p ? p.protocol === "https:" : false, matches: p ? matchesFor(url) : [], pending: S.pending.map((x, i) => ({ i, host: x.host, username: x.username, update: !!x.update })) };
   },
@@ -396,7 +413,8 @@ api.commands.onCommand.addListener(async (cmd) => {
   await restore();
   if (!S.keys) { await api.action.openPopup().catch(() => {}); return; }
   const tab = await activeTab();
-  const m = tab && tab.url ? matchesFor(tab.url) : [];
+  const url = await tabURL(tab);
+  const m = url ? matchesFor(url) : [];
   if (m.length === 1) await fill(m[0].id, tab.id).catch(() => {});
   else await api.action.openPopup().catch(() => {});
 });

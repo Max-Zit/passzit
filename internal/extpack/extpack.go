@@ -170,8 +170,11 @@ func writeManifest(o Options) error {
 			"data_collection_permissions": map[string]any{"required": []string{"none"}}}}
 	}
 	if o.Test {
-		m["host_permissions"] = []string{"https://*/*", "http://*/*"} // as granted by a user who lets the extension offer to save
+		m["host_permissions"] = []string{"https://*/*", "http://*/*", "http://127.0.0.1/*", "http://localhost/*"} // as granted by a user who lets the extension offer to save
 		m["name"] = "PassZit (test build)"
+		// Firefox's WebDriver BiDi may not open extension pages: a test page
+		// links to the harness instead.
+		m["web_accessible_resources"] = []map[string]any{{"resources": []string{"test/*"}, "matches": []string{"http://127.0.0.1/*"}}}
 	}
 	if o.Key != "" {
 		m["key"] = o.Key
