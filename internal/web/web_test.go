@@ -809,3 +809,42 @@ func TestExtensionTokens(t *testing.T) {
 		t.Fatalf("idle device still signed in: %d", c)
 	}
 }
+
+func TestBatchImportAndEvents(t *testing.T) {
+	e := newEnv(t)
+	admin := e.setupAdmin()
+	vid := admin.personal()
+	var batch []store.NewItem
+	for i := 0; i < 3; i++ {
+		id := newUUID()
+		batch = append(batch, store.NewItem{ID: id, VaultID: vid, Data: admin.sealItem(vid, id, map[string]any{"name": fmt.Sprintf("imported %d", i)})})
+	}
+	var rev revResp
+	admin.must("POST", "/api/items", batchReq{Items: batch}, &rev)
+	if s := admin.sync(0); len(s.Items) != 3 {
+		t.Fatalf("items after import: %d", len(s.Items))
+	}
+	// the same ids again: all or nothing
+	if code, _ := admin.do("POST", "/api/items", batchReq{Items: batch}, nil); code != http.StatusConflict {
+		t.Fatalf("duplicate batch: %d", code)
+	}
+	if code, _ := admin.do("POST", "/api/items", batchReq{}, nil); code != http.StatusBadRequest {
+		t.Fatalf("empty batch: %d", code)
+	}
+	// export and import events end up in the audit log, unknown ones are refused
+	admin.must("POST", "/api/account/event", eventReq{Event: "export.plain", Count: 3}, nil)
+	admin.must("POST", "/api/account/event", eventReq{Event: "import", Count: 3}, nil)
+	if code, _ := admin.do("POST", "/api/account/event", eventReq{Event: "anything", Count: 1}, nil); code != http.StatusBadRequest {
+		t.Fatalf("unknown event: %d", code)
+	}
+	list, err := e.st.AuditEntries(context.Background(), store.AuditFilter{Query: "UNENCRYPTED", Limit: 10})
+	if err != nil || len(list) != 1 {
+		t.Fatalf("audit of the plain export: %v %v", list, err)
+	}
+	// the master password check before an export
+	a, _ := admin.authKey(admin.email, admin.pw)
+	admin.must("POST", "/api/account/verify", verifyReq{CurrentAuth: a}, nil)
+	if code, _ := admin.do("POST", "/api/account/verify", verifyReq{CurrentAuth: b64(vaultcrypto.Random(32))}, nil); code != http.StatusForbidden {
+		t.Fatalf("wrong master password accepted: %d", code)
+	}
+}

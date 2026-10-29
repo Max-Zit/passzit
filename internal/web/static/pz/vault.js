@@ -7,6 +7,8 @@ import {
   loadKeys, saveKeys, lockNow, clearKeys, unlockWithPassword, kdfWeaker, wireLogout,
 } from "./common.js";
 import { generatorPanel } from "./genui.js";
+import { detect, importEncrypted, exportEncrypted, exportCSV, dedupeKey } from "./transfer.js";
+import { authFor } from "./common.js";
 
 const root = document.getElementById("pz-vault");
 const S = {
@@ -286,7 +288,10 @@ function renderFilters() {
       el("button", { type: "button", class: "iconbtn sm", title: t("New folder"), "aria-label": t("New folder"), onclick: newFolder }, icon("plus"))));
   const folders = [...S.folders.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, undefined, { sensitivity: "base" }));
   for (const [id, f] of folders) nav.append(link("folder", f.name, "folder", id));
-  nav.append(el("span", { class: "navlabel" }), link("trash", t("Trash"), "trash"));
+  nav.append(el("span", { class: "navlabel" }), link("trash", t("Trash"), "trash"),
+    el("span", { class: "navlabel", text: t("Tools") }),
+    el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openImport(); } }, icon("upload"), el("span", { text: t("Import") })),
+    el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openExport(); } }, icon("download"), el("span", { text: t("Export") })));
   return nav;
 }
 
@@ -546,14 +551,15 @@ function renderEditor() {
     ev.preventDefault();
     err.hidden = true;
     const old = e.item && e.item.data;
-    const out = {
+    // Keep what this editor does not show (for example the TOTP secret of an import).
+    const out = Object.assign({}, old || {}, {
       type: type.value, name: name.value.trim(), folder: folder.value, favorite: fav.checked, notes: notes.value,
       fields: [...fields.children].map((r) => { const i = r.querySelectorAll("input"); return { name: i[0].value.trim(), value: i[1].value, hidden: i[2].checked }; }).filter((f) => f.name || f.value),
       history: old && old.history ? old.history.slice() : [],
       passwordChanged: old && old.passwordChanged || "",
-    };
+    });
     if (out.type === "login") {
-      out.login = { username: user.value.trim(), password: pass.value, urls: [...urls.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean) };
+      out.login = Object.assign({}, old && old.login || {}, { username: user.value.trim(), password: pass.value, urls: [...urls.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean) });
       const oldPw = old && old.login ? old.login.password : "";
       if (oldPw && oldPw !== out.login.password) {
         out.history.push({ password: oldPw, changed: new Date().toISOString() });
@@ -590,6 +596,188 @@ function openGenerator(onUse) {
   d.addEventListener("close", () => d.remove());
   document.body.append(d);
   d.showModal();
+}
+
+// ---- import and export (all in this browser; the server gets ciphertext)
+
+function dialog(title, ...body) {
+  const d = el("dialog", { class: "dlg wide" });
+  d.append(el("div", { class: "row spread" }, el("h2", { text: title }),
+    el("button", { type: "button", class: "iconbtn", "aria-label": t("Close"), onclick: () => d.close() }, icon("x"))), ...body);
+  d.addEventListener("close", () => d.remove());
+  document.body.append(d);
+  d.showModal();
+  return d;
+}
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = el("a", { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+function today() { return new Date().toISOString().slice(0, 10); }
+
+function openImport() {
+  const err = el("div", { class: "flash err", role: "alert", hidden: true });
+  const file = el("input", { type: "file", accept: ".csv,.json,.xml,text/csv,application/json,text/xml" });
+  const pwField = el("input", { type: "password", autocomplete: "off" });
+  const pwRow = el("label", { hidden: true }, t("Password of the export file"), pwField);
+  const summary = el("div", { class: "small" });
+  const skip = el("input", { type: "checkbox", checked: true });
+  const into = el("select", {}, el("option", { value: "keep" }, t("Keep the folders of the file")), el("option", { value: "new" }, t("Put everything into a new folder")));
+  const go = button(t("Import"), { class: "primary", icon: "upload", disabled: true });
+  let parsed = null, text = "";
+  const fail = (e) => {
+    const m = e && e.message;
+    err.textContent = m === "bitwarden-encrypted" ? t("This Bitwarden export is encrypted. Export again as unencrypted JSON or CSV.")
+      : m === "unknown" || m === "empty" ? t("This file was not recognised. PassZit reads CSV files of browsers and password managers, Bitwarden JSON, KeePass XML and its own exports.")
+      : e instanceof pz.DecryptError ? t("Wrong password for this export file.") : (m || String(e));
+    err.hidden = false;
+  };
+  const show = () => {
+    const have = new Set([...S.items.values()].filter((i) => i.data && !i.deleted_at).map((i) => dedupeKey(i.data)));
+    const dup = parsed.items.filter((d) => have.has(dedupeKey(d))).length;
+    const folders = new Set(parsed.items.map((d) => d.folder).filter(Boolean)).size;
+    summary.replaceChildren(el("p", null, el("b", { text: parsed.format }), " · ", t("%d items", parsed.items.length), " · ", t("%d folders", folders),
+      dup ? " · " + t("%d already in the vault", dup) : ""));
+    go.disabled = !parsed.items.length;
+  };
+  file.addEventListener("change", async () => {
+    err.hidden = true; go.disabled = true; summary.replaceChildren(); parsed = null; pwRow.hidden = true;
+    const f = file.files[0];
+    if (!f) return;
+    if (f.size > 20 << 20) { fail(new Error(t("The file is too large."))); return; }
+    text = await f.text();
+    try {
+      const r = detect(text);
+      if (r.encrypted) { pwRow.hidden = false; go.disabled = false; summary.replaceChildren(el("p", { text: t("A PassZit export: enter the password it was made with.") })); parsed = r; return; }
+      parsed = r;
+      show();
+    } catch (e) { fail(e); }
+  });
+  go.addEventListener("click", async () => {
+    err.hidden = true;
+    go.disabled = true;
+    try {
+      if (parsed.encrypted) {
+        await nextFrame();
+        const payload = await importEncrypted(parsed.encrypted, pwField.value);
+        parsed = { format: "PassZit", items: (payload.items || []).map((d) => Object.assign({}, d, { folder: d.folderName || "" })) };
+        pwField.value = "";
+        pwRow.hidden = true;
+        show();
+        go.disabled = false;
+        return; // the summary first, then a second click imports
+      }
+      const n = await runImport(parsed.items, skip.checked, into.value, (msg) => { summary.replaceChildren(el("p", { text: msg })); });
+      d.close();
+      toast(t("%d items imported.", n));
+      render();
+    } catch (e) {
+      fail(e);
+      go.disabled = false;
+    }
+  });
+  const d = dialog(t("Import"),
+    el("p", { class: "small muted", text: t("Chrome, Edge, Firefox, Safari, Bitwarden, KeePass, KeePassXC, 1Password, LastPass and other CSV files, or a PassZit export. The file is read in this browser; delete it afterwards — it holds your passwords unencrypted.") }),
+    err, el("label", null, t("File"), file), pwRow, summary,
+    el("label", { class: "check" }, skip, " " + t("Skip items that are already in the vault")),
+    el("label", null, t("Folders"), into),
+    el("div", { class: "row end" }, go));
+}
+
+async function runImport(items, skipDupes, into, progress) {
+  const have = new Set([...S.items.values()].filter((i) => i.data && !i.deleted_at).map((i) => dedupeKey(i.data)));
+  const todo = skipDupes ? items.filter((d) => !have.has(dedupeKey(d))) : items.slice();
+  // folders by name (existing ones are reused)
+  const byName = new Map([...S.folders.entries()].map(([id, f]) => [f.name.toLowerCase(), id]));
+  const folderID = async (name) => {
+    if (!name) return "";
+    const k = name.toLowerCase();
+    if (!byName.has(k)) byName.set(k, await saveFolder("", name.slice(0, 100), 0));
+    return byName.get(k);
+  };
+  const common = into === "new" ? await folderID(t("Import %s", today())) : "";
+  const vaultID = personalVault();
+  const key = S.vaults.get(vaultID).key;
+  let done = 0;
+  for (let i = 0; i < todo.length; i += 200) {
+    const batch = [];
+    for (const d of todo.slice(i, i + 200)) {
+      const data = Object.assign({}, d, { folder: common || await folderID(d.folder) });
+      delete data.folderName;
+      const id = pz.uuid();
+      batch.push({ id, vault_id: vaultID, data: await pz.sealJSON(key, data, pz.AAD.item(vaultID, id)) });
+    }
+    await api("POST", "/api/items", { items: batch });
+    done += batch.length;
+    progress(t("Imported %d of %d…", done, todo.length));
+  }
+  await api("POST", "/api/account/event", { event: "import", count: done }).catch(() => {});
+  await sync(S.revision);
+  return done;
+}
+
+function openExport() {
+  const err = el("div", { class: "flash err", role: "alert", hidden: true });
+  const master = el("input", { type: "password", autocomplete: "current-password", required: true });
+  const fmtEnc = el("input", { type: "radio", name: "fmt", value: "enc", checked: true });
+  const fmtCSV = el("input", { type: "radio", name: "fmt", value: "csv" });
+  const p1 = el("input", { type: "password", autocomplete: "new-password", minlength: 12 });
+  const p2 = el("input", { type: "password", autocomplete: "new-password" });
+  const encPart = el("div", { class: "stack" }, el("label", null, t("Password for the export file"), p1), el("label", null, t("Repeat the password"), p2),
+    el("p", { class: "small muted", text: t("Keep this password: without it the file cannot be opened. It does not have to be your master password.") }));
+  const understood = el("input", { type: "checkbox" });
+  const csvPart = el("div", { hidden: true }, el("div", { class: "callout warn" }, icon("alert"), el("div", { text: t("A CSV file is not encrypted: anyone who gets it can read all your passwords. Use it only to move to another program, and delete it right after.") })),
+    el("label", { class: "check" }, understood, " " + t("I understand that this file is not protected.")));
+  const sync2 = () => { encPart.hidden = !fmtEnc.checked; csvPart.hidden = fmtEnc.checked; };
+  fmtEnc.addEventListener("change", sync2);
+  fmtCSV.addEventListener("change", sync2);
+  const go = button(t("Export"), { class: "primary", icon: "download" });
+  go.addEventListener("click", async () => {
+    err.hidden = true;
+    const fail = (m) => { err.textContent = m; err.hidden = false; };
+    if (fmtEnc.checked && (p1.value.length < 12 || p1.value !== p2.value)) return fail(p1.value !== p2.value ? t("The passwords do not match.") : t("The export password must have at least %d characters.", 12));
+    if (!fmtEnc.checked && !understood.checked) return fail(t("Confirm that you understand the risk of an unencrypted file."));
+    go.disabled = true;
+    go.classList.add("loading");
+    await nextFrame();
+    try {
+      try {
+        await api("POST", "/api/account/verify", { current_auth: await authFor(S.acct, master.value) });
+      } catch (e) {
+        throw new Error(t("The current master password is wrong."));
+      }
+      const items = [...S.items.values()].filter((i) => i.data && !i.deleted_at)
+        .map((i) => Object.assign({}, i.data, { folderName: i.data.folder && S.folders.get(i.data.folder) ? S.folders.get(i.data.folder).name : "" }));
+      if (fmtEnc.checked) {
+        const out = await exportEncrypted({ version: 1, exported_at: new Date().toISOString(), items }, p1.value, S.acct.policy_kdf || pz.DEFAULT_KDF);
+        download("passzit-export-" + today() + ".json", out, "application/json");
+        await api("POST", "/api/account/event", { event: "export", count: items.length }).catch(() => {});
+      } else {
+        download("passzit-export-" + today() + ".csv", exportCSV(items), "text/csv");
+        await api("POST", "/api/account/event", { event: "export.plain", count: items.length }).catch(() => {});
+      }
+      master.value = p1.value = p2.value = "";
+      d.close();
+      toast(t("%d items exported.", items.length));
+    } catch (e) {
+      fail(e.message);
+    } finally {
+      go.disabled = false;
+      go.classList.remove("loading");
+    }
+  });
+  const d = dialog(t("Export"), err,
+    el("p", { class: "small muted", text: t("The export holds your items (not the trash). It is made in this browser.") }),
+    el("label", null, t("Current master password"), master),
+    el("label", { class: "check" }, fmtEnc, " " + t("Encrypted PassZit file (recommended)")),
+    el("label", { class: "check" }, fmtCSV, " " + t("CSV file, unencrypted")),
+    encPart, csvPart, el("div", { class: "row end" }, go));
 }
 
 // A vault left open in a background tab still locks; the keys of a closed

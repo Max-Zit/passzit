@@ -381,3 +381,63 @@ func (s *Store) Stats(ctx context.Context) (VaultStats, error) {
 		Scan(&v.Users, &v.Items, &v.Trash)
 	return v, err
 }
+
+// NewItem is a new item of a batch (an import).
+type NewItem struct {
+	ID      string `json:"id"`
+	VaultID string `json:"vault_id"`
+	Data    string `json:"data"`
+}
+
+// MaxBatch is the most items one batch may create.
+const MaxBatch = 500
+
+// PutItems creates many new items in one transaction (all or none) and
+// returns the revision of the last one.
+func (s *Store) PutItems(ctx context.Context, userID int64, items []NewItem) (int64, error) {
+	if len(items) == 0 || len(items) > MaxBatch {
+		return 0, errors.New("a batch holds 1–500 items")
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+	checked := map[string]bool{}
+	now := s.now()
+	var rev int64
+	for _, it := range items {
+		if !ValidID(it.ID) || !ValidID(it.VaultID) {
+			return 0, errors.New("invalid id")
+		}
+		if !SealedOK(it.Data, MaxItemData) {
+			return 0, errors.New("invalid or too large item")
+		}
+		if !checked[it.VaultID] {
+			r, err := memberRights(ctx, tx, it.VaultID, userID)
+			if err != nil {
+				return 0, err
+			}
+			if !canEdit(r) {
+				return 0, ErrForbidden
+			}
+			var n int
+			if err := tx.QueryRow(ctx, `SELECT count(*) FROM items WHERE vault_id=$1`, it.VaultID).Scan(&n); err != nil {
+				return 0, err
+			}
+			if n+len(items) > MaxItems {
+				return 0, errors.New("the vault is full")
+			}
+			checked[it.VaultID] = true
+		}
+		err := tx.QueryRow(ctx, `INSERT INTO items(id, vault_id, data, revision, created_at, updated_at) VALUES($1,$2,$3,nextval('revisions'),$4,$4) RETURNING revision`,
+			it.ID, it.VaultID, it.Data, now).Scan(&rev)
+		if isUnique(err) {
+			return 0, ErrStale
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
+	return rev, tx.Commit(ctx)
+}

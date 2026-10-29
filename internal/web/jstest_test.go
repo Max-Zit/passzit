@@ -127,7 +127,7 @@ func TestJavaScriptCrypto(t *testing.T) {
 		Account                             map[string]string
 		GenPassword, GenPhrase, Uniform, UU bool
 		UUID                                bool `json:"uuid"`
-		Sites, Matches                      []string
+		Sites, Matches, Imports             []string
 		Error                               string
 	}
 	if err := json.Unmarshal(raw, &got); err != nil {
@@ -161,6 +161,9 @@ func TestJavaScriptCrypto(t *testing.T) {
 	ak, err := vaultcrypto.Open(vaultcrypto.Derive(mk, vaultcrypto.InfoWrap), got.Account["wrapped_account_key"], vaultcrypto.AADAccountKey())
 	if err != nil || vaultcrypto.B64.EncodeToString(ak) != got.Account["account_key"] || vaultcrypto.B64.EncodeToString(vaultcrypto.Derive(mk, vaultcrypto.InfoAuth)) != got.Account["auth"] {
 		t.Errorf("browser account does not open in Go: %v", err)
+	}
+	if len(got.Imports) > 0 {
+		t.Errorf("import/export: %v", got.Imports)
 	}
 	if len(got.Sites)+len(got.Matches) > 0 {
 		t.Errorf("domain matching: %v %v", got.Sites, got.Matches)

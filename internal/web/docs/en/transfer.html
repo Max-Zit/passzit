@@ -1,0 +1,31 @@
+<h1>Import and export</h1>
+<p class="lead">Moving to PassZit or taking your data elsewhere: files are read and written in your browser. The server only ever receives the items encrypted.</p>
+
+<h2 id="import">Importing</h2>
+<ol>
+  <li>Export your passwords from the old program (see below).</li>
+  <li>In the vault choose <b>Tools → Import</b> and pick the file. PassZit recognises the format and shows how many items and folders it found, and how many are already in your vault.</li>
+  <li>Choose whether to keep the folders of the file or to put everything into a new folder, and whether to skip items that are already in the vault. Then <b>Import</b>.</li>
+  <li><b>Delete the export file</b> of the old program — it holds your passwords unencrypted.</li>
+</ol>
+<table>
+  <tr><th>From</th><th>How to export there</th></tr>
+  <tr><td>Chrome, Edge, Brave, Opera, Vivaldi</td><td>Password manager → Settings → Export passwords (CSV)</td></tr>
+  <tr><td>Firefox</td><td>about:logins → … → Export passwords (CSV)</td></tr>
+  <tr><td>Safari</td><td>File → Export → Passwords (CSV)</td></tr>
+  <tr><td>Bitwarden</td><td>Tools → Export vault → <i>.json</i> or <i>.csv</i>, <b>not</b> the encrypted variant</td></tr>
+  <tr><td>KeePass 2</td><td>File → Export → KeePass XML (2.x)</td></tr>
+  <tr><td>KeePassXC</td><td>Database → Export → CSV file (or XML)</td></tr>
+  <tr><td>1Password</td><td>File → Export → CSV</td></tr>
+  <tr><td>LastPass</td><td>Advanced options → Export (CSV)</td></tr>
+  <tr><td>Other programs</td><td>A CSV file with column names such as <i>name, url, username, password, notes</i> usually works.</td></tr>
+</table>
+<p>Logins, secure notes, websites, own fields, folders (also nested folders of KeePass), favourites and TOTP secrets are taken over. Cards, identities and attachments come with a later version.</p>
+
+<h2 id="export">Exporting</h2>
+<p><b>Tools → Export</b> asks for your master password and offers two formats:</p>
+<ul>
+  <li><b>Encrypted PassZit file (recommended)</b> — protected with a password you choose (Argon2id and AES-256-GCM, like the vault). Use it as a backup copy of your own; it can be imported into PassZit again. Without its password the file cannot be opened.</li>
+  <li><b>CSV, unencrypted</b> — for moving to another program. Anyone who gets this file can read every password: delete it right after the move.</li>
+</ul>
+<p>Imports and exports are recorded in the audit log (the number of items, never their contents); an unencrypted export is marked as such.</p>

@@ -340,6 +340,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/account/event", s.apiEvent)
 	api("GET /api/sync", s.apiSync)
 	api("GET /api/revision", s.apiRevision)
+	api("POST /api/items", s.apiPutItems)
 	api("PUT /api/items/{id}", s.apiPutItem)
 	api("POST /api/items/{id}/trash", s.apiTrashItem)
 	api("POST /api/items/{id}/restore", s.apiRestoreItem)

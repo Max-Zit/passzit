@@ -306,3 +306,21 @@ func (s *Server) apiDeleteFolder(w http.ResponseWriter, r *http.Request) {
 		return s.store.DeleteFolder(r.Context(), u, id)
 	})
 }
+
+type batchReq struct {
+	Items []store.NewItem `json:"items"`
+}
+
+// apiPutItems creates many items at once (import).
+func (s *Server) apiPutItems(w http.ResponseWriter, r *http.Request) {
+	var q batchReq
+	if !readJSON(w, r, 16<<20, &q) {
+		return
+	}
+	rev, err := s.store.PutItems(r.Context(), userFrom(r).ID, q.Items)
+	if err != nil {
+		s.vaultErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, revResp{Revision: rev})
+}

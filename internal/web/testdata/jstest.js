@@ -4,6 +4,7 @@
 import * as pz from "/static/pz/crypto.js";
 import { password, passphrase, randomInt } from "/static/pz/generator.js";
 import { siteOf, match } from "/ext/domain.js";
+import * as tr from "/static/pz/transfer.js";
 
 const out = {};
 try {
@@ -46,6 +47,39 @@ try {
     ["https://example.co.uk", "https://evil.co.uk", ""], ["https://10.0.0.1:8443", "https://10.0.0.1:8443/x", "host"], ["https://10.0.0.1:8443", "https://10.0.0.1/", ""],
     ["https://bank.example", "https://bank.example.evil.com", ""], ["javascript:alert(1)", "https://x.com", ""]];
   out.matches = cases.filter(([a, b, want]) => match(a, b) !== want).map(([a, b, want]) => a + " vs " + b + " = " + match(a, b) + " want " + want);
+  // importers and exporters
+  const imp = [];
+  const expect = (name, cond, info) => { if (!cond) imp.push(name + ": " + JSON.stringify(info)); };
+  let r = tr.detect("name,url,username,password,note\nGitHub,https://github.com/login,alice,pw1,hello\n");
+  expect("chrome", r.items.length === 1 && r.items[0].login.username === "alice" && r.items[0].login.password === "pw1" && r.items[0].notes === "hello", r.items);
+  r = tr.detect('"url","username","password","httpRealm","formActionOrigin","guid","timeCreated","timeLastUsed","timePasswordChanged"\r\n"https://example.com","bob","p,w""2","","https://example.com","{x}","1","1","1"\r\n');
+  expect("firefox", r.items.length === 1 && r.items[0].login.password === 'p,w"2' && r.items[0].name === "example.com", r.items);
+  r = tr.detect("url,username,password,totp,extra,name,grouping,fav\nhttp://sn,,,,Wifi key 42,Home Wi-Fi,Home,1\nhttps://a.com,u,p,,,A,Work\\Sub,0\n");
+  expect("lastpass", r.items.length === 2 && r.items[0].type === "note" && r.items[0].notes === "Wifi key 42" && r.items[0].favorite && r.items[1].folder === "Work/Sub", r.items);
+  r = tr.detect(JSON.stringify({ encrypted: false, folders: [{ id: "f1", name: "Bank" }], items: [
+    { type: 1, name: "B", folderId: "f1", favorite: true, login: { username: "u", password: "p", totp: "JBSWY3DP", uris: [{ uri: "https://b.com" }] }, fields: [{ name: "PIN", value: "1234", type: 1 }] },
+    { type: 2, name: "N", notes: "secret note" }, { type: 3, name: "card is skipped" }] }));
+  expect("bitwarden", r.items.length === 2 && r.items[0].folder === "Bank" && r.items[0].login.totp === "JBSWY3DP" && r.items[0].fields[0].hidden && r.items[1].type === "note", r.items);
+  r = tr.detect('<?xml version="1.0"?><KeePassFile><Meta><RecycleBinUUID>RB</RecycleBinUUID></Meta><Root><Group><UUID>R</UUID><Name>Root</Name>' +
+    '<Entry><String><Key>Title</Key><Value>Top</Value></String><String><Key>Password</Key><Value ProtectInMemory="True">t</Value></String></Entry>' +
+    '<Group><UUID>G</UUID><Name>Servers</Name><Entry><String><Key>Title</Key><Value>pve</Value></String><String><Key>UserName</Key><Value>root</Value></String>' +
+    '<String><Key>Password</Key><Value ProtectInMemory="True">x&lt;y</Value></String><String><Key>URL</Key><Value>https://pve:8006</Value></String>' +
+    '<String><Key>API key</Key><Value ProtectInMemory="True">k</Value></String></Entry>' +
+    '<Group><UUID>G2</UUID><Name>Lab</Name><Entry><String><Key>Title</Key><Value>deep</Value></String><String><Key>Password</Key><Value>d</Value></String></Entry></Group></Group>' +
+    '<Group><UUID>RB</UUID><Name>Recycle Bin</Name><Entry><String><Key>Title</Key><Value>gone</Value></String></Entry></Group></Group></Root></KeePassFile>');
+  const kp = Object.fromEntries(r.items.map((i) => [i.name, i]));
+  expect("keepass", r.items.length === 3 && kp.Top.folder === "" && kp.pve.folder === "Servers" && kp.pve.login.password === "x<y" && kp.pve.fields[0].hidden && kp.deep.folder === "Servers/Lab", r.items);
+  const csv = tr.exportCSV([{ type: "login", name: "Q, \"quoted\"", folderName: "F", favorite: true, notes: "line1\nline2", login: { username: "u", password: "p\"w", urls: ["https://q.com", "https://r.com"], totp: "T" }, fields: [] }]);
+  r = tr.detect(csv);
+  expect("csv round trip", r.items.length === 1 && r.items[0].name === 'Q, "quoted"' && r.items[0].login.password === 'p"w' && r.items[0].login.urls.length === 2 && r.items[0].notes === "line1\nline2" && r.items[0].folder === "F" && r.items[0].login.totp === "T", r.items);
+  const enc = await tr.exportEncrypted({ version: 1, items: [{ name: "x" }] }, "export-password-1", { alg: "argon2id", m: 19456, t: 2, p: 1 });
+  const det = tr.detect(enc);
+  const back = await tr.importEncrypted(det.encrypted, "export-password-1");
+  let wrong = "opened";
+  try { await tr.importEncrypted(det.encrypted, "wrong-password-1"); } catch (e) { wrong = e.name; }
+  expect("encrypted export", back.items[0].name === "x" && wrong === "DecryptError" && !enc.includes('"x"'), { back, wrong });
+  try { tr.detect("just some text"); imp.push("garbage accepted"); } catch (e) { /* refused */ }
+  out.imports = imp;
   out.uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(pz.uuid());
 } catch (e) {
   out.error = String(e && e.stack || e);
