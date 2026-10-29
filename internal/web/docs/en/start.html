@@ -1,1 +1,32 @@
-<p>…</p>
+<h1>Getting started</h1>
+<p class="lead">PassZit is a self-hosted password manager. Every user has an encrypted vault for logins and secure notes; everything is encrypted and decrypted in the user's own browser, so the server — and anyone who steals it — never sees a password.</p>
+
+<h2 id="what">What PassZit does</h2>
+<table>
+  <tr><th>Area</th><th>What you get</th></tr>
+  <tr><td>Vault</td><td>Logins (user name, password, websites), secure notes, own fields, folders, favourites, search, trash and password history. <a href="/docs/vault">Working with the vault</a></td></tr>
+  <tr><td>Generator</td><td>Random passwords and easy-to-type passphrases, made in your browser.</td></tr>
+  <tr><td>Security</td><td>End-to-end encryption with a master password only you know, mandatory two-factor sign-in, a recovery key, automatic locking. <a href="/docs/security">How PassZit protects your passwords</a></td></tr>
+  <tr><td>Administration</td><td>Accounts only by invitation, roles, a tamper-evident audit log, policies for locking, the clipboard and key derivation. <a href="/docs/admin">Users, invitations and settings</a></td></tr>
+  <tr><td>Browser extensions</td><td>Chrome, Edge, Opera, Brave, Vivaldi and Firefox fill and save logins (coming with version 0.2).</td></tr>
+</table>
+
+<h2 id="first">First steps</h2>
+<ol>
+  <li><b>Install the server</b> and open its address in a browser (<a href="/docs/install">Installing the server</a>).</li>
+  <li><b>Set up PassZit:</b> enter the setup token from the server's data directory, your e-mail address and a master password. The browser makes your keys — this takes a second.</li>
+  <li><b>Set up two-factor sign-in</b> with an authenticator app and keep the recovery codes.</li>
+  <li><b>Make a recovery key</b> and store it offline. It is the only way back if you forget the master password.</li>
+  <li><b>Add your first login</b> with <i>New item</i>, and <b>invite your colleagues</b> under <i>Users</i>.</li>
+</ol>
+
+<div class="callout warn"><p><b>Remember the master password.</b> PassZit never knows it. Nobody — not the administrator, not MaxZit — can open your vault without the master password or your recovery key.</p></div>
+
+<h2 id="screens">The screens</h2>
+<ul>
+  <li><b>Vault</b> — your items. On the left the filters (all, favourites, types, folders, trash), in the middle the list with search, on the right the selected item.</li>
+  <li><b>Password generator</b> — make a password without saving it.</li>
+  <li><b>My account</b> — name, lock and clipboard times, master password, recovery key, recovery codes and your sessions.</li>
+  <li><b>Users, Audit log, Settings</b> — for administrators.</li>
+</ul>
+<p>The <b>Lock</b> button at the top locks the vault at once; it also locks by itself after the inactivity time your administrator chose (15 minutes by default).</p>

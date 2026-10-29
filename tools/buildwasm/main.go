@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -23,10 +22,13 @@ func main() {
 
 func run() error {
 	out := filepath.Join("internal", "web", "static", "pz")
-	if err := os.MkdirAll(out, 0o755); err != nil {
+	if err := os.MkdirAll(out, 0o750); err != nil {
 		return err
 	}
-	goBin := filepath.Join(runtime.GOROOT(), "bin", "go")
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		return err
+	}
 	cmd := exec.Command(goBin, "build", "-trimpath", "-ldflags=-s -w -buildid=", "-o", filepath.Join(out, "argon2.wasm"), "./tools/argon2wasm") // #nosec G204 -- fixed arguments
 	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
@@ -42,7 +44,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(out, "wasm_exec.js"), b, 0o644); err != nil { // #nosec G306 -- public web asset
+	if err := os.WriteFile(filepath.Join(out, "wasm_exec.js"), b, 0o644); err != nil { // #nosec G306 G703 -- public web asset at a fixed path
 		return err
 	}
 	fmt.Println("wrote", filepath.Join(out, "argon2.wasm"), "and wasm_exec.js")

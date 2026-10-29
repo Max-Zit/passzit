@@ -1,0 +1,37 @@
+<h1>Users, invitations and settings</h1>
+<p class="lead">Administrators manage accounts and the server's rules. They have a vault like everyone else — and, like everyone else, cannot read other users' vaults.</p>
+
+<h2 id="roles">Roles</h2>
+<table>
+  <tr><th>Role</th><th>May</th></tr>
+  <tr><td>User</td><td>use an own vault</td></tr>
+  <tr><td>Administrator</td><td>also invite and manage users, read the audit log and change the settings</td></tr>
+</table>
+
+<h2 id="invite">Inviting users</h2>
+<p>Accounts are made <b>only by invitation</b>. Under <b>Users → Invite a user</b> enter the e-mail address and the role. PassZit shows the invitation link once; send it to the person. The link works once and for the number of days in <i>Sign-in and security</i> (7 by default). The invited person chooses the master password and sets up two-factor sign-in. Open invitations can be withdrawn.</p>
+
+<h2 id="manage">Managing users</h2>
+<ul>
+  <li><b>Disable</b> a user to stop all sign-ins at once (open sessions end). Enabling again restores everything.</li>
+  <li><b>Reset two-factor sign-in</b> for a user who lost the phone and the recovery codes.</li>
+  <li><b>Delete the account</b> removes the user with the personal vault for good — type the address to confirm.</li>
+</ul>
+<p>Administrators cannot see or reset master passwords. A user who forgot it and has no recovery key can only start over with an empty vault: delete the account and invite again. The user list shows who has made a recovery key.</p>
+
+<h2 id="policy">Vault policy</h2>
+<ul>
+  <li><b>Lock the vault after inactivity</b> (15 minutes) and <b>clear copied passwords</b> (30 seconds) — users may choose shorter times.</li>
+  <li><b>Minimum master password length</b> (12) for new accounts and changed passwords.</li>
+  <li><b>Empty the trash</b> after a number of days (30).</li>
+  <li><b>Key derivation (Argon2id):</b> memory, passes and lanes. Stronger settings make stolen data harder to attack but every unlock slower; accounts move to new settings at their next unlock.</li>
+</ul>
+
+<h2 id="security">Sign-in and security</h2>
+<p>Session length and inactivity timeout, how many failed sign-ins block an address and for how long (doubling for repeated blocks), and how long invitations work. Blocked addresses can be released here or on the server with <code>passzit-server --unblock-ip ADDRESS</code>.</p>
+
+<h2 id="network">Network and access</h2>
+<p>The listen address, the networks allowed to connect (others are refused before TLS) and the public address used in invitation links. If you lock yourself out, run <code>passzit-server --reset-allowlist</code> on the server.</p>
+
+<h2 id="audit">Audit log</h2>
+<p>Sign-ins, failed attempts, blocks, invitations, user changes, settings, master-password changes and recovery are recorded with time, user and address. Every entry contains a hash of the previous one; the page shows whether the chain is intact. The log never contains passwords or item contents.</p>

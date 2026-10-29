@@ -518,3 +518,8 @@ func (s *Server) RunHousekeeping(ctx context.Context) {
 		}
 	}
 }
+
+// uiMsg is an error whose text is a sentence for the user (translated when shown).
+type uiMsg string
+
+func (m uiMsg) Error() string { return string(m) }

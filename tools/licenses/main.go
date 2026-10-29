@@ -1,9 +1,9 @@
 // licenses writes THIRD_PARTY_LICENSES.md: every module linked into the
-// given WatchZit programs with its license text, read from the Go module
+// given PassZit programs with its license text, read from the Go module
 // cache. It fails when a license is not known to be compatible with the
 // AGPL-3.0, so a new dependency is checked before a release.
 //
-//	go run ./tools/licenses -out THIRD_PARTY_LICENSES.md dist/watchzit-server-X-linux-amd64 dist/watchzit-agent-X-windows-amd64.exe …
+//	go run ./tools/licenses -out THIRD_PARTY_LICENSES.md bin/passzit-server
 package main
 
 import (
@@ -121,7 +121,7 @@ func main() {
 	sort.Strings(paths)
 	cache := modCache()
 	var b bytes.Buffer
-	b.WriteString("# Third-party licenses\n\nWatchZit is licensed under the GNU Affero General Public License v3.0 (see LICENSE).\n")
+	b.WriteString("# Third-party licenses\n\nPassZit is licensed under the GNU Affero General Public License v3.0 (see LICENSE).\n")
 	b.WriteString("Its programs contain the following components under their own licenses, all compatible with the AGPL-3.0.\n\n")
 	b.WriteString("| Component | Version | License |\n|---|---|---|\n")
 	b.WriteString("| Go standard library and runtime | " + goVersion + " | BSD-3-Clause |\n")
@@ -142,6 +142,8 @@ func main() {
 	}
 	b.WriteString("\nOther components:\n\n")
 	b.WriteString("- PostgreSQL (PostgreSQL License) is the database; with the development option `--dev-embedded-db` the server downloads PostgreSQL binaries (Zonky embedded-postgres-binaries, Apache-2.0) and runs them.\n")
+	b.WriteString("- The browser module `argon2.wasm` is golang.org/x/crypto/argon2 with the Go runtime compiled to WebAssembly; `wasm_exec.js` comes from the Go distribution (both BSD-3-Clause, see below).\n")
+	b.WriteString("- Passphrases use the EFF Large Wordlist by the Electronic Frontier Foundation (https://www.eff.org/dice), licensed under the Creative Commons Attribution 3.0 United States License (https://creativecommons.org/licenses/by/3.0/us/). The list is used unchanged.\n")
 	b.WriteString("- Some icons of the console are based on Feather Icons (MIT License, see below).\n\n")
 	goroot := goEnv("GOROOT")
 	if t, err := os.ReadFile(filepath.Join(goroot, "LICENSE")); err == nil { // #nosec G304 -- Go installation

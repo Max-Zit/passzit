@@ -403,6 +403,7 @@ input.sep { width: 4em; display: inline-block; }
   .vgrid { grid-template-columns: minmax(240px, 320px) 1fr; }
   .vfilters { grid-column: 1 / -1; position: static; display: flex; flex-wrap: wrap; gap: 4px; }
   .vfilters .navlabel { display: none; }
+  .vfilters .navlabel:has(button) { display: inline-flex; gap: 4px; margin: 0; padding: 0 4px 0 10px; border: 1px dashed var(--line-2); border-radius: 8px; }
   .vfilters a { border: 1px solid var(--line); padding: 5px 10px; background: var(--panel); }
 }
 @media (max-width: 760px) {
@@ -417,3 +418,4 @@ input.sep { width: 4em; display: inline-block; }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 div.stack { display: grid; gap: 16px; }
 p.row { margin: 10px 0; }
+pre.vnotes, code.vvalue { background: none; border: 0; padding: 0; color: var(--text); font-size: 14.5px; }

@@ -1,0 +1,39 @@
+<h1>How PassZit protects your passwords</h1>
+<p class="lead">PassZit is built so that a stolen server, database or backup reveals nothing: the server stores only encrypted data and never receives your master password or any key it could use.</p>
+
+<h2 id="e2e">End-to-end encryption</h2>
+<ol>
+  <li>Your browser turns the master password into a <b>master key</b> with <b>Argon2id</b> (64 MiB of memory, 3 passes by default — slow on purpose, so guessing is slow too). A random salt per account makes every result unique.</li>
+  <li>From the master key the browser derives two different keys: an <b>auth key</b>, which is sent to the server to prove that you know the password, and a <b>wrap key</b>, which never leaves the browser.</li>
+  <li>The wrap key opens your <b>account key</b> — a random 256-bit key the server stores only in encrypted form. The account key opens the key of your <b>vault</b>, and the vault key encrypts every <b>item</b> with AES-256-GCM.</li>
+  <li>Everything about an item is encrypted: name, user name, password, websites, notes, fields, folder and history. The server sees only that an item exists, its size and when it changed.</li>
+</ol>
+<p>The server hashes the auth key once more with argon2id before storing it. Even the auth key does not help an attacker: the wrap key cannot be computed from it.</p>
+<p>Each account also has an X25519 key pair; it will be used to share vaults with other users (later versions) without the server being able to read the shared keys.</p>
+
+<h2 id="recovery">Forgotten master password</h2>
+<p>Because the server never knows the master password, nobody can reset it. There are two ways back into a vault:</p>
+<ul>
+  <li>The <b>recovery key</b> (32 letters and digits). It opens a second copy of your account key and lets you choose a new master password. Make it in <i>My account</i>, print it or write it down and keep it offline. Recovery also needs your second factor.</li>
+  <li>Without a recovery key the vault is lost. An administrator can delete the account and invite you again — with an empty vault.</li>
+</ul>
+
+<h2 id="2fa">Two-factor sign-in</h2>
+<p>Every account needs an authenticator app (TOTP). A stolen master password alone does not sign anyone in. Keep the ten recovery codes: each replaces the app once. An administrator can reset the second factor of a user who lost both.</p>
+
+<h2 id="browser">In the browser</h2>
+<ul>
+  <li>Unlocked keys are kept only in memory and, encrypted with a key that only the server session knows, in the session storage of this tab. Locking, signing out or closing the session makes them useless.</li>
+  <li>The vault locks after the inactivity time of the policy; copied passwords are cleared from the clipboard after 30 seconds (by default).</li>
+  <li>The pages use a strict content security policy: only PassZit's own scripts run, nothing is loaded from other servers.</li>
+</ul>
+
+<h2 id="limits">Honest limits</h2>
+<ul>
+  <li>The web vault's JavaScript comes from your server. Someone who fully controls the server could serve changed code and catch master passwords typed afterwards. Protect the server like any other critical system; the browser extensions (version 0.2) bring their own code, which the server cannot change.</li>
+  <li>Malware on your own computer can read what you type and what the browser shows. Keep your devices updated.</li>
+  <li>A weak master password can be guessed from a stolen database — slowly, but it can. Use a long passphrase.</li>
+</ul>
+
+<h2 id="server">Server protection</h2>
+<p>HTTPS only, accounts only by invitation, blocking of addresses after failed sign-ins, short sessions, an allow-list of networks, a hash-chained audit log that shows any change, and cookies that cannot be read by scripts or sent by other sites.</p>

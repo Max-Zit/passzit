@@ -1,0 +1,25 @@
+<h1>Troubleshooting and FAQ</h1>
+
+<h2 id="forgot">I forgot my master password</h2>
+<p>Use your recovery key: <i>Forgot the master password?</i> on the sign-in page. Without a recovery key the vault cannot be opened by anyone; ask your administrator to delete the account and invite you again.</p>
+
+<h2 id="phone">I lost my phone with the authenticator app</h2>
+<p>Sign in with one of your recovery codes instead of the app code. Without codes, an administrator resets your second factor; your vault is not affected.</p>
+
+<h2 id="blocked">"Too many failed attempts"</h2>
+<p>Your address was blocked after failed sign-ins. Wait until the time shown, or ask an administrator to release it (<i>Settings → Sign-in and security</i>, or <code>passzit-server --unblock-ip ADDRESS</code> on the server).</p>
+
+<h2 id="locked">The vault locks too often</h2>
+<p>It locks after the inactivity time of the policy. Administrators can raise it under <i>Settings → Vault policy</i>; users can only choose a shorter time.</p>
+
+<h2 id="slow">Unlocking takes a few seconds</h2>
+<p>That is the key derivation working as intended — it makes guessing master passwords slow. On old PCs and phones, an administrator can lower the memory in the policy (not below 19 MiB).</p>
+
+<h2 id="changed">"This was changed on another device in the meantime"</h2>
+<p>The item was saved elsewhere while you edited it. Click <i>Reload</i> and make your change again.</p>
+
+<h2 id="decrypt">"This item cannot be decrypted"</h2>
+<p>The stored data is damaged or was changed outside PassZit. The authenticated encryption refuses to show changed data. Restore the item from a backup of the database.</p>
+
+<h2 id="js">The page says it needs JavaScript</h2>
+<p>All encryption happens in the browser, so PassZit cannot work without JavaScript. Allow scripts for the PassZit address.</p>

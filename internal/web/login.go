@@ -587,7 +587,7 @@ func (s *Server) apiInvite(w http.ResponseWriter, r *http.Request) {
 	u, err := s.store.CreateAccount(r.Context(), q.NewAccount)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			err = errors.New("This invitation link does not work any more. Ask your administrator for a new one.")
+			err = uiMsg("This invitation link does not work any more. Ask your administrator for a new one.")
 		}
 		apiError(w, http.StatusBadRequest, "invalid", s.msg(r, storeErr(err)))
 		return

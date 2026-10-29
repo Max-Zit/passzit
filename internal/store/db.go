@@ -122,8 +122,3 @@ func notFound(err error) error {
 func isUnique(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "SQLSTATE 23505")
 }
-
-// isFK reports a foreign-key violation.
-func isFK(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "SQLSTATE 23503")
-}

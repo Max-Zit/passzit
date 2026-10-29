@@ -1,0 +1,33 @@
+<h1>Installing the server</h1>
+<p class="lead">PassZit is one program, <code>passzit-server</code>, with a PostgreSQL database. Packages for Debian/Ubuntu and RHEL, a one-line installer and ready appliance images follow with version 0.5; until then the server is built from source.</p>
+
+<h2 id="requirements">Requirements</h2>
+<ul>
+  <li>Linux (Debian 12, Ubuntu 22.04/24.04, RHEL 9 or compatible), 1 CPU, 1 GB RAM, a few GB of disk.</li>
+  <li>PostgreSQL 14 or newer.</li>
+  <li>A name and a certificate the browsers trust — browser extensions refuse self-signed certificates. Built-in Let's Encrypt support follows later.</li>
+</ul>
+
+<h2 id="build">Building from source</h2>
+<pre>git clone https://github.com/Max-Zit/passzit
+cd passzit
+go run ./tools/buildwasm          # Argon2id for the browser
+go build -o passzit-server ./cmd/passzit-server</pre>
+
+<h2 id="run">Running</h2>
+<pre>export PASSZIT_DB=postgres://passzit:SECRET@localhost/passzit
+./passzit-server --data-dir /var/lib/passzit --listen :8443</pre>
+<p>On the first start the server creates its secret key (<code>secret.key</code>), a certificate and a <b>setup token</b> (<code>setup-token.txt</code>) in the data directory. Open <code>https://SERVER:8443</code>, enter the token and create the first administrator.</p>
+<div class="callout warn"><p>Back up the database <b>and</b> <code>secret.key</code>. The vaults are encrypted by the users' keys, but the server's own secrets (second factors, session keys) need <code>secret.key</code>.</p></div>
+
+<h2 id="options">Command-line options</h2>
+<table>
+  <tr><th>Option</th><th>Meaning</th></tr>
+  <tr><td><code>--data-dir</code></td><td>certificates, secret key, logs (default <code>/var/lib/passzit</code>)</td></tr>
+  <tr><td><code>--db</code></td><td>PostgreSQL URL (or <code>PASSZIT_DB</code>)</td></tr>
+  <tr><td><code>--listen</code></td><td>address and port, overriding the saved setting</td></tr>
+  <tr><td><code>--reset-allowlist</code></td><td>allow the private networks again and exit</td></tr>
+  <tr><td><code>--unblock-ip</code></td><td>release a blocked address (or <code>all</code>) and exit</td></tr>
+  <tr><td><code>--dev-embedded-db</code></td><td>a private PostgreSQL in the data directory — for tests and demos only</td></tr>
+  <tr><td><code>--dev-no-2fa</code></td><td>sign in without the second factor — test and demo servers only, needs <code>--dev-embedded-db</code>; every page shows a warning</td></tr>
+</table>

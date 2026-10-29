@@ -1,6 +1,6 @@
 # PassZit — architecture proposal (draft, 2026-10-29)
 
-Status: **draft, waiting for Stefan's approval.** Nothing below is built yet.
+Status: **approved by Stefan on 2026-10-29** (accounts only by invitation; 2FA mandatory, off only on test servers; policy values changeable in the settings). Version 0.1 is built on develop.
 
 PassZit is a self-hosted password manager: a Go server with PostgreSQL, a web
 vault and admin console in the browser, and browser extensions. It follows the

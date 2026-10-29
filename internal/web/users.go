@@ -72,7 +72,7 @@ func (s *Server) handleInviteCreate(w http.ResponseWriter, r *http.Request) {
 	tok, inv, err := s.store.CreateInvite(r.Context(), d.Email, d.Role, userFrom(r).Email, time.Duration(days)*24*time.Hour)
 	if err != nil {
 		if errors.Is(err, store.ErrConflict) {
-			err = errors.New("There is already an account with this address.")
+			err = uiMsg("There is already an account with this address.")
 		}
 		s.showUsers(w, r, http.StatusBadRequest, d, storeErr(err))
 		return
