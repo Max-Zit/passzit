@@ -1,0 +1,48 @@
+name: Bug report
+description: Something does not work as described in the guide
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Security problems** must not be reported here — use [Report a vulnerability](https://github.com/Max-Zit/passzit/security/advisories/new) instead. **Never paste passwords, vault exports or master passwords.**
+  - type: input
+    id: version
+    attributes:
+      label: PassZit version
+      description: Server version (bottom of the sidebar) and, if relevant, the extension version and browser.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Web vault / console
+        - Browser extension (fill, save, generator)
+        - Shared vaults and permissions
+        - Sharing and time-limited access
+        - Import / export
+        - Sign-in, two-factor, recovery
+        - Installation / updates
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Server host (appliance, Debian/Ubuntu package, …), browser and version, operating system.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Remove user names, URLs and anything secret you do not want to share.
+      render: text
