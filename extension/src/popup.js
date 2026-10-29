@@ -30,6 +30,7 @@ const PATHS = {
   key: ["M8 19a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "m10.8 12.2 9.2-9.2M17 6l3 3M14 9l2 2"],
   globe: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"],
   refresh: ["M21 12a9 9 0 1 1-3-6.7L21 8", "M21 3v5h-5"],
+  terminal: ["M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z", "m7 9 3 3-3 3M13 15h4"],
   alert: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M12 8v5M12 16.5v.01"],
 };
 
@@ -170,21 +171,46 @@ async function showMain() {
   for (const o of p.pending) body.append(offer(o));
   body.append(el("div", { class: "site" }, icon("globe"), p.host || t("No website")));
   if (p.host && !p.secure) body.append(el("div", { class: "warn" }, t("This page is not encrypted (HTTP). Logins saved for HTTPS are not offered here.")));
-  body.append(itemList(p.matches, true, t("No saved login for this website.")));
+  body.append(itemList(p.matches, true, t("No saved login for this website."), p.helper));
+  if (p.device) {
+    body.append(el("div", { class: "site" }, icon("globe"), t("Device %s", p.device)),
+      itemList(p.deviceMatches, false, t("No saved login for this device."), p.helper));
+  }
   body.append(el("div", { class: "foot" },
     el("a", { href: "#", onclick: (e) => { e.preventDefault(); openVault(); } }, t("Open the web vault")),
     el("button", { type: "button", class: "iconbtn", title: t("Reload"), "aria-label": t("Reload"), onclick: async () => { await bg("sync"); showMain(); } }, icon("refresh"))));
 }
 
-function itemList(items, canFill, emptyText) {
+const TOOLS = { rdp: "RDP", ssh: "SSH", winbox: "WinBox" };
+
+function itemList(items, canFill, emptyText, helper) {
   if (!items.length) return el("p", { class: "empty", text: emptyText });
   return el("ul", { class: "list" }, ...items.map((m) => el("li", { class: "row" },
     el("span", { class: "av" }, (m.name || "?")[0].toUpperCase()),
     el("span", { class: "who" }, el("b", { text: m.name || m.site }), el("small", { text: m.username || m.site })),
     el("span", { class: "acts" },
+      m.connect && helper ? el("button", { type: "button", class: "iconbtn", title: t("Connect with %s", TOOLS[m.connect.tool] || m.connect.tool),
+        "aria-label": t("Connect with %s", TOOLS[m.connect.tool] || m.connect.tool), onclick: () => doConnect(m) }, icon("terminal")) : null,
       m.username ? el("button", { type: "button", class: "iconbtn", title: t("Copy the user name"), "aria-label": t("Copy the user name"), onclick: () => copySecret(m.id, "username") }, icon("user")) : null,
       m.hasPassword ? el("button", { type: "button", class: "iconbtn", title: t("Copy the password"), "aria-label": t("Copy the password"), onclick: () => copySecret(m.id, "password") }, icon("key")) : null,
       canFill ? el("button", { type: "button", class: "fill", onclick: () => doFill(m.id) }, t("Fill")) : null))));
+}
+
+async function doConnect(m) {
+  const tool = TOOLS[m.connect.tool] || m.connect.tool;
+  const q = m.connect.tool === "winbox"
+    ? t("Open %s with WinBox? WinBox takes the password only on its command line: other programs of your Windows user can see it while WinBox runs.", m.connect.host)
+    : t("Open %s with %s?", m.connect.host, tool);
+  if (!window.confirm(q)) return;
+  try {
+    const r = await bg("connect", { id: m.id });
+    if (r.copy) {
+      await navigator.clipboard.writeText(r.value);
+      toast(r.copy === "password" ? t("The password is on the clipboard for the login prompt (cleared in %d seconds).", Math.max(r.clip, 30)) : t("The key's passphrase is on the clipboard (cleared in %d seconds).", Math.max(r.clip, 30)));
+    } else {
+      window.close();
+    }
+  } catch (e) { toast(e.message); }
 }
 
 async function doFill(id) {
@@ -275,14 +301,40 @@ async function showMenu(st) {
     await saveSettings({ offerSave: save.checked });
     await bg("settingsChanged");
   });
+  // remote connections through passzit-helper
+  const helper = el("input", { type: "checkbox" });
+  try { helper.checked = await api.permissions.contains({ permissions: ["nativeMessaging"] }); } catch (e) { helper.checked = false; }
+  const helperState = el("p", { class: "small muted" });
+  const firefox = typeof browser !== "undefined" && api.runtime.getURL("").startsWith("moz-extension:");
+  const installCmd = firefox ? "passzit-helper install --firefox" : "passzit-helper install --chrome-id " + api.runtime.id;
+  const checkHelper = async () => {
+    if (!helper.checked) { helperState.textContent = ""; return; }
+    const r = await bg("helperPing").catch(() => ({ ok: false }));
+    helperState.replaceChildren(r && r.ok ? t("The PassZit helper %s answers.", r.version || "") : t("The PassZit helper is not installed yet. Install it, then run once:"),
+      r && r.ok ? "" : el("code", { class: "cmd", text: installCmd }));
+  };
+  helper.addEventListener("change", async () => {
+    showErr(err, "");
+    if (helper.checked) {
+      let ok = false;
+      try { ok = await api.permissions.request({ permissions: ["nativeMessaging"] }); } catch (e) { ok = false; }
+      if (!ok) { helper.checked = false; showErr(err, t("The browser did not allow talking to the PassZit helper.")); return; }
+    } else {
+      try { await api.permissions.remove({ permissions: ["nativeMessaging"] }); } catch (e) { /* stays */ }
+    }
+    checkHelper();
+  });
   app.replaceChildren(el("div", { class: "menu" },
     el("h1", { text: t("Settings") }), err,
     el("p", { class: "small" }, el("b", { text: s.email }), el("br"), el("span", { class: "muted", text: s.server })),
     el("label", { class: "check" }, save, t("Offer to save new and changed logins")),
     el("p", { class: "small muted", text: t("For this the extension needs to see the sign-in forms of the sites you visit. Passwords never leave your browser unencrypted.") }),
+    el("label", { class: "check" }, helper, t("Open connections (RDP, SSH, WinBox) with the PassZit helper")),
+    helperState,
     el("button", { type: "button", class: "secondary", onclick: openVault }, t("Open the web vault")),
     el("button", { type: "button", class: "ghost", onclick: async () => { await bg("logout"); start(); } }, t("Sign out of this browser")),
     el("button", { type: "button", class: "ghost", onclick: () => start() }, t("Back"))));
+  checkHelper();
   if (!st.signedIn) start();
 }
 

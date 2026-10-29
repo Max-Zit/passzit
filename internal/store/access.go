@@ -304,7 +304,7 @@ type AccessEntry struct {
 }
 
 // ItemActions are the uses clients report.
-var ItemActions = map[string]bool{"show": true, "copy": true, "fill": true, "view": true}
+var ItemActions = map[string]bool{"show": true, "copy": true, "fill": true, "view": true, "connect": true}
 
 // LogItemAccess records a use of an item in a shared vault (items of
 // personal vaults are not logged).

@@ -9,6 +9,7 @@
   "action": { "default_popup": "popup.html", "default_title": "PassZit", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } },
   "background": { "service_worker": "background.js", "type": "module" },
   "permissions": ["storage", "activeTab", "scripting", "alarms", "clipboardWrite", "offscreen"],
+  "optional_permissions": ["nativeMessaging"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "commands": {
     "fill-login": { "suggested_key": { "default": "Ctrl+Shift+L", "mac": "Command+Shift+L" }, "description": "Fill the login for this website" }

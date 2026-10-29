@@ -32,6 +32,7 @@ var DocPages = []DocPage{
 	{"sharing", "Shared vaults and groups"},
 	{"links", "Secret links and emergency access"},
 	{"extension", "Browser extension"},
+	{"connections", "Remote connections"},
 	{"transfer", "Import and export"},
 	{"account", "Master password, recovery key and two-factor sign-in"},
 	{"admin", "Users, invitations and settings"},

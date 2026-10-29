@@ -64,3 +64,4 @@ button:disabled { opacity: .6; cursor: default; }
 .menu { display: grid; gap: 8px; }
 [hidden] { display: none !important; }
 input[type=checkbox], input[type=range] { accent-color: var(--accent); }
+code.cmd { display: block; margin-top: 4px; padding: 6px; border-radius: 6px; background: var(--panel-2, #eef); font-size: 11px; word-break: break-all; user-select: all; }

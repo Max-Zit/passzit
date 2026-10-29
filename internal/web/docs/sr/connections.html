@@ -1,0 +1,30 @@
+<h1>Udaljene veze</h1>
+<p class="lead">Otvarajte RDP, SSH i WinBox veze direktno iz ekstenzije pregledača, sa prijavom sačuvanom u PassZit-u — bez kucanja i gledanja lozinke.</p>
+
+<h2 id="item">Čuvanje veze</h2>
+<p>Izmenite prijavu (ili SSH ključ) u web trezoru i popunite <b>Udaljena veza</b>: program (<i>RDP</i>, <i>SSH</i> ili <i>WinBox</i>), adresu uređaja (ime ili IP adresu) i port, ako nije uobičajeni. Za SSH ključ unesite i korisničko ime. Za vezu se koriste korisničko ime i lozinka prijave; SSH ključ se koristi sa svojom lozinkom ključa.</p>
+<p>U deljenim trezorima za vezu je potrebno pravo <i>Korišćenje</i> ili više. Veza se beleži u <i>Ko je koristio ovu stavku</i> kao „povezao se njime“.</p>
+
+<h2 id="helper">Instaliranje pomoćnika</h2>
+<p>Pregledač ne sme da pokreće programe, pa to radi mali program na vašem računaru: <b>PassZit pomoćnik</b> (<code>passzit-helper</code>, za Windows i Linux u svakom izdanju). Radi samo kada ekstenzija zatraži vezu i odmah se zatim gasi.</p>
+<ol>
+  <li>Stavite <code>passzit-helper</code> na trajno mesto (na primer <code>%LOCALAPPDATA%\PassZit</code> ili <code>~/.local/bin</code>).</li>
+  <li>U meniju ekstenzije (≡) uključite <i>Otvaraj veze (RDP, SSH, WinBox) pomoću PassZit pomoćnika</i> i dozvolite pitanje pregledača.</li>
+  <li>Ekstenzija prikazuje komandu za vaš pregledač; pokrenite je jednom, na primer <code>passzit-helper install --chrome-id ID</code> ili <code>passzit-helper install --firefox</code>. Ona registruje pomoćnika samo za vašeg korisnika, bez administratorskih prava.</li>
+</ol>
+<p>Meni zatim prikazuje „PassZit pomoćnik … odgovara“. <code>passzit-helper uninstall</code> uklanja registraciju.</p>
+
+<h2 id="connect">Povezivanje</h2>
+<p>Prijave sa vezom dobijaju <b>dugme terminala</b> u ekstenziji (u <i>Ovaj sajt</i> i <i>Pretraga</i>). Kliknite ga i potvrdite. Pomoćnik zatim otvara:</p>
+<ul>
+  <li><b>RDP</b> — na Windows-u klijent udaljene radne površine (<code>mstsc</code>), sa prijavom sačuvanom nekoliko sekundi u Windows menadžeru akreditiva; na Linux-u <code>xfreerdp</code>, koji lozinku dobija na svom ulazu.</li>
+  <li><b>SSH</b> sa lozinkom — PuTTY ako je instaliran (lozinka u privremenoj datoteci koju čita samo pomoćnik, odmah obrisanoj); inače sistemski <code>ssh</code>, a lozinka je u klipbordu za upit.</li>
+  <li><b>SSH</b> sa ključem — sistemski <code>ssh</code> sa ključem u privremenoj datoteci koja se briše kada veza krene; lozinka ključa ide u klipbord.</li>
+  <li><b>WinBox</b> (Windows) — WinBox prima lozinku samo u komandnoj liniji, gde je drugi programi vašeg Windows korisnika mogu pročitati dok WinBox radi. PassZit vas pre toga upozorava.</li>
+</ul>
+<p>Kopirane lozinke se brišu iz klipborda posle vremena podešenog u smernicama.</p>
+
+<h2 id="devices">Stranice uređaja</h2>
+<p>Na stranici uređaja u konzoli za nadzor kao što je WatchZit, ekstenzija prikazuje prijave sačuvane za taj uređaj pod <i>Uređaj …</i>, pa se možete povezati odatle. Stranica imenuje uređaj u oznaci <code>&lt;meta name="passzit-device"&gt;</code>; PassZit nudi samo prijave čija adresa veze se poklapa.</p>
+
+<div class="callout"><p>Pomoćnik dobija jednu prijavu po kliku, samo od PassZit ekstenzije (pregledač proverava njegov id), i ništa ne čuva. Trezor ostaje šifrovan u pregledaču.</p></div>

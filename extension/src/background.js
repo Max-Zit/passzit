@@ -143,8 +143,68 @@ async function signedOut() {
 
 function summary(it, how) {
   const d = it.data;
-  return { id: it.id, name: d.name || "", username: d.login && d.login.username || "", type: d.type, match: how || "",
-    site: (parse((d.login && d.login.urls || [])[0]) || {}).hostname || "", hasPassword: !!(d.login && d.login.password), favorite: !!d.favorite };
+  const c = d.connect && d.connect.tool ? { tool: d.connect.tool, host: d.connect.host || "", port: d.connect.port || 0 } : null;
+  return { id: it.id, name: d.name || "", username: d.login && d.login.username || (c && d.connect.user) || "", type: d.type, match: how || "",
+    site: (parse((d.login && d.login.urls || [])[0]) || {}).hostname || (c ? c.host : ""), hasPassword: !!(d.login && d.login.password), favorite: !!d.favorite, connect: c };
+}
+
+// devicesFor lists the items that belong to a device: a connection to its
+// address, or a website on it (any port or scheme).
+function devicesFor(host) {
+  const h = (host || "").toLowerCase().replace(/^\[|\]$/g, "");
+  if (!h) return [];
+  const out = [];
+  for (const it of S.items.values()) {
+    const d = it.data;
+    if (!d || it.deleted_at) continue;
+    const hosts = (d.login && d.login.urls || []).map((u) => ((parse(u) || {}).hostname || "").toLowerCase().replace(/^\[|\]$/g, ""));
+    if (d.connect && d.connect.host) hosts.push(d.connect.host.toLowerCase().replace(/^\[|\]$/g, ""));
+    if (hosts.includes(h)) out.push(summary(it, "device"));
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
+// deviceHint reads the address a monitoring page names for the device it
+// shows (<meta name="passzit-device" content="…">, e.g. WatchZit's device
+// page). Only that one value is read from the page.
+async function deviceHint(tab) {
+  try {
+    const [r] = await api.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] },
+      func: () => { const m = document.querySelector('meta[name="passzit-device"]'); return m ? String(m.content).slice(0, 255) : ""; } });
+    const v = r && typeof r.result === "string" ? r.result.trim() : "";
+    return /^[A-Za-z0-9.:\-\[\]]{1,255}$/.test(v) ? v : "";
+  } catch (e) { return ""; }
+}
+
+// ---- remote connections through passzit-helper (native messaging)
+
+const HELPER = "com.maxzit.passzit";
+
+async function helperAllowed() {
+  try { return await api.permissions.contains({ permissions: ["nativeMessaging"] }); } catch (e) { return false; }
+}
+
+async function connectItem(id) {
+  const it = S.items.get(id);
+  if (!S.keys || !it || !it.data || !it.data.connect) throw new Error(t("Not found."));
+  if (!(await helperAllowed())) throw new Error(t("Switch on \"Open connections\" in the settings first."));
+  armLock();
+  const d = it.data, c = d.connect;
+  const msg = { v: 1, tool: c.tool, host: c.host, port: c.port || 0, user: (d.login && d.login.username) || c.user || "" };
+  if (d.type === "sshkey" && d.ssh) { msg.key = d.ssh.privateKey || ""; msg.passphrase = d.ssh.passphrase || ""; } else if (d.login) msg.password = d.login.password || "";
+  let res;
+  try {
+    res = await api.runtime.sendNativeMessage(HELPER, msg);
+  } catch (e) {
+    throw new Error(t("The PassZit helper does not answer. Is it installed on this computer?"));
+  }
+  if (!res || !res.ok) throw new Error((res && res.error) || t("The connection could not be opened."));
+  server().then((s) => call(s.server, s.token, "POST", "/api/items/" + id + "/access", { action: "connect" })).catch(() => {});
+  if (res.copy === "password" || res.copy === "passphrase") {
+    api.alarms.create("pz-clip", { delayInMinutes: Math.max(S.clipSeconds, 30) / 60 });
+    return { copy: res.copy, value: res.copy === "password" ? msg.password : msg.passphrase, clip: S.clipSeconds };
+  }
+  return { ok: true };
 }
 
 function matchesFor(url) {
@@ -169,7 +229,7 @@ function search(q) {
   for (const it of S.items.values()) {
     const d = it.data;
     if (!d || it.deleted_at) continue;
-    const hay = [d.name, d.login && d.login.username, ...(d.login && d.login.urls || [])].join("\n").toLowerCase();
+    const hay = [d.name, d.login && d.login.username, ...(d.login && d.login.urls || []), d.connect && d.connect.host].join("\n").toLowerCase();
     if (!f || hay.includes(f)) out.push(summary(it));
   }
   return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })).slice(0, 200);
@@ -373,9 +433,18 @@ const handlers = {
     if (!S.keys) return { locked: true };
     armLock();
     await maybeSync();
-    const url = await tabURL(await activeTab());
+    const tab = await activeTab();
+    const url = await tabURL(tab);
     const p = parse(url);
-    return { url, host: p ? p.hostname : "", secure: p ? p.protocol === "https:" : false, matches: p ? matchesFor(url) : [], pending: S.pending.map((x, i) => ({ i, host: x.host, username: x.username, update: !!x.update })) };
+    const device = tab ? await deviceHint(tab) : "";
+    return { url, host: p ? p.hostname : "", secure: p ? p.protocol === "https:" : false, matches: p ? matchesFor(url) : [],
+      device, deviceMatches: device ? devicesFor(device) : [], helper: await helperAllowed(),
+      pending: S.pending.map((x, i) => ({ i, host: x.host, username: x.username, update: !!x.update })) };
+  },
+  async connect(msg) { return await connectItem(msg.id); },
+  async helperPing() {
+    if (!(await helperAllowed())) return { ok: false, error: "permission" };
+    try { return await api.runtime.sendNativeMessage(HELPER, { v: 1, ping: true }); } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
   },
   async search(msg) { if (!S.keys) return { locked: true }; armLock(); return { items: search(msg.q) }; },
   async fill(msg) { return await fill(msg.id, msg.tabId); },

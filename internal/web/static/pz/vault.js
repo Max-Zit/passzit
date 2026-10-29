@@ -521,6 +521,11 @@ function renderDetail() {
     if (k.passphrase) rows.push(field(t("Passphrase of the key"), k.passphrase, { copy: true, secret: true }));
   }
   for (const f of d.fields || []) rows.push(field(f.name || t("Field"), f.value, { copy: true, secret: f.hidden }));
+  if (d.connect && d.connect.tool) {
+    const c = d.connect;
+    const tool = { rdp: "RDP", ssh: "SSH", winbox: "WinBox" }[c.tool] || c.tool;
+    rows.push(field(t("Remote connection"), tool + " · " + (c.user ? c.user + "@" : "") + c.host + (c.port ? ":" + c.port : ""), { copy: false }));
+  }
   if (d.notes) rows.push(el("div", { class: "vfield" }, el("label", { text: t("Notes") }), noShow ? el("p", { class: "small muted", text: t("Hidden: you may use this item, not read it.") }) : el("pre", { class: "vnotes", text: d.notes })));
   const folder = d.folder && S.folders.get(d.folder);
   const meta = el("p", { class: "small muted" },
@@ -697,8 +702,24 @@ function renderEditor() {
       kPriv.value = g.privateKey; kPub.value = g.publicKey; kFp.textContent = g.fingerprint;
     } }),
     el("label", null, t("Private key"), kPriv), el("label", null, t("Public key"), kPub, kFp), el("label", null, t("Passphrase of the key"), kPass));
+  // a remote connection the extension opens with passzit-helper
+  const cn = d.connect || {};
+  const cTool = el("select", { name: "connect_tool", "aria-label": t("Remote connection") },
+    el("option", { value: "" }, t("None")), ...[["rdp", "RDP (Remote Desktop)"], ["ssh", "SSH"], ["winbox", "WinBox (MikroTik)"]].map(([v, l]) => el("option", { value: v, selected: cn.tool === v }, l)));
+  const cHost = el("input", { name: "connect_host", value: cn.host || "", placeholder: "10.0.0.5", autocomplete: "off", spellcheck: "false", class: "mono" });
+  const cPort = el("input", { name: "connect_port", type: "number", min: 1, max: 65535, value: cn.port || "", placeholder: t("default"), class: "narrow" });
+  const cUser = el("input", { name: "connect_user", value: cn.user || "", autocomplete: "off", spellcheck: "false" });
+  const cUserRow = el("label", null, t("User name"), cUser);
+  const connectPart = el("fieldset", { class: "box" }, el("legend", { text: t("Remote connection") }),
+    el("div", { class: "grid2" }, el("label", null, t("Open with"), cTool), el("label", null, t("Port"), cPort)),
+    el("label", null, t("Address"), cHost), cUserRow,
+    el("small", { class: "muted", text: t("The browser extension opens it with the PassZit helper on this computer. A monitoring page that names the device (WatchZit) shows its logins too.") }));
   const parts = { login: loginPart, card: cardPart, identity: identityPart, sshkey: sshPart };
-  const showParts = () => { for (const [key, part] of Object.entries(parts)) part.hidden = d.type !== key; };
+  const showParts = () => {
+    for (const [key, part] of Object.entries(parts)) part.hidden = d.type !== key;
+    connectPart.hidden = d.type !== "login" && d.type !== "sshkey";
+    cUserRow.hidden = d.type !== "sshkey";
+  };
   showParts();
 
   const folder = el("select", { name: "folder" }, el("option", { value: "" }, t("No folder")),
@@ -724,7 +745,7 @@ function renderEditor() {
     el("div", { class: "grid2" }, el("label", null, t("Type"), type), el("label", null, t("Folder"), folder)),
     el("label", null, t("Name"), name),
     editable.length > 1 ? el("label", null, t("Vault"), vaultSel) : null,
-    loginPart, cardPart, identityPart, sshPart,
+    loginPart, cardPart, identityPart, sshPart, connectPart,
     el("label", null, t("Notes"), notes),
     el("div", null, el("label", { text: t("More fields") }), fields, button(t("Add a field"), { class: "ghost sm", icon: "plus", onclick: () => addField({ name: "", value: "", hidden: false }) })),
     el("label", { class: "check" }, fav, " " + t("Favorite")),
@@ -759,6 +780,13 @@ function renderEditor() {
     }
     if (out.type === "identity") out.identity = Object.assign({}, old && old.identity || {}, Object.fromEntries(Object.entries(idFields).map(([key, f]) => [key, f.value.trim()])));
     if (out.type === "sshkey") out.ssh = { privateKey: kPriv.value.trim() ? kPriv.value.trim() + "\n" : "", publicKey: kPub.value.trim(), passphrase: kPass.value, fingerprint: await sshFingerprint(kPub.value) };
+    delete out.connect;
+    if ((out.type === "login" || out.type === "sshkey") && cTool.value) {
+      const host = cHost.value.trim();
+      if (!/^[A-Za-z0-9][A-Za-z0-9.\-:]{0,252}$/.test(host)) { err.textContent = t("Enter the address of the connection (a name or an IP address)."); err.hidden = false; return; }
+      out.connect = { tool: cTool.value, host, port: +cPort.value || 0 };
+      if (out.type === "sshkey" && cUser.value.trim()) out.connect.user = cUser.value.trim();
+    }
     if (!out.name) { err.textContent = t("Enter a name."); err.hidden = false; return; }
     save.disabled = true;
     try {
@@ -1153,7 +1181,7 @@ function accessLog(it) {
     if (!d.open) return;
     try {
       const list = await api("GET", "/api/items/" + it.id + "/access");
-      const what = { show: t("showed the password"), copy: t("copied a secret"), fill: t("filled it in"), view: t("opened it") };
+      const what = { show: t("showed the password"), copy: t("copied a secret"), fill: t("filled it in"), view: t("opened it"), connect: t("connected with it") };
       body.replaceChildren(list.length ? el("ul", null, ...list.map((a) => el("li", null, el("b", { text: a.email }), " " + (what[a.action] || a.action) + " · ", el("small", { class: "muted", text: fmtDate(a.at) + (a.ip ? " · " + a.ip : "") }))))
         : el("p", { class: "muted", text: t("Nobody has used it yet.") }));
     } catch (e) { body.replaceChildren(el("p", { class: "muted", text: e.message })); }

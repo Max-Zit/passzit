@@ -1,0 +1,30 @@
+<h1>Remote connections</h1>
+<p class="lead">Open RDP, SSH and WinBox connections straight from the browser extension, with the login saved in PassZit — without typing or seeing the password.</p>
+
+<h2 id="item">Saving a connection</h2>
+<p>Edit a login (or an SSH key) in the web vault and fill in <b>Remote connection</b>: the program (<i>RDP</i>, <i>SSH</i> or <i>WinBox</i>), the address of the device (a name or an IP address) and, if it is not the usual one, the port. For an SSH key also enter the user name. The user name and password of a login are used for the connection; an SSH key is used with its passphrase.</p>
+<p>In shared vaults the connection needs the right <i>Use</i> or more. It is reported in <i>Who used this item</i> as "connected with it".</p>
+
+<h2 id="helper">Installing the helper</h2>
+<p>A browser may not start programs, so a small program on your computer does it: the <b>PassZit helper</b> (<code>passzit-helper</code>, for Windows and Linux in every release). It runs only when the extension asks for a connection and ends right after.</p>
+<ol>
+  <li>Put <code>passzit-helper</code> in a lasting place (for example <code>%LOCALAPPDATA%\PassZit</code> or <code>~/.local/bin</code>).</li>
+  <li>In the extension's menu (≡) switch on <i>Open connections (RDP, SSH, WinBox) with the PassZit helper</i> and allow the browser's question.</li>
+  <li>The extension shows the command for your browser; run it once, for example <code>passzit-helper install --chrome-id ID</code> or <code>passzit-helper install --firefox</code>. It registers the helper for your user only, no administrator rights needed.</li>
+</ol>
+<p>The menu then shows "The PassZit helper … answers". <code>passzit-helper uninstall</code> removes the registration.</p>
+
+<h2 id="connect">Connecting</h2>
+<p>Logins with a connection get a <b>terminal button</b> in the extension (in <i>This site</i> and <i>Search</i>). Click it and confirm. The helper then opens:</p>
+<ul>
+  <li><b>RDP</b> — on Windows the Remote Desktop client (<code>mstsc</code>) with the login stored for a few seconds in the Windows credential manager; on Linux <code>xfreerdp</code>, which gets the password on its input.</li>
+  <li><b>SSH</b> with a password — PuTTY when it is installed (password in a temporary file only the helper can read, deleted right after); otherwise the system's <code>ssh</code>, and the password is on the clipboard for the prompt.</li>
+  <li><b>SSH</b> with a key — the system's <code>ssh</code> with the key in a temporary file that is deleted after the connection starts; a passphrase is put on the clipboard.</li>
+  <li><b>WinBox</b> (Windows) — WinBox accepts the password only on its command line, where other programs of your Windows user can read it while WinBox runs. PassZit warns you before.</li>
+</ul>
+<p>Copied passwords are cleared from the clipboard after the time set in the policy.</p>
+
+<h2 id="devices">Device pages</h2>
+<p>On the device page of a monitoring console such as WatchZit, the extension shows the logins saved for that device under <i>Device …</i>, so you can connect from there. The page names the device in a <code>&lt;meta name="passzit-device"&gt;</code> tag; PassZit only offers logins whose connection address matches it.</p>
+
+<div class="callout"><p>The helper gets one login per click, only from the PassZit extension (the browser checks its id), and keeps nothing. The vault stays encrypted in the browser.</p></div>

@@ -7,7 +7,7 @@ Its programs contain the following components under their own licenses, all comp
 |---|---|---|
 | Go standard library and runtime | go1.27.3 | BSD-3-Clause |
 | github.com/Azure/go-ntlmssp | v0.1.1 | MIT |
-| github.com/beevik/etree | v1.5.0 | BSD-2-Clause |
+| github.com/beevik/etree | v1.6.0 | BSD-2-Clause |
 | github.com/coreos/go-oidc/v3 | v3.21.0 | Apache-2.0 |
 | github.com/crewjam/saml | v0.5.1 | BSD-2-Clause |
 | github.com/fergusstrange/embedded-postgres | v1.34.0 | MIT |
@@ -19,10 +19,10 @@ Its programs contain the following components under their own licenses, all comp
 | github.com/jackc/pgservicefile | v0.0.0-20240606120523-5a60cdf6a761 | MIT |
 | github.com/jackc/pgx/v5 | v5.11.0 | MIT |
 | github.com/jackc/puddle/v2 | v2.2.2 | MIT |
-| github.com/jonboulle/clockwork | v0.2.2 | Apache-2.0 |
+| github.com/jonboulle/clockwork | v0.5.0 | Apache-2.0 |
 | github.com/lib/pq | v1.10.9 | MIT |
 | github.com/mattermost/xml-roundtrip-validator | v0.1.0 | Apache-2.0 |
-| github.com/russellhaering/goxmldsig | v1.4.0 | Apache-2.0 |
+| github.com/russellhaering/goxmldsig | v1.6.0 | Apache-2.0 |
 | github.com/xi2/xz | v0.0.0-20171230120015-48954b6210f8 | Public domain |
 | golang.org/x/crypto | v0.58.0 | BSD-3-Clause |
 | golang.org/x/oauth2 | v0.37.0 | BSD-3-Clause |
@@ -97,7 +97,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## github.com/beevik/etree v1.5.0 (BSD-2-Clause)
+## github.com/beevik/etree v1.6.0 (BSD-2-Clause)
 
 ```
 Copyright 2015-2024 Brett Vickers. All rights reserved.
@@ -786,7 +786,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-## github.com/jonboulle/clockwork v0.2.2 (Apache-2.0)
+## github.com/jonboulle/clockwork v0.5.0 (Apache-2.0)
 
 ```
 Apache License
@@ -1211,7 +1211,7 @@ Apache License
    limitations under the License.
 ```
 
-## github.com/russellhaering/goxmldsig v1.4.0 (Apache-2.0)
+## github.com/russellhaering/goxmldsig v1.6.0 (Apache-2.0)
 
 ```
 Apache License

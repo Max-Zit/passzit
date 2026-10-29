@@ -97,6 +97,8 @@ func describe(n string) update.File {
 		f.Kind = "server"
 	case strings.HasPrefix(n, "passzit-extension"):
 		f.Kind = "extension"
+	case strings.HasPrefix(n, "passzit-helper"):
+		f.Kind = "helper"
 	}
 	switch {
 	case strings.HasSuffix(n, ".deb"):
