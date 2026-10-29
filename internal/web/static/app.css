@@ -377,10 +377,21 @@ input.sep { width: 4em; display: inline-block; }
 .kchip:hover { border-color: var(--accent); }
 .kchip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .kchip.on .ic, .kchip.on small { color: var(--accent); }
-.vgroup button { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 6px 4px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; cursor: pointer; text-align: left; }
-.vgroup button span { flex: 1; }
-.vgroup .ic { width: 14px; height: 14px; }
-.vgroup button:hover { color: var(--text); }
+.vitems > li > a { padding-left: calc(8px + var(--depth, 0) * 20px); }
+.vgroup { display: flex; align-items: center; position: relative; }
+.vfolder { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px; padding-left: calc(8px + var(--depth, 0) * 20px); border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.vfolder span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vfolder small { color: var(--muted); font-weight: 500; font-size: 12px; }
+.vfolder .ic { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.vfolder .ic + .ic { width: 20px; height: 20px; color: #d97706; }
+.vfolder:hover { background: var(--panel-2); }
+.vfolder.on { background: var(--accent-soft); }
+.vfacts { display: none; gap: 2px; position: absolute; right: 6px; background: var(--panel-2); border-radius: 8px; }
+.vgroup:hover .vfacts, .vgroup:focus-within .vfacts, .vgroup:has(.vfolder.on) .vfacts { display: flex; }
+.searchfield > .iconbtn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
+.searchfield > .iconbtn .ic { position: static; transform: none; }
+.searchfield:has(> .iconbtn) input { padding-right: 38px; }
+.searchfield .iconbtn.on { color: var(--accent); background: var(--accent-soft); }
 .vicon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent-2), #a855f7); }
 .vicon[data-type="note"] { background: linear-gradient(135deg, #0ea5e9, #14b8a6); }
 .vicon[data-kind="rdp"] { background: linear-gradient(135deg, #2563eb, #0ea5e9); }

@@ -230,7 +230,7 @@ function search(q) {
   const out = [];
   for (const it of S.items.values()) {
     const d = it.data;
-    if (!d || it.deleted_at) continue;
+    if (!d || it.deleted_at || d.type === "folder") continue;
     const hay = [d.name, d.login && d.login.username, ...(d.login && d.login.urls || []), d.connect && d.connect.host].join("\n").toLowerCase();
     if (!f || hay.includes(f)) out.push(summary(it));
   }

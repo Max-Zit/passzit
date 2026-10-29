@@ -26,7 +26,8 @@ const S = {
   view: "vault",      // vault, folder, trash ("all": search results, jumps)
   kind: "",           // a kind of item shown in the list (KINDS key or "fav")
   closed: new Set(),  // folder groups closed in the list
-  folder: "",
+  cwd: "",            // the folder of the vault last opened in the list (new items go there)
+  qAll: false,        // search all vaults
   vault: "",          // the vault shown with view "vault"
   q: "",
   selected: "",
@@ -176,6 +177,8 @@ async function openVault() {
   // Shared vaults: confirmed keys, then access that groups give.
   await loadKnown();
   if (await completePending(true)) { await sync(S.revision); render(); }
+  // folders of earlier versions move into the vaults
+  await migrateFolders();
 }
 
 async function sync(since) {
@@ -263,38 +266,134 @@ async function itemOp(id, op) {
   else if (it) { it.revision = res.revision; it.deleted_at = op === "trash" ? new Date().toISOString() : null; }
 }
 
-async function saveFolder(id, name, revision) {
-  const fid = id || pz.uuid();
-  const data = await pz.seal(S.keys.accountKey, pz.utf8(name), pz.AAD.folder(fid));
-  const res = await api("PUT", "/api/folders/" + fid, { data, revision: revision || 0 });
-  S.folders.set(fid, { revision: res.revision, name });
-  S.revision = Math.max(S.revision, res.revision);
-  return fid;
+// ---- folders inside a vault: items of type "folder" ({ name, parent }),
+// sealed with the vault key like every item, so all members of the vault
+// see them; an item names its folder in data.folder. Folders can be nested
+// (a customer, then its sites).
+
+function isFolder(it) { return !!(it && it.data && it.data.type === "folder"); }
+
+function vaultFolders(vaultID) {
+  return [...S.items.values()].filter((it) => isFolder(it) && !it.deleted_at && it.vault_id === vaultID);
+}
+
+// folderOf is the folder item an item is in (null: the top of its vault).
+function folderOf(it) {
+  const f = it && it.data && it.data.folder ? S.items.get(it.data.folder) : null;
+  return f && isFolder(f) && !f.deleted_at && f.vault_id === it.vault_id ? f : null;
+}
+
+// folderPath is "Customer / Site" for a folder item (or "").
+function folderPath(f) {
+  const names = [];
+  for (let i = 0; f && i < 20; i++) {
+    names.unshift(f.data.name || "?");
+    f = folderOf({ vault_id: f.vault_id, data: { folder: f.data.parent } });
+  }
+  return names.join(" / ");
+}
+
+function byName(a, b) { return itemName(a).localeCompare(itemName(b), undefined, { sensitivity: "base" }); }
+
+async function newVaultFolder(vaultID, parent) {
+  const name = await prompt1(t("New folder"), t("Name"), "");
+  if (!name) return;
+  try {
+    const f = await saveItem({ vault_id: vaultID }, { type: "folder", name, parent: parent || "" });
+    S.closed.delete(f.id);
+    S.cwd = f.id;
+    render();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function renameVaultFolder(f) {
+  const name = await prompt1(t("Rename the folder"), t("Name"), f.data.name);
+  if (!name || name === f.data.name) return;
+  try { await saveItem(f, Object.assign({}, f.data, { name })); render(); } catch (e) { toast(e.message, true); }
+}
+
+// deleteVaultFolder moves what the folder holds one level up and puts the
+// folder into the trash.
+async function deleteVaultFolder(f) {
+  const inside = [...S.items.values()].filter((it) => !it.deleted_at && it.vault_id === f.vault_id && it.data &&
+    (isFolder(it) ? it.data.parent === f.id : it.data.folder === f.id));
+  const q = inside.length
+    ? t("Delete the folder %s? The %d items and folders in it move to the folder above.", f.data.name, inside.length)
+    : t("Delete the folder %s?", f.data.name);
+  if (!(await confirmBox(q, t("Delete"), true))) return;
+  try {
+    const up = f.data.parent || "";
+    for (const it of inside) {
+      await saveItem(it, Object.assign({}, it.data, isFolder(it) ? { parent: up } : { folder: up }));
+    }
+    await itemOp(f.id, "trash");
+    if (S.cwd === f.id) S.cwd = up;
+    render();
+  } catch (e) { toast(e.message, true); }
+}
+
+// migrateFolders moves the folders of earlier versions (one list per user)
+// into the vaults: a folder per vault with the same name, and the items
+// into it. Items of vaults this user may not change stay where they are.
+let migrating = false;
+async function migrateFolders() {
+  if (migrating || !S.folders.size) return;
+  migrating = true;
+  try {
+    for (const [fid, f] of [...S.folders.entries()]) {
+      const items = [...S.items.values()].filter((it) => !it.deleted_at && it.data && !isFolder(it) && it.data.folder === fid);
+      const vaults = new Set(items.map((it) => it.vault_id).filter((v) => canEditVault(v)));
+      if (!items.length) vaults.add(personalVault());
+      let left = items.length;
+      for (const v of vaults) {
+        const nf = await saveItem({ vault_id: v }, { type: "folder", name: f.name, parent: "" });
+        for (const it of items.filter((x) => x.vault_id === v)) {
+          await saveItem(it, Object.assign({}, it.data, { folder: nf.id }));
+          left--;
+        }
+      }
+      if (!left) {
+        const res = await api("DELETE", "/api/folders/" + fid);
+        S.revision = Math.max(S.revision, res.revision);
+        S.folders.delete(fid);
+      }
+    }
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    migrating = false;
+    render();
+  }
 }
 
 // ---- rendering
 
 function itemName(it) { return it.data ? it.data.name || t("(no name)") : t("(cannot be decrypted)"); }
 
+// searching reports whether the list shows search or kind results (a flat
+// list) instead of the vault's folder tree.
+function searching() { return !!(S.q.trim() || S.kind); }
+
 function visibleItems() {
   const q = S.q.trim().toLowerCase();
+  const everywhere = q && S.qAll;
   const out = [];
   for (const it of S.items.values()) {
+    if (isFolder(it)) continue;
     const d = it.data;
     const trashed = !!it.deleted_at;
     if (S.view === "trash" ? !trashed : trashed) continue;
-    if (S.view === "vault" && it.vault_id !== S.vault) continue;
+    if (S.view === "vault" && !everywhere && it.vault_id !== S.vault) continue;
     if (d) {
       if (S.kind === "fav" ? !d.favorite : S.kind && kindOf(d) !== S.kind) continue;
-      if (S.view === "folder" && (d.folder || "") !== S.folder) continue;
       if (q) {
-        const hay = [d.name, d.login && d.login.username, ...(d.login && d.login.urls || []), d.notes].join("\n").toLowerCase();
+        const hay = [d.name, d.login && d.login.username, ...(d.login && d.login.urls || []), d.connect && d.connect.host, d.notes].join("\n").toLowerCase();
         if (!hay.includes(q)) continue;
       }
-    } else if (S.view === "folder") continue;
+    }
     out.push(it);
   }
-  return out.sort((a, b) => itemName(a).localeCompare(itemName(b), undefined, { sensitivity: "base" }));
+  return out.sort(byName);
 }
 
 function render() {
@@ -304,35 +403,30 @@ function render() {
   root.replaceChildren(grid);
 }
 
-function count(view, folder) {
+function count(view, vaultID) {
   let n = 0;
   for (const it of S.items.values()) {
-    const d = it.data;
+    if (isFolder(it)) continue;
     if (view === "trash") { if (it.deleted_at) n++; continue; }
     if (it.deleted_at) continue;
-    if (view === "vault") { if (it.vault_id === folder) n++; continue; }
-    if (view === "all") n++;
-    else if (!d) continue;
-    else if (view === "fav" && d.favorite) n++;
-    else if (TYPES[view] && d.type === view) n++;
-    else if (view === "folder" && (d.folder || "") === folder) n++;
+    if (view === "vault") { if (it.vault_id === vaultID) n++; continue; }
+    n++;
   }
   return n;
 }
 
 function renderFilters() {
-  const link = (view, label, ic, folder) => {
-    const on = S.view === view && (view !== "folder" || S.folder === folder);
-    return el("a", { href: "#", class: on ? "on" : "", onclick: (ev) => { ev.preventDefault(); S.view = view; S.folder = folder || ""; S.kind = ""; S.selected = ""; S.editing = null; render(); } },
-      icon(ic), el("span", { text: label }), el("small", { text: String(count(view, folder)) }));
+  const link = (view, label, ic, vaultID) => {
+    const on = S.view === view && (view !== "vault" || S.vault === vaultID);
+    return el("a", { href: "#", class: on ? "on" : "", onclick: (ev) => {
+      ev.preventDefault(); S.view = view; if (vaultID) S.vault = vaultID; S.kind = ""; S.cwd = ""; S.selected = ""; S.editing = null; render();
+    } }, icon(ic), el("span", { text: label }), el("small", { text: String(count(view, vaultID)) }));
   };
   const nav = el("nav", { class: "vfilters", "aria-label": t("Filters") });
-  // vaults first: the personal one, then the team vaults by name (a new
-  // one appears among them)
+  // the personal vault, then the team vaults by name (a new one appears
+  // among them)
   const vaultLink = (id, v) => {
     const a = link("vault", vaultLabel(id), v.kind === "personal" ? "lock" : "users", id);
-    a.onclick = (ev) => { ev.preventDefault(); S.view = "vault"; S.vault = id; S.kind = ""; S.selected = ""; S.editing = null; render(); };
-    if (S.view === "vault" && S.vault === id) a.classList.add("on"); else a.classList.remove("on");
     if (v.needsRotation && v.rights === "manage") a.append(el("span", { class: "dot warn", title: t("Needs a new key") }));
     return a;
   };
@@ -346,27 +440,13 @@ function renderFilters() {
   }
   for (const [id, v] of teams) nav.append(vaultLink(id, v));
   if (!teams.length && canCreate) nav.append(el("a", { href: "#", class: "muted", onclick: (ev) => { ev.preventDefault(); createVault(); } }, icon("plus"), el("span", { text: t("New shared vault") })));
-  nav.append(el("span", { class: "navlabel brk" }, t("Folders"),
-      el("button", { type: "button", class: "iconbtn sm", title: t("New folder"), "aria-label": t("New folder"), onclick: newFolder }, icon("plus"))));
-  const folders = [...S.folders.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, undefined, { sensitivity: "base" }));
-  for (const [id, f] of folders) nav.append(link("folder", f.name, "folder", id));
-  nav.append(el("span", { class: "navlabel" }), link("trash", t("Trash"), "trash"),
+  nav.append(el("span", { class: "navlabel brk" }), link("trash", t("Trash"), "trash"),
     el("span", { class: "navlabel", text: t("Tools") }),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openHealth(); } }, icon("shield"), el("span", { text: t("Password health") })),
     S.acct.no_sends ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openSends(""); } }, icon("link"), el("span", { text: t("Secret links") })),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openImport(); } }, icon("upload"), el("span", { text: t("Import") })),
     S.acct.no_export ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openExport(); } }, icon("download"), el("span", { text: t("Export") })));
   return nav;
-}
-
-async function newFolder() {
-  const name = await prompt1(t("New folder"), t("Name"), "");
-  if (!name) return;
-  try {
-    const id = await saveFolder("", name, 0);
-    S.view = "folder"; S.folder = id;
-    render();
-  } catch (e) { toast(e.message, true); }
 }
 
 // prompt1 asks for one line of text in a dialog.
@@ -386,106 +466,147 @@ function prompt1(title, label, value) {
 }
 
 function renderList() {
-  const search = el("input", { type: "search", value: S.q, placeholder: t("Search the vault"), "aria-label": t("Search the vault"), class: "vsearch" });
-  search.addEventListener("input", () => {
-    S.q = search.value;
+  const search = el("input", { type: "search", value: S.q, placeholder: S.qAll ? t("Search all vaults") : t("Search the vault"), "aria-label": t("Search the vault"), class: "vsearch" });
+  const refresh = () => {
     const list = document.getElementById("vlist-items");
     if (list) list.replaceChildren(...listRows());
-  });
-  const head = el("div", { class: "vlist-head" }, el("div", { class: "searchfield" }, icon("search"), search));
-  if (S.view !== "trash" && (S.view !== "vault" || canEditVault(S.vault))) head.append(button(t("New item"), { class: "primary", icon: "plus", onclick: () => startEdit(null) }));
-  let title = TYPES[S.view] ? t(TYPES[S.view].plural) : { all: t("All items"), fav: t("Favorites"), trash: t("Trash") }[S.view];
-  if (S.view === "folder") title = (S.folders.get(S.folder) || {}).name || "";
-  if (S.view === "vault") title = vaultLabel(S.vault);
+  };
+  search.addEventListener("input", () => { S.q = search.value; refresh(); });
+  const scope = el("button", { type: "button", class: "iconbtn sm" + (S.qAll ? " on" : ""), "aria-pressed": String(!!S.qAll),
+    title: t("Search all vaults"), "aria-label": t("Search all vaults"), onclick: () => {
+      S.qAll = !S.qAll;
+      scope.classList.toggle("on", S.qAll);
+      scope.setAttribute("aria-pressed", String(S.qAll));
+      search.placeholder = S.qAll ? t("Search all vaults") : t("Search the vault");
+      refresh();
+    } }, icon("layers"));
+  const head = el("div", { class: "vlist-head" }, el("div", { class: "searchfield" }, icon("search"), search, S.view === "vault" ? scope : null));
+  const editable = S.view === "vault" && canEditVault(S.vault);
+  if (editable) head.append(button(t("New item"), { class: "primary", icon: "plus", onclick: () => startEdit(null) }));
+  const title = S.view === "trash" ? t("Trash") : S.view === "vault" ? vaultLabel(S.vault) : t("All items");
   const tools = el("div", { class: "vlist-title" }, el("h2", { text: title }));
+  const actions = el("span", { class: "row" });
+  if (editable) actions.append(button("", { class: "ghost sm", icon: "folderplus", aria: t("New folder"), title: t("New folder"), onclick: () => newVaultFolder(S.vault, S.cwd) }));
   if (S.view === "vault" && (S.vaults.get(S.vault) || {}).kind === "shared") {
     const v = S.vaults.get(S.vault);
-    tools.append(el("span", { class: "row" }, el("small", { class: "muted", text: rightsText(v.rights) }),
-      button("", { class: "ghost sm", icon: "settings", aria: t("Members and settings"), title: t("Members and settings"), onclick: () => openVaultDialog(S.vault) })));
+    actions.append(el("small", { class: "muted", text: rightsText(v.rights) }),
+      button("", { class: "ghost sm", icon: "settings", aria: t("Members and settings"), title: t("Members and settings"), onclick: () => openVaultDialog(S.vault) }));
   }
-  if (S.view === "folder") {
-    tools.append(el("span", { class: "row" },
-      button("", { class: "ghost sm", icon: "edit", aria: t("Rename the folder"), title: t("Rename the folder"), onclick: renameFolder }),
-      button("", { class: "ghost sm", icon: "trash", aria: t("Delete the folder"), title: t("Delete the folder"), onclick: deleteFolder })));
-  }
+  tools.append(actions);
   if (S.view === "trash") tools.append(el("small", { class: "muted", text: t("Items in the trash are deleted after %d days.", S.acct.trash_days || 30) }));
   const banner = S.view === "vault" ? rotateBanner(S.vault) : null;
   return el("section", { class: "vlist panel" }, head, tools, banner, S.view === "trash" ? null : kindBar(), el("ul", { class: "vitems", id: "vlist-items" }, ...listRows()));
 }
 
-// KIND_ICONS are the list icons of the kinds of items (websites show their
-// first letter).
-const KIND_ICONS = { rdp: "monitor", ssh: "terminal", winbox: "router", sshkey: "key", note: "note", card: "card", identity: "user" };
+// KIND_ICONS are the list icons of the kinds of items.
+const KIND_ICONS = { web: "globe", cred: "idcard", rdp: "monitor", ssh: "terminal", winbox: "router", sshkey: "key", note: "note", card: "card", identity: "user" };
 
-// kindOf is the KINDS key of an item: devices by the program that opens them.
+// kindOf is the KINDS key of an item: devices by the program that opens
+// them, logins by whether they belong to a website.
 function kindOf(d) {
   if (!d) return "";
-  if (d.type === "login") return d.connect && KIND_ICONS[d.connect.tool] ? d.connect.tool : "web";
+  if (d.type === "login") {
+    if (d.connect && d.connect.tool && KIND_ICONS[d.connect.tool]) return d.connect.tool;
+    return (d.login && (d.login.urls || []).some(Boolean)) ? "web" : "cred";
+  }
   return d.type || "";
 }
 
-// kindBar shows what the vault (or folder) holds: one chip per kind with
-// its count; a chip shows only that kind.
+// kindBar shows what the vault holds: one chip per kind with its count; a
+// chip shows only that kind.
 function kindBar() {
   const counts = new Map();
   let all = 0, fav = 0;
   for (const it of S.items.values()) {
-    if (it.deleted_at || !it.data) continue;
+    if (it.deleted_at || !it.data || isFolder(it)) continue;
     if (S.view === "vault" && it.vault_id !== S.vault) continue;
-    if (S.view === "folder" && (it.data.folder || "") !== S.folder) continue;
     all++;
     if (it.data.favorite) fav++;
     const k = kindOf(it.data);
     counts.set(k, (counts.get(k) || 0) + 1);
   }
-  const PLURAL = { web: t("Websites"), rdp: "RDP", ssh: "SSH", winbox: "WinBox", sshkey: t("SSH keys"), note: t("Secure notes"), card: t("Cards"), identity: t("Identities") };
+  const PLURAL = { web: t("Websites"), cred: t("Credentials"), rdp: "RDP", ssh: "SSH", winbox: "WinBox", sshkey: t("SSH keys"), note: t("Secure notes"), card: t("Cards"), identity: t("Identities") };
   const chip = (key, label, ic, n) => el("button", { type: "button", class: "kchip" + (S.kind === key ? " on" : ""), "aria-pressed": String(S.kind === key),
     onclick: () => { S.kind = S.kind === key && key ? "" : key; S.selected = ""; S.editing = null; render(); } },
     ic ? icon(ic) : null, el("span", { text: label }), el("small", { text: String(n) }));
   const bar = el("div", { class: "kindbar", role: "toolbar", "aria-label": t("Kinds of items") }, chip("", t("All"), "", all));
   if (fav) bar.append(chip("fav", t("Favorites"), "star", fav));
-  for (const k of KINDS.map((x) => x.key)) if (counts.get(k)) bar.append(chip(k, PLURAL[k], KIND_ICONS[k] || "link", counts.get(k)));
+  for (const k of KINDS.map((x) => x.key)) if (counts.get(k)) bar.append(chip(k, PLURAL[k], KIND_ICONS[k], counts.get(k)));
   return bar;
+}
+
+function itemRow(it, depth, extra) {
+  const d = it.data || {};
+  const sub = [subtitle(d), extra].filter(Boolean).join(" · ");
+  const a = el("a", { href: "#", class: it.id === S.selected ? "on" : "", onclick: (ev) => { ev.preventDefault(); S.selected = it.id; S.cwd = d.folder || ""; S.editing = null; render(); } },
+    avatar(it, ""),
+    el("span", { class: "vname" }, el("b", { text: itemName(it) }), el("small", { text: sub })),
+    d.favorite ? el("span", { class: "vfav", title: t("Favorite") }, icon("star")) : null);
+  if (depth) a.style.setProperty("--depth", String(depth));
+  return el("li", null, a);
 }
 
 function listRows() {
   const items = visibleItems();
-  if (!items.length) {
-    return [el("li", { class: "empty" }, S.q ? t("Nothing found.") : S.view === "trash" ? t("The trash is empty.") : t("No items yet. Add your first login with New item."))];
+  // search, a kind or the trash: a flat list that says where each item is
+  if (S.view !== "vault" || searching()) {
+    if (!items.length) return [el("li", { class: "empty" }, S.q ? t("Nothing found.") : S.view === "trash" ? t("The trash is empty.") : t("Nothing found."))];
+    return items.map((it) => {
+      const f = folderOf(it);
+      const where = [S.qAll || S.view !== "vault" ? vaultLabel(it.vault_id) : "", f ? folderPath(f) : ""].filter(Boolean).join(" / ");
+      return itemRow(it, 0, where);
+    });
   }
-  const row = (it) => {
-    const d = it.data || {};
-    const sub = subtitle(d);
-    return el("li", null, el("a", { href: "#", class: it.id === S.selected ? "on" : "", onclick: (ev) => { ev.preventDefault(); S.selected = it.id; S.editing = null; render(); } },
-      avatar(it, ""),
-      el("span", { class: "vname" }, el("b", { text: itemName(it) }), el("small", { text: sub || "" })),
-      d.favorite ? el("span", { class: "vfav", title: t("Favorite") }, icon("star")) : null));
-  };
-  // In a vault the items are grouped by folder, like a tree; a group can
-  // be closed.
-  if (S.view !== "vault" || S.q || !items.some((it) => it.data && it.data.folder && S.folders.has(it.data.folder))) return items.map(row);
-  const groups = new Map();
+  // the vault as a tree: folders (closed ones keep their contents hidden),
+  // then the items at each level
+  const folders = vaultFolders(S.vault);
+  if (!items.length && !folders.length) return [el("li", { class: "empty" }, t("No items yet. Add your first login with New item."))];
+  const ids = new Set(folders.map((f) => f.id));
+  const kids = new Map(), inside = new Map();
+  for (const f of folders) {
+    const p = ids.has(f.data.parent) ? f.data.parent : "";
+    if (!kids.has(p)) kids.set(p, []);
+    kids.get(p).push(f);
+  }
   for (const it of items) {
-    const f = it.data && S.folders.has(it.data.folder) ? it.data.folder : "";
-    if (!groups.has(f)) groups.set(f, []);
-    groups.get(f).push(it);
+    const p = it.data && ids.has(it.data.folder) ? it.data.folder : "";
+    if (!inside.has(p)) inside.set(p, []);
+    inside.get(p).push(it);
   }
-  const order = [...groups.keys()].sort((a, b) => !a ? 1 : !b ? -1 : S.folders.get(a).name.localeCompare(S.folders.get(b).name, undefined, { sensitivity: "base" }));
+  const total = (fid, seen) => {
+    if (seen.has(fid)) return 0;
+    seen.add(fid);
+    return (inside.get(fid) || []).length + (kids.get(fid) || []).reduce((n, f) => n + total(f.id, seen), 0);
+  };
+  const editable = canEditVault(S.vault);
   const out = [];
-  for (const f of order) {
-    const closed = S.closed.has(f || "-");
-    out.push(el("li", { class: "vgroup" }, el("button", { type: "button", "aria-expanded": String(!closed), onclick: () => {
-      if (closed) S.closed.delete(f || "-"); else S.closed.add(f || "-");
-      render();
-    } }, icon(closed ? "chevr" : "chevd"), icon("folder"), el("span", { text: f ? S.folders.get(f).name : t("No folder") }), el("small", { text: String(groups.get(f).length) }))));
-    if (!closed) out.push(...groups.get(f).map(row));
-  }
+  const walk = (parent, depth, seen) => {
+    for (const f of (kids.get(parent) || []).sort(byName)) {
+      if (seen.has(f.id)) continue;
+      seen.add(f.id);
+      const closed = S.closed.has(f.id);
+      const btn = el("button", { type: "button", class: "vfolder" + (S.cwd === f.id ? " on" : ""), "aria-expanded": String(!closed), onclick: () => {
+        if (S.cwd === f.id || closed) { if (closed) S.closed.delete(f.id); else S.closed.add(f.id); }
+        S.cwd = f.id;
+        render();
+      } }, icon(closed ? "chevr" : "chevd"), icon(closed ? "folder" : "folderopen"), el("span", { text: f.data.name || "?" }), el("small", { text: String(total(f.id, new Set())) }));
+      if (depth) btn.style.setProperty("--depth", String(depth));
+      const acts = editable ? el("span", { class: "vfacts" },
+        button("", { class: "ghost sm", icon: "folderplus", aria: t("New folder in %s", f.data.name), title: t("New folder in %s", f.data.name), onclick: () => newVaultFolder(S.vault, f.id) }),
+        button("", { class: "ghost sm", icon: "edit", aria: t("Rename the folder"), title: t("Rename the folder"), onclick: () => renameVaultFolder(f) }),
+        button("", { class: "ghost sm", icon: "trash", aria: t("Delete the folder"), title: t("Delete the folder"), onclick: () => deleteVaultFolder(f) })) : null;
+      out.push(el("li", { class: "vgroup" }, btn, acts));
+      if (!closed) walk(f.id, depth + 1, seen);
+    }
+    for (const it of inside.get(parent) || []) out.push(itemRow(it, depth, ""));
+  };
+  walk("", 0, new Set());
   return out;
 }
 
 // subtitle is the second line of an item in the list.
 function subtitle(d) {
-  if (d.type === "login") return (d.login && d.login.username) || hostOf((d.login && d.login.urls || [])[0]);
+  if (d.type === "login") return (d.login && d.login.username) || (d.connect && d.connect.host) || hostOf((d.login && d.login.urls || [])[0]);
   if (d.type === "card" && d.card) return [d.card.brand, d.card.number ? "•••• " + d.card.number.replace(/\D/g, "").slice(-4) : ""].filter(Boolean).join(" ");
   if (d.type === "identity" && d.identity) return [d.identity.first, d.identity.last].filter(Boolean).join(" ") || d.identity.email || "";
   if (d.type === "sshkey" && d.ssh) return (d.ssh.fingerprint || "").slice(0, 24);
@@ -495,8 +616,7 @@ function subtitle(d) {
 function avatar(it, cls) {
   const d = it.data || {};
   const k = kindOf(d);
-  const ic = KIND_ICONS[k] ? icon(KIND_ICONS[k]) : (itemName(it)[0] || "?").toUpperCase();
-  return el("span", { class: "vicon" + (cls ? " " + cls : ""), dataset: { type: d.type || "", kind: k } }, ic);
+  return el("span", { class: "vicon" + (cls ? " " + cls : ""), dataset: { type: d.type || "", kind: k } }, icon(KIND_ICONS[k] || "key"));
 }
 
 function hostOf(u) {
@@ -511,26 +631,6 @@ function safeHref(u) {
     const p = new URL(full);
     return p.protocol === "https:" || p.protocol === "http:" ? p.href : null;
   } catch (e) { return null; }
-}
-
-async function renameFolder() {
-  const f = S.folders.get(S.folder);
-  if (!f) return;
-  const name = await prompt1(t("Rename the folder"), t("Name"), f.name);
-  if (!name || name === f.name) return;
-  try { await saveFolder(S.folder, name, f.revision); render(); } catch (e) { toast(e.message, true); }
-}
-
-async function deleteFolder() {
-  const f = S.folders.get(S.folder);
-  if (!f || !(await confirmBox(t("Delete the folder %s? Its items stay in the vault, without a folder.", f.name), t("Delete"), true))) return;
-  try {
-    const res = await api("DELETE", "/api/folders/" + S.folder);
-    S.revision = Math.max(S.revision, res.revision);
-    S.folders.delete(S.folder);
-    S.view = "vault"; S.folder = "";
-    render();
-  } catch (e) { toast(e.message, true); }
 }
 
 // ---- detail
@@ -589,7 +689,7 @@ function renderDetail() {
     rows.push(field(t("Remote connection"), tool + " · " + (c.user ? c.user + "@" : "") + c.host + (c.port ? ":" + c.port : ""), { copy: false }));
   }
   if (d.notes) rows.push(el("div", { class: "vfield" }, el("label", { text: t("Notes") }), noShow ? el("p", { class: "small muted", text: t("Hidden: you may use this item, not read it.") }) : el("pre", { class: "vnotes", text: d.notes })));
-  const folder = d.folder && S.folders.get(d.folder);
+  const folder = folderOf(it);
   const meta = el("p", { class: "small muted" },
     t("Changed %s", fmtDate(it.updated_at)), " · ", t("Created %s", fmtDate(it.created_at)),
     d.passwordChanged ? " · " + t("Password changed %s", fmtDate(d.passwordChanged)) : "");
@@ -601,7 +701,7 @@ function renderDetail() {
   return el("div", { class: "vview" }, back,
     el("div", { class: "vview-head" },
       avatar(it, "lg"),
-      el("div", null, el("h2", { text: itemName(it) }), el("small", { class: "muted" }, t(TYPES[d.type] ? TYPES[d.type].label : "Item"), folder ? " · " + folder.name : "",
+      el("div", null, el("h2", { text: itemName(it) }), el("small", { class: "muted" }, t((KINDS.find((k) => k.key === kindOf(d)) || TYPES[d.type] || { label: "Item" }).label), folder ? " · " + folderPath(folder) : "",
         (S.vaults.get(it.vault_id) || {}).kind === "shared" ? " · " + vaultLabel(it.vault_id) : "")),
       it.deleted_at || !canEditItem(it) ? null : el("button", { type: "button", class: "iconbtn" + (d.favorite ? " fav-on" : ""), title: t("Favorite"), "aria-pressed": d.favorite ? "true" : "false", onclick: () => toggleFav(it) }, icon("star"))),
     it.deleted_at ? el("div", { class: "flash warn" }, icon("trash"), el("span", { text: t("In the trash since %s.", fmtDate(it.deleted_at)) })) : null,
@@ -703,7 +803,8 @@ function totpField(secret) {
 // KINDS are the choices for a new item: the type and, for devices, the
 // program that opens the connection.
 const KINDS = [
-  { key: "web", label: "Website login", hint: "User name and password of a website", icon: "link", type: "login" },
+  { key: "web", label: "Website login", hint: "User name and password of a website", icon: "globe", type: "login" },
+  { key: "cred", label: "Credentials", hint: "User name and password without a website", icon: "idcard", type: "login" },
   { key: "rdp", label: "Remote Desktop (RDP)", hint: "Windows computers and servers", icon: "monitor", type: "login", tool: "rdp" },
   { key: "ssh", label: "SSH with a password", hint: "Linux servers, switches and routers", icon: "terminal", type: "login", tool: "ssh" },
   { key: "sshkey", label: "SSH key", hint: "A key pair for SSH sign-in", icon: "key", type: "sshkey", tool: "ssh" },
@@ -721,7 +822,7 @@ function startEdit(it, kind) {
     if (!k) { S.editing = { choose: true }; render(); return; }
     kind = k;
   }
-  const base = it && it.data ? JSON.parse(JSON.stringify(it.data)) : { type: kind.type, name: "", login: { username: "", password: "", urls: [""] }, notes: "", fields: [], favorite: false, folder: S.view === "folder" ? S.folder : "" };
+  const base = it && it.data ? JSON.parse(JSON.stringify(it.data)) : { type: kind.type, name: "", login: { username: "", password: "", urls: [""] }, notes: "", fields: [], favorite: false, folder: !it && S.view === "vault" && S.cwd && (S.items.get(S.cwd) || {}).vault_id === S.vault ? S.cwd : "" };
   if (!it && kind.tool) base.connect = { tool: kind.tool, host: "", port: 0 };
   if (!base.login) base.login = { username: "", password: "", urls: [""] };
   if (!base.login.urls || !base.login.urls.length) base.login.urls = [""];
@@ -833,8 +934,12 @@ function renderEditor() {
   };
   showParts();
 
-  const folder = el("select", { name: "folder" }, el("option", { value: "" }, t("No folder")),
-    ...[...S.folders.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([id, f]) => el("option", { value: id, selected: d.folder === id }, f.name)));
+  // the folders of the vault the item is saved in
+  const folder = el("select", { name: "folder" });
+  const fillFolders = (vaultID, selected) => {
+    const list = vaultFolders(vaultID).map((f) => [f.id, folderPath(f)]).sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: "base" }));
+    folder.replaceChildren(el("option", { value: "" }, t("No folder")), ...list.map(([id, p]) => el("option", { value: id, selected: id === selected }, p)));
+  };
   const notes = el("textarea", { name: "notes", rows: 5, maxlength: 20000 }, d.notes || "");
   const fields = el("div", { class: "rows" });
   const addField = (f) => {
@@ -848,7 +953,8 @@ function renderEditor() {
   const fav = el("input", { type: "checkbox", checked: d.favorite });
   const curVault = e.item ? e.item.vault_id : S.view === "vault" && canEditVault(S.vault) ? S.vault : personalVault();
   const editable = [...S.vaults.keys()].filter((id) => canEditVault(id));
-  const vaultSel = el("select", { name: "vault" }, ...editable.map((id) => el("option", { value: id, selected: id === curVault }, vaultLabel(id))));
+  const vaultSel = el("select", { name: "vault", onchange: () => fillFolders(vaultSel.value, "") }, ...editable.map((id) => el("option", { value: id, selected: id === curVault }, vaultLabel(id))));
+  fillFolders(curVault, d.folder);
   const err = el("div", { class: "flash err", role: "alert", hidden: true });
   const save = button(t("Save"), { type: "submit", class: "primary", icon: "check" });
   const form = el("form", { class: "stack veditor" },
@@ -1103,7 +1209,7 @@ function openImport() {
     err.hidden = false;
   };
   const show = () => {
-    const have = new Set([...S.items.values()].filter((i) => i.data && !i.deleted_at).map((i) => dedupeKey(i.data)));
+    const have = new Set([...S.items.values()].filter((i) => i.data && !i.deleted_at && !isFolder(i)).map((i) => dedupeKey(i.data)));
     const dup = parsed.items.filter((d) => have.has(dedupeKey(d))).length;
     const folders = new Set(parsed.items.map((d) => d.folder).filter(Boolean)).size;
     summary.replaceChildren(el("p", null, el("b", { text: parsed.format }), " · ", t("%d items", parsed.items.length), " · ", t("%d folders", folders),
@@ -1155,24 +1261,29 @@ function openImport() {
 }
 
 async function runImport(items, skipDupes, into, progress) {
-  const have = new Set([...S.items.values()].filter((i) => i.data && !i.deleted_at).map((i) => dedupeKey(i.data)));
+  const have = new Set([...S.items.values()].filter((i) => i.data && !i.deleted_at && !isFolder(i)).map((i) => dedupeKey(i.data)));
   const todo = skipDupes ? items.filter((d) => !have.has(dedupeKey(d))) : items.slice();
-  // folders by name (existing ones are reused)
-  const byName = new Map([...S.folders.entries()].map(([id, f]) => [f.name.toLowerCase(), id]));
-  const folderID = async (name) => {
-    if (!name) return "";
-    const k = name.toLowerCase();
-    if (!byName.has(k)) byName.set(k, await saveFolder("", name.slice(0, 100), 0));
-    return byName.get(k);
+  // folders of the personal vault by path ("A/B" makes B inside A;
+  // existing ones are reused)
+  const vaultID = personalVault();
+  const byPath = new Map(vaultFolders(vaultID).map((f) => [folderPath(f).toLowerCase(), f.id]));
+  const folderID = async (path, under) => {
+    let id = under || "", p = under ? folderPath(S.items.get(under)) : "";
+    for (const part of (path || "").split("/").map((s) => s.trim()).filter(Boolean)) {
+      p = p ? p + " / " + part : part;
+      const k = p.toLowerCase();
+      if (!byPath.has(k)) byPath.set(k, (await saveItem({ vault_id: vaultID }, { type: "folder", name: part.slice(0, 100), parent: id })).id);
+      id = byPath.get(k);
+    }
+    return id;
   };
   const common = into === "new" ? await folderID(t("Import %s", today())) : "";
-  const vaultID = personalVault();
   const key = S.vaults.get(vaultID).key;
   let done = 0;
   for (let i = 0; i < todo.length; i += 200) {
     const batch = [];
     for (const d of todo.slice(i, i + 200)) {
-      const data = Object.assign({}, d, { folder: common || await folderID(d.folder) });
+      const data = Object.assign({}, d, { folder: await folderID(d.folder, common) });
       delete data.folderName;
       const id = pz.uuid();
       batch.push({ id, vault_id: vaultID, data: await pz.sealJSON(key, data, pz.AAD.item(vaultID, id)) });
@@ -1216,8 +1327,8 @@ function openExport() {
       } catch (e) {
         throw new Error(t("The current master password is wrong."));
       }
-      const items = [...S.items.values()].filter((i) => i.data && !i.deleted_at)
-        .map((i) => Object.assign({}, i.data, { folderName: i.data.folder && S.folders.get(i.data.folder) ? S.folders.get(i.data.folder).name : "" }));
+      const items = [...S.items.values()].filter((i) => i.data && !i.deleted_at && !isFolder(i))
+        .map((i) => Object.assign({}, i.data, { folderName: folderOf(i) ? folderPath(folderOf(i)).replace(/ \/ /g, "/") : "" }));
       if (fmtEnc.checked) {
         // The server records the export first (and refuses it when the policy forbids exports).
         await api("POST", "/api/account/event", { event: "export", count: items.length });
