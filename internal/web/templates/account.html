@@ -71,8 +71,12 @@
 <section class="panel">
   <h2>{{template "icon" "screen"}}{{.T "Active sessions"}}</h2>
   <div class="table-wrap"><table>
-    <thead><tr><th>{{.T "Address"}}</th><th class="hide-sm">{{.T "Browser"}}</th><th>{{.T "Signed in"}}</th><th class="hide-sm">{{.T "Last activity"}}</th></tr></thead>
-    <tbody>{{range .Data.Sessions}}<tr><td>{{.IP}}{{if eq .Hash $.Data.Current}} <span class="badge ok">{{$.T "This session"}}</span>{{end}}</td><td class="hide-sm muted ellipsis">{{.UserAgent}}</td><td class="muted">{{$.Time .CreatedAt}}</td><td class="hide-sm muted">{{$.Time .LastSeen}}</td></tr>{{end}}</tbody>
+    <thead><tr><th>{{.T "Device"}}</th><th>{{.T "Address"}}</th><th class="hide-sm">{{.T "Signed in"}}</th><th class="hide-sm">{{.T "Last activity"}}</th><th></th></tr></thead>
+    <tbody>{{range .Data.Sessions}}<tr>
+      <td>{{if eq .Kind "ext"}}<b>{{.Device}}</b> <span class="badge">{{$.T "Extension"}}</span>{{else}}{{$.T "Web vault"}}{{end}}{{if eq .Hash $.Data.Current}} <span class="badge ok">{{$.T "This session"}}</span>{{end}}<br><small class="muted ellipsis">{{.UserAgent}}</small></td>
+      <td>{{.IP}}</td><td class="hide-sm muted">{{$.Time .CreatedAt}}</td><td class="hide-sm muted">{{$.Ago .LastSeen}}</td>
+      <td class="actions">{{if ne .Hash $.Data.Current}}<form method="post" action="/account/sessions/{{.ID}}/signout"><button class="ghost sm">{{$.T "Sign out"}}</button></form>{{end}}</td>
+    </tr>{{end}}</tbody>
   </table></div>
   <form method="post" action="/account/sessions/signout" class="mt"><button class="secondary">{{.T "Sign out all other sessions"}}</button></form>
 </section>

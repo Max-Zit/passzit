@@ -13,6 +13,10 @@
       <label>{{.T "Invitations valid for (days)"}}<input type="number" name="invite_days" value="{{.Data.X.InviteDays}}" min="1" max="30" required></label>
     </div>
     <div class="cols">
+      <label>{{.T "Browser extensions stay signed in (days)"}}<input type="number" name="ext_days" value="{{.Data.X.ExtDays}}" min="1" max="365" required></label>
+      <label>{{.T "Sign extensions out after not being used for (days)"}}<input type="number" name="ext_idle_days" value="{{.Data.X.ExtIdleDays}}" min="1" max="365" required><small>{{.T "The vault in the extension still locks after the policy's inactivity time; only signing in again needs the second factor."}}</small></label>
+    </div>
+    <div class="cols">
       <label>{{.T "Failed sign-ins before a block"}}<input type="number" name="max_attempts" value="{{.Data.X.MaxAttempts}}" min="3" max="50" required></label>
       <label>{{.T "Counting period (minutes)"}}<input type="number" name="window_minutes" value="{{.Data.X.WindowMinutes}}" min="1" max="1440" required></label>
       <label>{{.T "Block length (minutes)"}}<input type="number" name="block_minutes" value="{{.Data.X.BlockMinutes}}" min="1" max="10080" required><small>{{.T "Doubles for every repeated block within a day (up to 7 days)."}}</small></label>

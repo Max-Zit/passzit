@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/max-zit/passzit/internal/extpack"
 )
 
 // uiTexts collects the English texts of the console: template {{.T "…"}}
@@ -50,6 +52,14 @@ func uiTexts(t *testing.T) map[string]bool {
 		}
 	}
 	for _, k := range jsTexts {
+		out[k] = true
+	}
+	// the browser extension takes its texts from the same catalogs
+	ext, err := extpack.Texts(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k := range ext {
 		out[k] = true
 	}
 	for _, p := range DocPages {

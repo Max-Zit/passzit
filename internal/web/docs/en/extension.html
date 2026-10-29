@@ -1,0 +1,34 @@
+<h1>Browser extension</h1>
+<p class="lead">The PassZit extension fills your logins into websites, offers to save new ones and makes passwords — in Chrome, Edge, Opera, Brave, Vivaldi and Firefox. It brings its own code, so the server cannot change what runs in your browser.</p>
+
+<h2 id="install">Installing</h2>
+<ul>
+  <li><b>Chrome, Edge, Opera, Brave, Vivaldi:</b> the Chromium package <code>passzit-extension-chromium-VERSION.zip</code>. Until it is in the stores: unzip it, open <code>chrome://extensions</code> (<code>edge://extensions</code>, <code>opera://extensions</code> …), switch on <i>Developer mode</i> and choose <i>Load unpacked</i>.</li>
+  <li><b>Firefox:</b> the Firefox package <code>passzit-extension-firefox-VERSION.zip</code> (Firefox 128 or newer). Firefox installs only signed add-ons permanently; until the add-on is published, load it for testing in <code>about:debugging</code> → <i>This Firefox</i> → <i>Load Temporary Add-on</i>.</li>
+</ul>
+
+<h2 id="signin">Signing in</h2>
+<ol>
+  <li>Click the PassZit icon and enter the address of your server (for example <code>https://vault.example.com</code>), your e-mail address and the master password.</li>
+  <li>The browser asks once whether PassZit may talk to that server — allow it.</li>
+  <li>Enter the code of your authenticator app. Two-factor sign-in must already be set up in the web vault.</li>
+</ol>
+<p>The extension appears under <i>My account → Active sessions</i> with the name of the browser; you can sign it out there. It stays signed in for 30 days (set by the administrator) and is signed out earlier when it is not used for 14 days.</p>
+<div class="callout warn"><p>The server needs a certificate the browser trusts. With the self-signed certificate of a fresh server the extension cannot connect — use your own certificate or a name with Let's Encrypt.</p></div>
+
+<h2 id="fill">Filling logins</h2>
+<ul>
+  <li>Open the sign-in page, click the PassZit icon: <i>This site</i> lists the logins for the website. <b>Fill</b> puts user name and password into the page.</li>
+  <li>Keyboard: <b>Ctrl+Shift+L</b> fills the login directly when there is exactly one for the site, otherwise it opens the list.</li>
+  <li>The copy buttons copy the user name or the password; copied passwords are cleared from the clipboard again.</li>
+</ul>
+<p>PassZit offers a login only on its own website: <code>shop.example.co.uk</code> gets the logins of <code>example.co.uk</code>, but a login for one <code>github.io</code> page is never offered on another, and a login saved for HTTPS is not offered on plain HTTP. It fills only visible fields of the top page, never into frames of other sites, and checks again right before filling that the page has not changed.</p>
+
+<h2 id="save">Offering to save</h2>
+<p>In the menu (≡) switch on <i>Offer to save new and changed logins</i>. The browser then asks for access to all websites — needed to notice when you sign in or change a password. When you do, the PassZit icon shows a number; open it and choose <b>Save</b> or <b>Update</b>. PassZit never shows anything inside the web page itself, so a page cannot imitate or click the offer.</p>
+
+<h2 id="lock">Locking</h2>
+<p>The extension locks after the same inactivity time as the web vault and when the browser closes; the lock button locks at once. Unlocking needs only the master password. The keys are kept in the browser's memory, never on disk.</p>
+
+<h2 id="generator">Generator and search</h2>
+<p><i>Generator</i> makes passwords and passphrases like the one in the web vault; <i>Search</i> finds any item of your vault to copy its user name or password.</p>

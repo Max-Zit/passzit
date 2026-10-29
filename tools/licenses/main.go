@@ -144,6 +144,7 @@ func main() {
 	b.WriteString("- PostgreSQL (PostgreSQL License) is the database; with the development option `--dev-embedded-db` the server downloads PostgreSQL binaries (Zonky embedded-postgres-binaries, Apache-2.0) and runs them.\n")
 	b.WriteString("- The browser module `argon2.wasm` is golang.org/x/crypto/argon2 with the Go runtime compiled to WebAssembly; `wasm_exec.js` comes from the Go distribution (both BSD-3-Clause, see below).\n")
 	b.WriteString("- Passphrases use the EFF Large Wordlist by the Electronic Frontier Foundation (https://www.eff.org/dice), licensed under the Creative Commons Attribution 3.0 United States License (https://creativecommons.org/licenses/by/3.0/us/). The list is used unchanged.\n")
+	b.WriteString("- The browser extension matches websites with the Public Suffix List (https://publicsuffix.org), Mozilla Public License 2.0 (https://mozilla.org/MPL/2.0/), converted unchanged into extension/src/psl-rules.js.\n")
 	b.WriteString("- Some icons of the console are based on Feather Icons (MIT License, see below).\n\n")
 	goroot := goEnv("GOROOT")
 	if t, err := os.ReadFile(filepath.Join(goroot, "LICENSE")); err == nil { // #nosec G304 -- Go installation

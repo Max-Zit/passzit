@@ -56,23 +56,61 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: cookieName(r), Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
 }
 
+// bearerToken returns the device token of an API request of an extension
+// (Authorization: Bearer pzd_…); browsers never add it by themselves, so
+// such requests need no CSRF check.
+func bearerToken(r *http.Request) string {
+	if !strings.HasPrefix(r.URL.Path, "/api/") {
+		return ""
+	}
+	h := r.Header.Get("Authorization")
+	if !strings.HasPrefix(h, "Bearer pzd_") {
+		return ""
+	}
+	return strings.TrimPrefix(h, "Bearer ")
+}
+
+// idleLimit is the inactivity limit of a session kind.
+func (s *Server) idleLimit(ctx context.Context) func(string) time.Duration {
+	sec := s.security(ctx)
+	return func(kind string) time.Duration {
+		if kind == store.KindExt {
+			return time.Duration(sec.ExtIdleDays) * 24 * time.Hour
+		}
+		return time.Duration(sec.IdleMinutes) * time.Minute
+	}
+}
+
 // loadSession puts the user of a full session into the request context
-// (and the session of any stage).
+// (and the session of any stage). Web sessions come from the cookie,
+// extension sessions from the Authorization header.
 func (s *Server) loadSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(cookieName(r))
-		if err != nil || strings.HasPrefix(r.URL.Path, "/static/") {
+		if strings.HasPrefix(r.URL.Path, "/static/") {
 			next.ServeHTTP(w, r)
 			return
 		}
-		sec := s.security(r.Context())
-		x, err := s.store.SessionByToken(r.Context(), c.Value, time.Duration(sec.IdleMinutes)*time.Minute)
+		tok, kind := bearerToken(r), store.KindExt
+		if tok == "" {
+			c, err := r.Cookie(cookieName(r))
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			tok, kind = c.Value, store.KindWeb
+		}
+		x, err := s.store.SessionByToken(r.Context(), tok, s.idleLimit(r.Context()))
+		if err == nil && x.Kind != kind {
+			err = store.ErrNotFound // a device token is no cookie and the other way round
+		}
 		if err != nil {
 			if !errors.Is(err, store.ErrNotFound) {
 				s.serverError(w, r, err)
 				return
 			}
-			s.clearSessionCookie(w, r)
+			if kind == store.KindWeb {
+				s.clearSessionCookie(w, r)
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -85,7 +123,7 @@ func (s *Server) loadSession(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			_ = s.store.TouchSession(r.Context(), x)
+			_ = s.store.TouchSession(r.Context(), x, clientIP(r))
 			ctx = context.WithValue(ctx, ctxUser, u)
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))

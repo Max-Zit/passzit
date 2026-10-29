@@ -59,6 +59,7 @@ func newEnv(t *testing.T) *env {
 	}
 	e := &env{t: t, st: st, srv: srv, clock: time.Now(), ip: "127.0.0.1"}
 	srv.SetClock(func() time.Time { return e.clock })
+	st.SetClock(func() time.Time { return e.clock })
 	srv.SetSetupToken("setup-token-123")
 	if err := srv.store.SetSetting(ctx, settingPolicy, Policy{LockMinutes: 15, ClipboardSeconds: 30, KDF: fastKDF, MinPasswordLength: 12, TrashDays: 30}); err != nil {
 		t.Fatal(err)
@@ -685,5 +686,126 @@ func TestDevNo2FA(t *testing.T) {
 	}
 	if _, page := c.get("/vault"); !strings.Contains(page, "two-factor sign-in is switched off") {
 		t.Fatal("no test-mode warning")
+	}
+}
+
+// bearer sends an API request with a device token (no cookie, no Origin),
+// like the browser extension does.
+func (e *env) bearer(tok, method, path string, body, out any) int {
+	e.t.Helper()
+	var rd io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		e.mu.Lock()
+		e.bodies = append(e.bodies, string(b))
+		e.mu.Unlock()
+		rd = bytes.NewReader(b)
+	}
+	req, _ := http.NewRequest(method, e.ts.URL+path, rd)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if out != nil && resp.StatusCode < 300 {
+		if err := json.Unmarshal(raw, out); err != nil {
+			e.t.Fatalf("%s %s: %v", method, path, err)
+		}
+	}
+	return resp.StatusCode
+}
+
+func TestExtensionTokens(t *testing.T) {
+	e := newEnv(t)
+	admin := e.setupAdmin()
+	a, wrap := admin.authKey(admin.email, admin.pw)
+
+	var lr extLoginResp
+	if code := e.bearer("", "POST", "/api/ext/login", extLoginReq{Email: admin.email, Auth: b64(vaultcrypto.Random(32)), Device: "Chrome on test"}, nil); code != http.StatusUnauthorized {
+		t.Fatalf("wrong auth: %d", code)
+	}
+	if code := e.bearer("", "POST", "/api/ext/login", extLoginReq{Email: admin.email, Auth: a, Device: "Chrome on test"}, &lr); code != http.StatusOK || lr.Next != "2fa" {
+		t.Fatalf("ext login: %d %+v", code, lr)
+	}
+	pending := lr.Token
+	// the pending token is no session yet
+	if code := e.bearer(pending, "GET", "/api/sync", nil, nil); code != http.StatusUnauthorized {
+		t.Fatalf("pending token used for sync: %d", code)
+	}
+	if code := e.bearer(pending, "POST", "/api/ext/login/2fa", codeReq{Code: "000000"}, nil); code != http.StatusUnauthorized {
+		t.Fatalf("wrong code: %d", code)
+	}
+
+	code := admin.code()
+	if c := e.bearer(pending, "POST", "/api/ext/login/2fa", codeReq{Code: code}, &lr); c != http.StatusOK || !strings.HasPrefix(lr.Token, "pzd_") {
+		t.Fatalf("ext 2fa: %d %+v", c, lr)
+	}
+	tok := lr.Token
+	if c := e.bearer(pending, "GET", "/api/sync", nil, nil); c != http.StatusUnauthorized {
+		t.Fatalf("pending token still works: %d", c)
+	}
+	// the device token unlocks and uses the API without cookie or Origin
+	var acct accountResp
+	if c := e.bearer(tok, "GET", "/api/account", nil, &acct); c != http.StatusOK {
+		t.Fatalf("account: %d", c)
+	}
+	ak, err := vaultcrypto.Open(wrap, acct.WrappedAccountKey, vaultcrypto.AADAccountKey())
+	if err != nil || !bytes.Equal(ak, admin.keys.account) {
+		t.Fatal("extension cannot unlock")
+	}
+	vid := admin.personal()
+	id := newUUID()
+	if c := e.bearer(tok, "PUT", "/api/items/"+id, putItemReq{VaultID: vid, Data: admin.sealItem(vid, id, map[string]any{"name": "saved by the extension"})}, nil); c != http.StatusOK {
+		t.Fatalf("save from extension: %d", c)
+	}
+	// a device token is not accepted as a cookie, pages stay closed to it
+	req, _ := http.NewRequest("GET", e.ts.URL+"/vault", nil)
+	req.AddCookie(&http.Cookie{Name: "pzsession", Value: tok})
+	resp, err := (&http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("device token as cookie: %d", resp.StatusCode)
+	}
+	// a web cookie without Origin is still refused (CSRF), a bearer is not needed for it
+	req, _ = http.NewRequest("POST", e.ts.URL+"/api/session/lock", nil)
+	resp, err = admin.hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("cookie POST without Origin: %d", resp.StatusCode)
+	}
+	// the account page lists the extension; signing it out kills the token
+	_, page := admin.get("/account")
+	m := regexp.MustCompile(`/account/sessions/([0-9a-f]{16})/signout`).FindStringSubmatch(page)
+	if m == nil || !strings.Contains(page, "Chrome on test") {
+		t.Fatal("extension not listed on the account page")
+	}
+	if c, _ := admin.form("/account/sessions/"+m[1]+"/signout", url.Values{}); c != http.StatusSeeOther {
+		t.Fatalf("sign out device: %d", c)
+	}
+	if c := e.bearer(tok, "GET", "/api/sync", nil, nil); c != http.StatusUnauthorized {
+		t.Fatalf("signed-out token: %d", c)
+	}
+	// unused extensions are signed out after the idle limit
+	e.bearer("", "POST", "/api/ext/login", extLoginReq{Email: admin.email, Auth: a, Device: "Firefox"}, &lr)
+	e.bearer(lr.Token, "POST", "/api/ext/login/2fa", codeReq{Code: admin.code()}, &lr)
+	if c := e.bearer(lr.Token, "GET", "/api/revision", nil, nil); c != http.StatusOK {
+		t.Fatalf("second device: %d", c)
+	}
+	e.clock = e.clock.Add(15 * 24 * time.Hour)
+	if c := e.bearer(lr.Token, "GET", "/api/revision", nil, nil); c != http.StatusUnauthorized {
+		t.Fatalf("idle device still signed in: %d", c)
 	}
 }

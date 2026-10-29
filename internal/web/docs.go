@@ -29,6 +29,7 @@ var DocPages = []DocPage{
 	{"start", "Getting started"},
 	{"security", "How PassZit protects your passwords"},
 	{"vault", "Working with the vault"},
+	{"extension", "Browser extension"},
 	{"account", "Master password, recovery key and two-factor sign-in"},
 	{"admin", "Users, invitations and settings"},
 	{"install", "Installing the server"},

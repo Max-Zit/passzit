@@ -3,6 +3,7 @@
 // results back to the test server.
 import * as pz from "/static/pz/crypto.js";
 import { password, passphrase, randomInt } from "/static/pz/generator.js";
+import { siteOf, match } from "/ext/domain.js";
 
 const out = {};
 try {
@@ -36,6 +37,15 @@ try {
   const counts = new Array(6).fill(0);
   for (let i = 0; i < 60000; i++) counts[randomInt(6)]++;
   out.uniform = counts.every((n) => Math.abs(n - 10000) < 600);
+  // registrable domains (Public Suffix List) and login matching
+  const sites = { "www.example.com": "example.com", "a.b.example.co.uk": "example.co.uk", "foo.github.io": "foo.github.io", "github.io": "github.io",
+    "city.kawasaki.jp": "city.kawasaki.jp", "x.y.kawasaki.jp": "x.y.kawasaki.jp", "192.168.1.10": "192.168.1.10", "intranet": "intranet", "shop.example.com.": "example.com" };
+  out.sites = Object.entries(sites).filter(([h, want]) => siteOf(h) !== want).map(([h, want]) => h + "=" + siteOf(h) + " want " + want);
+  const cases = [["https://github.com/login", "https://github.com/session", "host"], ["github.com", "https://gist.github.com/", "site"],
+    ["https://a.github.io", "https://b.github.io", ""], ["https://example.com", "http://example.com", ""], ["http://example.com", "https://example.com", "host"],
+    ["https://example.co.uk", "https://evil.co.uk", ""], ["https://10.0.0.1:8443", "https://10.0.0.1:8443/x", "host"], ["https://10.0.0.1:8443", "https://10.0.0.1/", ""],
+    ["https://bank.example", "https://bank.example.evil.com", ""], ["javascript:alert(1)", "https://x.com", ""]];
+  out.matches = cases.filter(([a, b, want]) => match(a, b) !== want).map(([a, b, want]) => a + " vs " + b + " = " + match(a, b) + " want " + want);
   out.uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(pz.uuid());
 } catch (e) {
   out.error = String(e && e.stack || e);

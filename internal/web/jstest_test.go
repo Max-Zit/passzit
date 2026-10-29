@@ -75,6 +75,7 @@ func TestJavaScriptCrypto(t *testing.T) {
 	sub, _ := fs.Sub(staticFS, "static")
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(sub))))
+	mux.Handle("/ext/", http.StripPrefix("/ext/", http.FileServer(http.Dir(filepath.Join("..", "..", "extension", "src")))))
 	mux.HandleFunc("/case.json", func(w http.ResponseWriter, r *http.Request) { _ = json.NewEncoder(w).Encode(c) })
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -126,6 +127,7 @@ func TestJavaScriptCrypto(t *testing.T) {
 		Account                             map[string]string
 		GenPassword, GenPhrase, Uniform, UU bool
 		UUID                                bool `json:"uuid"`
+		Sites, Matches                      []string
 		Error                               string
 	}
 	if err := json.Unmarshal(raw, &got); err != nil {
@@ -159,6 +161,9 @@ func TestJavaScriptCrypto(t *testing.T) {
 	ak, err := vaultcrypto.Open(vaultcrypto.Derive(mk, vaultcrypto.InfoWrap), got.Account["wrapped_account_key"], vaultcrypto.AADAccountKey())
 	if err != nil || vaultcrypto.B64.EncodeToString(ak) != got.Account["account_key"] || vaultcrypto.B64.EncodeToString(vaultcrypto.Derive(mk, vaultcrypto.InfoAuth)) != got.Account["auth"] {
 		t.Errorf("browser account does not open in Go: %v", err)
+	}
+	if len(got.Sites)+len(got.Matches) > 0 {
+		t.Errorf("domain matching: %v %v", got.Sites, got.Matches)
 	}
 	if !got.AccountRoundTrip || !got.GenPassword || !got.GenPhrase || !got.Uniform || !got.UUID {
 		t.Errorf("browser checks: %+v", got)

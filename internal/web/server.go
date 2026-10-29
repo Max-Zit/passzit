@@ -183,10 +183,14 @@ type SecuritySettings struct {
 	BlockMinutes  int `json:"block_minutes"`
 	// InviteDays is how long an invitation link works.
 	InviteDays int `json:"invite_days"`
+	// ExtDays is how long a browser extension stays signed in;
+	// ExtIdleDays ends it earlier when it is not used.
+	ExtDays     int `json:"ext_days"`
+	ExtIdleDays int `json:"ext_idle_days"`
 }
 
 // DefaultSecurity: a password manager keeps sessions short.
-var DefaultSecurity = SecuritySettings{SessionHours: 8, IdleMinutes: 30, MaxAttempts: 5, WindowMinutes: 15, BlockMinutes: 30, InviteDays: 7}
+var DefaultSecurity = SecuritySettings{SessionHours: 8, IdleMinutes: 30, MaxAttempts: 5, WindowMinutes: 15, BlockMinutes: 30, InviteDays: 7, ExtDays: 30, ExtIdleDays: 14}
 
 // Validate checks the ranges.
 func (x SecuritySettings) Validate() error {
@@ -203,6 +207,8 @@ func (x SecuritySettings) Validate() error {
 		return errors.New("the block must last 1–10080 minutes")
 	case x.InviteDays < 1 || x.InviteDays > 30:
 		return errors.New("invitations must be valid for 1–30 days")
+	case x.ExtDays < 1 || x.ExtDays > 365 || x.ExtIdleDays < 1 || x.ExtIdleDays > x.ExtDays:
+		return errors.New("extensions must stay signed in 1–365 days, and the idle limit must not be longer")
 	}
 	return nil
 }
@@ -303,6 +309,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/login/enroll", s.apiEnrollFinish)
 	mux.HandleFunc("POST /api/recover/start", s.apiRecoverStart)
 	mux.HandleFunc("POST /api/recover/finish", s.apiRecoverFinish)
+	mux.HandleFunc("POST /api/ext/prelogin", s.apiPrelogin)
+	mux.HandleFunc("POST /api/ext/login", s.apiExtLogin)
+	mux.HandleFunc("POST /api/ext/login/2fa", s.apiExtLogin2FA)
 
 	app := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireUser(h)) }
 	admin := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireUser(s.requireAdmin(h))) }
@@ -315,11 +324,13 @@ func (s *Server) Handler() http.Handler {
 	app("POST /account/profile", s.handleAccountProfile)
 	app("POST /account/codes", s.handleAccountCodes)
 	app("POST /account/sessions/signout", s.handleAccountSignout)
+	app("POST /account/sessions/{id}/signout", s.handleSessionSignout)
 	app("GET /docs", s.handleDocs)
 	app("GET /docs/search", s.handleDocsSearch)
 	app("GET /docs/{page}", s.handleDocs)
 
 	api("GET /api/account", s.apiAccount)
+	api("POST /api/ext/logout", s.apiExtLogout)
 	api("GET /api/session/key", s.apiSessionKey)
 	api("POST /api/session/lock", s.apiSessionLock)
 	api("POST /api/account/password", s.apiChangePassword)
@@ -411,10 +422,17 @@ func (s *Server) aclCheck(l *netacl.List, next http.Handler) http.Handler {
 
 // csrf refuses state-changing requests that do not come from a page of
 // this server: the Origin (or, without it, the Referer) must match the
-// Host, and Sec-Fetch-Site, where sent, must be same-origin.
+// Host, and Sec-Fetch-Site, where sent, must be same-origin. Extensions
+// sign in and call the API with a bearer token instead of a cookie, from
+// their own origin: those requests carry no ambient credentials, so they
+// are not checked.
 func (s *Server) csrf(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if extRequest(r) {
 			next.ServeHTTP(w, r)
 			return
 		}

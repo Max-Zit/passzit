@@ -25,10 +25,12 @@ jobs:
         run: go run ./tools/buildwasm
       - name: go vet
         run: go vet ./...
-      - name: Tests
+      - name: Tests (the browser crypto and the extension run in Chrome)
         env:
           PASSZIT_BROWSER: google-chrome
         run: go test -count=1 -timeout 20m ./...
+      - name: Build the extension (Chromium and Firefox)
+        run: go run ./tools/extpack -version 0.0.0
 
   windows:
     name: Build (Windows)
