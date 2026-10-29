@@ -9,3 +9,7 @@
 credentials.txt
 node_modules/
 NOTES.md
+.claude/
+/internal/web/static/pz/argon2.wasm
+/internal/web/static/pz/wasm_exec.js
+/extension/build/

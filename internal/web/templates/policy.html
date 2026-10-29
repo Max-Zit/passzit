@@ -1,0 +1,33 @@
+{{template "app" .}}
+{{define "content"}}
+<h1>{{.T "Settings"}}</h1>
+<div class="settings">
+{{template "settingstabs" .}}
+<div class="settings-body">
+<form method="post" action="/settings/policy" class="stack wide">
+  <section class="panel">
+    <h2>{{template "icon" "lock"}}{{.T "Locking and clipboard"}}</h2>
+    <div class="cols">
+      <label>{{.T "Lock the vault after inactivity (minutes)"}}<input type="number" name="lock_minutes" value="{{.Data.LockMinutes}}" min="1" max="480" required><small>{{.T "Users may choose a shorter time for themselves, not a longer one."}}</small></label>
+      <label>{{.T "Clear copied passwords after (seconds)"}}<input type="number" name="clipboard_seconds" value="{{.Data.ClipboardSeconds}}" min="5" max="600" required></label>
+    </div>
+    <div class="cols">
+      <label>{{.T "Minimum master password length"}}<input type="number" name="min_password_length" value="{{.Data.MinPasswordLength}}" min="10" max="64" required><small>{{.T "For new accounts and changed master passwords."}}</small></label>
+      <label>{{.T "Empty the trash after (days)"}}<input type="number" name="trash_days" value="{{.Data.TrashDays}}" min="1" max="365" required></label>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>{{template "icon" "key"}}{{.T "Key derivation (Argon2id)"}}</h2>
+    <p class="muted">{{.T "How much work the browser does to turn a master password into keys. More memory and passes make guessing a stolen password hash slower, but every unlock takes longer (with the default: about 0.7 s on a normal PC). Accounts are moved to new settings at their next unlock."}}</p>
+    <div class="cols">
+      <label>{{.T "Memory (MiB)"}}<input type="number" name="kdf_m" value="{{div .Data.KDF.M 1024}}" min="19" max="1024" required></label>
+      <label>{{.T "Passes"}}<input type="number" name="kdf_t" value="{{.Data.KDF.T}}" min="2" max="20" required></label>
+      <label>{{.T "Lanes"}}<input type="number" name="kdf_p" value="{{.Data.KDF.P}}" min="1" max="16" required></label>
+    </div>
+    <p class="small muted">{{.T "Default: 64 MiB, 3 passes, 4 lanes. Phones and old PCs may struggle above 256 MiB."}}</p>
+  </section>
+  <div><button class="primary">{{.T "Save"}}</button></div>
+</form>
+</div>
+</div>
+{{end}}

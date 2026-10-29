@@ -1,0 +1,50 @@
+{{template "app" .}}
+{{define "content"}}
+<h1>{{.T "Users"}}</h1>
+{{with .Data.NewLink}}
+<section class="panel accent">
+  <h2>{{template "icon" "mail"}}{{$.T "Invitation for %s" $.Data.NewEmail}}</h2>
+  <p>{{$.T "Send this link to the user (it is shown only now and works once, for %d days). The user chooses the master password; you never see it." $.Data.Days}}</p>
+  <pre class="token" id="invlink">{{.}}</pre>
+  <p><button type="button" class="secondary" data-copy="#invlink">{{template "icon" "copy"}}{{$.T "Copy"}}</button></p>
+</section>
+{{end}}
+<section class="panel">
+  {{template "usertable" (userTable . .Data.Users)}}
+  {{with .Data.Disabled}}<details class="mt">
+    <summary class="muted">{{$.T "Disabled users"}} ({{len .}})</summary>
+    {{template "usertable" (userTable $ .)}}
+  </details>{{end}}
+</section>
+<section class="panel">
+  <h2>{{template "icon" "plus"}}{{.T "Invite a user"}}</h2>
+  <p class="muted">{{.T "Accounts are made only by invitation. The invited person opens the link, chooses a master password and sets up two-factor sign-in."}}</p>
+  <form method="post" action="/users/invite" class="stack">
+    <label>{{.T "E-mail address"}}<input type="email" name="email" value="{{.Data.Email}}" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+    {{template "rolefield" (rowOf $ .Data.Role)}}
+    <div><button class="primary">{{template "icon" "mail"}}{{.T "Create invitation link"}}</button></div>
+  </form>
+  {{if .Data.Invites}}
+  <h3 class="mt">{{.T "Invitations"}}</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>{{.T "E-mail address"}}</th><th>{{.T "Role"}}</th><th class="hide-sm">{{.T "Invited by"}}</th><th>{{.T "State"}}</th><th></th></tr></thead>
+    <tbody>{{range .Data.Invites}}<tr>
+      <td>{{.Email}}</td><td>{{$.RoleName .Role}}</td><td class="hide-sm muted">{{.CreatedBy}}</td>
+      <td>{{if .UsedAt}}<span class="badge ok"><i></i>{{$.T "Used"}}</span> <small class="muted">{{$.Time .UsedAt}}</small>{{else if .Expired $.Data.Now}}<span class="badge">{{$.T "Expired"}}</span>{{else}}<span class="badge warn"><i></i>{{$.T "Open until %s" ($.Time .ExpiresAt)}}</span>{{end}}</td>
+      <td class="actions">{{if not .UsedAt}}<form method="post" action="/users/invites/{{.ID}}/delete"><button class="ghost sm">{{$.T "Withdraw"}}</button></form>{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{end}}
+</section>
+{{end}}
+
+{{define "usertable"}}{{$p := .P}}<div class="table-wrap"><table>
+    <thead><tr><th>{{$p.T "E-mail address"}}</th><th>{{$p.T "Role"}}</th><th>{{$p.T "Two-factor"}}</th><th class="hide-sm">{{$p.T "Recovery key"}}</th><th class="hide-sm">{{$p.T "Last sign-in"}}</th></tr></thead>
+    <tbody>{{range .Users}}<tr>
+      <td><a href="/users/{{.ID}}">{{.Email}}</a>{{if .DisplayName}} <span class="muted">· {{.DisplayName}}</span>{{end}}{{if .Disabled}} <span class="badge bad">{{$p.T "Disabled"}}</span>{{end}}</td>
+      <td>{{$p.RoleName .Role}}</td>
+      <td>{{if .TOTPEnabled}}<span class="badge ok"><i></i>{{$p.T "On"}}</span>{{else}}<span class="badge warn">{{$p.T "At next sign-in"}}</span>{{end}}</td>
+      <td class="hide-sm">{{if .HasRecovery}}<span class="badge ok"><i></i>{{$p.T "Yes"}}</span>{{else}}<span class="badge warn">{{$p.T "No"}}</span>{{end}}</td>
+      <td class="hide-sm muted">{{$p.Time .LastLoginAt}}</td>
+    </tr>{{end}}</tbody>
+  </table></div>{{end}}

@@ -1,0 +1,42 @@
+{{template "app" .}}
+{{define "content"}}
+<p class="back"><a href="/users">{{.T "Users"}}</a></p>
+<h1>{{.Data.U.Email}}{{if .Data.U.Disabled}} <span class="badge bad">{{.T "Disabled"}}</span>{{end}}</h1>
+<section class="panel">
+  <h2>{{.T "Account"}}</h2>
+  <form method="post" action="/users/{{.Data.U.ID}}" class="stack">
+    <label>{{.T "Full name"}}<input name="display_name" value="{{.Data.U.DisplayName}}" maxlength="100"></label>
+    {{template "rolefield" (rowOf $ .Data.U.Role)}}
+    {{if not .Data.Self}}<label class="check"><input type="checkbox" name="disabled" value="1" {{if .Data.U.Disabled}}checked{{end}}>{{.T "Disabled (cannot sign in; open sessions end)"}}</label>{{else}}<input type="hidden" name="disabled" value="">{{end}}
+    <div><button class="primary">{{.T "Save"}}</button></div>
+  </form>
+</section>
+<section class="panel">
+  <h2>{{.T "Sign-in"}}</h2>
+  <dl class="facts">
+    <dt>{{.T "Two-factor"}}</dt><dd>{{if .Data.U.TOTPEnabled}}<span class="badge ok"><i></i>{{.T "On"}}</span>{{else}}<span class="badge warn">{{.T "At next sign-in"}}</span>{{end}}</dd>
+    <dt>{{.T "Recovery key"}}</dt><dd>{{if .Data.U.HasRecovery}}<span class="badge ok"><i></i>{{.T "Yes"}}</span>{{else}}<span class="badge warn">{{.T "No"}}</span>{{end}}</dd>
+    <dt>{{.T "Master password changed"}}</dt><dd>{{.Time .Data.U.PasswordAt}}</dd>
+    <dt>{{.T "Last sign-in"}}</dt><dd>{{.Time .Data.U.LastLoginAt}}</dd>
+    <dt>{{.T "Added"}}</dt><dd>{{.Time .Data.U.CreatedAt}}</dd>
+  </dl>
+  <p class="small muted mt">{{.T "Administrators cannot see or reset master passwords: PassZit never knows them. A user who forgot it and has no recovery key can only start over with an empty vault (delete the account and invite again)."}}</p>
+  {{if not .Data.Self}}
+  {{if .Data.U.TOTPEnabled}}
+  <form method="post" action="/users/{{.Data.U.ID}}/reset-2fa" class="mt" data-confirm="{{.T "Reset two-factor sign-in of this user?"}}">
+    <button class="danger">{{.T "Reset two-factor sign-in"}}</button> <small class="muted">{{.T "For a user who lost the phone and the recovery codes."}}</small>
+  </form>
+  {{end}}
+  {{end}}
+</section>
+{{if not .Data.Self}}
+<section class="panel danger-zone">
+  <h2>{{template "icon" "trash"}}{{.T "Delete the account"}}</h2>
+  <p>{{.T "The account and its personal vault are deleted for good. Nobody can bring the items back."}}</p>
+  <form method="post" action="/users/{{.Data.U.ID}}/delete" class="row">
+    <input name="confirm" required autocomplete="off" placeholder="{{.Data.U.Email}}" aria-label="{{.T "Type the e-mail address to confirm"}}">
+    <button class="danger">{{.T "Delete the account"}}</button>
+  </form>
+</section>
+{{end}}
+{{end}}

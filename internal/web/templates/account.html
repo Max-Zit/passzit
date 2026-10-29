@@ -1,0 +1,79 @@
+{{template "app" .}}
+{{define "scripts"}}<script type="module" src="/static/pz/account.js?v={{.Asset}}"></script>{{end}}
+{{define "content"}}
+<h1>{{.T "My account"}}</h1>
+<div class="flash err" role="alert" id="pz-error" hidden></div>
+<div class="flash ok" role="status" id="pz-ok" hidden></div>
+{{with .Data.Codes}}
+<section class="panel accent">
+  <h2>{{$.T "New recovery codes"}}</h2>
+  <p>{{$.T "Keep these codes in a safe place: each one replaces the authenticator app once if you lose your phone. They are shown only now; the old codes no longer work."}}</p>
+  <ul class="codes">{{range .}}<li><code>{{.}}</code></li>{{end}}</ul>
+  <p><button type="button" class="secondary" data-copy="ul.codes">{{template "icon" "copy"}}{{$.T "Copy"}}</button></p>
+</section>
+{{end}}
+
+<section class="panel">
+  <h2>{{template "icon" "users"}}{{.T "Profile"}}</h2>
+  <form method="post" action="/account/profile" class="stack">
+    <label>{{.T "E-mail address"}}<input value="{{.User.Email}}" readonly></label>
+    <label>{{.T "Full name"}} <small>{{.T "optional"}}</small><input name="display_name" value="{{.User.DisplayName}}" maxlength="100" autocomplete="name"></label>
+    <div class="grid2">
+      <label>{{.T "Lock the vault after (minutes)"}}<input type="number" name="lock_minutes" min="1" max="{{.Data.Policy.LockMinutes}}" value="{{if .User.Prefs.LockMinutes}}{{.User.Prefs.LockMinutes}}{{end}}" placeholder="{{.Data.Policy.LockMinutes}}"><small>{{.T "Empty: %d minutes (the most your administrator allows)." .Data.Policy.LockMinutes}}</small></label>
+      <label>{{.T "Clear copied passwords after (seconds)"}}<input type="number" name="clipboard_seconds" min="5" max="{{.Data.Policy.ClipboardSeconds}}" value="{{if .User.Prefs.ClipboardSeconds}}{{.User.Prefs.ClipboardSeconds}}{{end}}" placeholder="{{.Data.Policy.ClipboardSeconds}}"><small>{{.T "Empty: %d seconds." .Data.Policy.ClipboardSeconds}}</small></label>
+    </div>
+    <div><button class="primary">{{.T "Save"}}</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>{{template "icon" "lock"}}{{.T "Change the master password"}}</h2>
+  <p class="muted">{{.T "Your items stay as they are: only the key that protects them is wrapped again. Your other sessions are signed out."}}</p>
+  <form class="stack" id="f-password">
+    <label>{{.T "Current master password"}}<input type="password" name="current" required autocomplete="current-password"></label>
+    <label>{{.T "New master password"}}<span class="pwfield"><input type="password" name="password" required minlength="{{.Data.Policy.MinPasswordLength}}" autocomplete="new-password" data-strength="#pw-meter"><button type="button" class="iconbtn" data-reveal aria-label="{{.T "Show the password"}}">{{template "icon" "eye"}}</button></span>
+      <span class="meter" id="pw-meter"><i></i><small></small></span>
+      <small>{{.T "At least %d characters. A passphrase of four or more random words is easy to type and hard to guess." .Data.Policy.MinPasswordLength}}</small></label>
+    <label>{{.T "Repeat the master password"}}<input type="password" name="password2" required autocomplete="new-password"></label>
+    <div><button class="primary">{{.T "Change the master password"}}</button></div>
+  </form>
+  <p class="small muted">{{.T "Last changed"}}: {{.Time .User.PasswordAt}}</p>
+</section>
+
+<section class="panel" id="recovery">
+  <h2>{{template "icon" "key"}}{{.T "Recovery key"}}</h2>
+  {{if .User.HasRecovery}}<p><span class="badge ok"><i></i>{{.T "A recovery key is set up."}}</span></p>
+  {{else}}<div class="callout warn">{{template "icon" "alert"}}<div>{{.T "You have no recovery key. If you forget the master password, your vault is lost for good."}}</div></div>{{end}}
+  <p class="muted">{{.T "The recovery key lets you set a new master password when you forgot the old one. Making a new key replaces the old one."}}</p>
+  <form class="stack" id="f-recovery">
+    <label>{{.T "Current master password"}}<input type="password" name="current" required autocomplete="current-password"></label>
+    <div class="row"><button class="primary" name="op" value="new">{{if .User.HasRecovery}}{{.T "Make a new recovery key"}}{{else}}{{.T "Make a recovery key"}}{{end}}</button>
+    {{if .User.HasRecovery}}<button class="ghost" name="op" value="remove" data-ask="{{.T "Remove the recovery key? Without it, a forgotten master password cannot be replaced."}}">{{.T "Remove the recovery key"}}</button>{{end}}</div>
+  </form>
+  <div id="rkey-show" hidden>
+    <p class="rkey mono" id="rkey-text"></p>
+    <p class="row"><button type="button" class="secondary" data-copy="#rkey-text">{{template "icon" "copy"}}{{.T "Copy"}}</button><button type="button" class="secondary" id="rkey-print">{{template "icon" "file"}}{{.T "Print"}}</button></p>
+    <p class="small">{{.T "Keep it offline (printed, in a safe) — not in this vault. It is shown only now."}}</p>
+  </div>
+</section>
+
+{{if .User.TOTPEnabled}}
+<section class="panel">
+  <h2>{{template "icon" "shield"}}{{.T "Two-factor sign-in"}}</h2>
+  <p class="muted">{{.T "%d unused recovery codes left. Make new ones if you used most of them or think someone saw them; enter a code from your authenticator app to confirm." .Data.CodesN}}</p>
+  <form method="post" action="/account/codes" class="row">
+    <input name="code" required inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" aria-label="{{.T "Code from the app"}}" class="code">
+    <button class="secondary">{{.T "Make new recovery codes"}}</button>
+  </form>
+</section>
+{{end}}
+
+<section class="panel">
+  <h2>{{template "icon" "screen"}}{{.T "Active sessions"}}</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>{{.T "Address"}}</th><th class="hide-sm">{{.T "Browser"}}</th><th>{{.T "Signed in"}}</th><th class="hide-sm">{{.T "Last activity"}}</th></tr></thead>
+    <tbody>{{range .Data.Sessions}}<tr><td>{{.IP}}{{if eq .Hash $.Data.Current}} <span class="badge ok">{{$.T "This session"}}</span>{{end}}</td><td class="hide-sm muted ellipsis">{{.UserAgent}}</td><td class="muted">{{$.Time .CreatedAt}}</td><td class="hide-sm muted">{{$.Time .LastSeen}}</td></tr>{{end}}</tbody>
+  </table></div>
+  <form method="post" action="/account/sessions/signout" class="mt"><button class="secondary">{{.T "Sign out all other sessions"}}</button></form>
+</section>
+{{end}}

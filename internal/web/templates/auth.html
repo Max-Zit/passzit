@@ -1,0 +1,105 @@
+{{template "guest" .}}
+{{define "scripts"}}<script type="module" src="/static/pz/auth.js?v={{.Asset}}"></script>{{end}}
+{{define "content"}}
+<div id="pz-auth" data-mode="{{.Data.Mode}}" data-next="{{.Data.Next}}" data-min="{{.Data.MinLength}}" data-invite="{{.Data.Invite}}">
+<noscript><div class="flash err">{{.T "PassZit encrypts your passwords in your browser, so it needs JavaScript."}}</div></noscript>
+<div class="flash err" role="alert" id="pz-error" hidden></div>
+
+{{if eq .Data.Mode "login"}}
+<section data-step="login">
+  <h1>{{.T "Sign in"}}</h1>
+  <form class="stack" id="f-login">
+    <label>{{.T "E-mail address"}}<input type="email" name="email" required autofocus autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+    <label>{{.T "Master password"}}<span class="pwfield"><input type="password" name="password" required autocomplete="current-password"><button type="button" class="iconbtn" data-reveal aria-label="{{.T "Show the password"}}">{{template "icon" "eye"}}</button></span></label>
+    <button class="primary">{{template "icon" "lock"}}{{.T "Sign in and unlock"}}</button>
+  </form>
+  <p class="small muted mt"><a href="/recover">{{.T "Forgot the master password? Use your recovery key."}}</a></p>
+</section>
+{{end}}
+
+{{if or (eq .Data.Mode "setup") (eq .Data.Mode "invite")}}
+<section data-step="create">
+  {{if eq .Data.Mode "setup"}}<h1>{{.T "Set up PassZit"}}</h1>
+  <p class="muted">{{.T "Create the first administrator. Two-factor sign-in with an authenticator app is set up in the next step."}}</p>
+  {{else}}<h1>{{.T "Create your account"}}</h1>
+  <p class="muted">{{.T "You were invited to PassZit. Choose your master password: it encrypts your vault in this browser and is never sent to the server."}}</p>{{end}}
+  <form class="stack" id="f-create">
+    {{if .Data.NeedToken}}<label>{{.T "Setup token"}}<input name="token" required autocomplete="off" spellcheck="false"><small>{{.T "It is in the file setup-token.txt in the server's data directory and in the server log."}}</small></label>{{end}}
+    <label>{{.T "E-mail address"}}<input type="email" name="email" required autocomplete="username" autocapitalize="none" spellcheck="false" value="{{.Data.Email}}" {{if .Data.Email}}readonly{{end}}></label>
+    <label>{{.T "Full name"}} <small>{{.T "optional"}}</small><input name="name" autocomplete="name" maxlength="100"></label>
+    <label>{{.T "Master password"}}<span class="pwfield"><input type="password" name="password" required minlength="{{.Data.MinLength}}" autocomplete="new-password" data-strength="#pw-meter"><button type="button" class="iconbtn" data-reveal aria-label="{{.T "Show the password"}}">{{template "icon" "eye"}}</button></span>
+      <span class="meter" id="pw-meter"><i></i><small></small></span>
+      <small>{{.T "At least %d characters. A passphrase of four or more random words is easy to type and hard to guess." .Data.MinLength}}</small></label>
+    <label>{{.T "Repeat the master password"}}<input type="password" name="password2" required autocomplete="new-password"></label>
+    <div class="callout warn">{{template "icon" "alert"}}<div><b>{{.T "Nobody can reset your master password."}}</b> {{.T "PassZit never knows it, so neither the administrator nor MaxZit can open your vault without it. In the next steps you can create a recovery key — keep it offline."}}</div></div>
+    <label class="check"><input type="checkbox" name="understood" required> {{.T "I understand that my vault is lost if I forget the master password and have no recovery key."}}</label>
+    <button class="primary">{{.T "Create account"}}</button>
+  </form>
+</section>
+{{end}}
+
+{{if eq .Data.Mode "recover"}}
+<section data-step="recover">
+  <h1>{{.T "Recover your account"}}</h1>
+  <p class="muted">{{.T "With the recovery key you made earlier you can set a new master password. Your items stay as they are."}}</p>
+  <form class="stack" id="f-recover">
+    <label>{{.T "E-mail address"}}<input type="email" name="email" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+    <label>{{.T "Recovery key"}}<input name="recovery" required autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH-…" class="mono"></label>
+    {{if not .DevNo2FA}}<label>{{.T "Code from the authenticator app or a recovery code"}}<input name="code" autocomplete="one-time-code" class="code"></label>{{end}}
+    <label>{{.T "New master password"}}<span class="pwfield"><input type="password" name="password" required minlength="{{.Data.MinLength}}" autocomplete="new-password" data-strength="#pw-meter2"><button type="button" class="iconbtn" data-reveal aria-label="{{.T "Show the password"}}">{{template "icon" "eye"}}</button></span>
+      <span class="meter" id="pw-meter2"><i></i><small></small></span></label>
+    <label>{{.T "Repeat the master password"}}<input type="password" name="password2" required autocomplete="new-password"></label>
+    <button class="primary">{{.T "Set the new master password"}}</button>
+  </form>
+  <p class="small muted mt">{{.T "No recovery key? Then the vault cannot be opened any more. An administrator can delete the account and invite you again (with an empty vault)."}}</p>
+  <p class="small"><a href="/login">{{.T "Back to the sign-in"}}</a></p>
+</section>
+{{end}}
+
+<section data-step="2fa" hidden>
+  <h1>{{.T "Two-factor sign-in"}}</h1>
+  <form class="stack" id="f-2fa">
+    <label>{{.T "Code from the authenticator app"}}<input name="code" required inputmode="numeric" autocomplete="one-time-code" class="code"><small>{{.T "Lost your phone? Enter one of your recovery codes instead."}}</small></label>
+    <button class="primary">{{.T "Continue"}}</button>
+  </form>
+</section>
+
+<section data-step="enroll" hidden>
+  <h1>{{.T "Set up two-factor sign-in"}}</h1>
+  <p class="muted">{{.T "Every PassZit account needs a second factor. Scan the code with an authenticator app (Microsoft Authenticator, Google Authenticator, Authy, 2FAS …)."}}</p>
+  <div class="enroll"><div id="enroll-qr"></div>
+    <div><p class="small muted">{{.T "Or enter this key by hand:"}}</p><p><code class="secret" id="enroll-secret"></code></p></div></div>
+  <form class="stack" id="f-enroll">
+    <label>{{.T "Code from the app"}}<input name="code" required inputmode="numeric" autocomplete="one-time-code" maxlength="7" class="code"></label>
+    <button class="primary">{{.T "Confirm"}}</button>
+  </form>
+</section>
+
+<section data-step="codes" hidden>
+  <h1>{{.T "Recovery codes"}}</h1>
+  <p>{{.T "Keep these codes in a safe place: each one replaces the authenticator app once if you lose your phone. They are shown only now."}}</p>
+  <ul class="codes" id="codes-list"></ul>
+  <p><button type="button" class="secondary" data-copy="#codes-list">{{template "icon" "copy"}}{{.T "Copy"}}</button></p>
+  <button type="button" class="primary" id="codes-next">{{.T "I saved them — continue"}}</button>
+</section>
+
+<section data-step="rkey" hidden>
+  <h1>{{.T "Recovery key"}}</h1>
+  <p>{{.T "If you ever forget the master password, this key is the only way back into your vault. Print it or write it down and keep it somewhere safe and offline — not in this vault."}}</p>
+  <p class="rkey mono" id="rkey-text"></p>
+  <p class="row"><button type="button" class="secondary" data-copy="#rkey-text">{{template "icon" "copy"}}{{.T "Copy"}}</button><button type="button" class="secondary" id="rkey-print">{{template "icon" "file"}}{{.T "Print"}}</button></p>
+  <label class="check"><input type="checkbox" id="rkey-ok"> {{.T "I stored the recovery key safely."}}</label>
+  <p class="row mt"><button type="button" class="primary" id="rkey-save" disabled>{{.T "Save the recovery key and continue"}}</button><button type="button" class="link" id="rkey-skip">{{.T "Skip (not recommended)"}}</button></p>
+</section>
+
+<section data-step="busy" hidden>
+  <p class="busy"><span class="spinner" aria-hidden="true"></span><span id="busy-text">{{.T "Deriving the keys from the master password…"}}</span></p>
+</section>
+
+<section data-step="recovered" hidden>
+  <h1>{{.T "New master password set"}}</h1>
+  <p>{{.T "Sign in with the new master password. All other sessions were signed out."}}</p>
+  <p><a class="btn primary" href="/login">{{.T "Sign in"}}</a></p>
+</section>
+</div>
+{{end}}

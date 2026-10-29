@@ -1,0 +1,8 @@
+{{template "app" .}}
+{{define "scripts"}}<script type="module" src="/static/pz/vault.js?v={{.Asset}}"></script>{{end}}
+{{define "content"}}
+<div id="pz-vault" class="vault" data-email="{{.User.Email}}">
+  <noscript><div class="flash err">{{.T "PassZit encrypts your passwords in your browser, so it needs JavaScript."}}</div></noscript>
+  <p class="busy" id="vault-busy"><span class="spinner" aria-hidden="true"></span><span>{{.T "Opening the vault…"}}</span></p>
+</div>
+{{end}}

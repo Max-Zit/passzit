@@ -1,0 +1,30 @@
+{{template "app" .}}
+{{define "content"}}
+<h1>{{.T "Settings"}}</h1>
+<div class="settings">
+{{template "settingstabs" .}}
+<div class="settings-body">
+{{if .Data.Restart}}<div class="flash warn" role="status">{{template "icon" "alert"}}<span>{{.T "The saved port differs from the running one (%s). Restart the PassZit service to use it." .Data.RunningMgmt}}</span></div>{{end}}
+{{if .Data.Override}}<div class="flash info" role="status">{{template "icon" "alert"}}<span>{{.T "The service runs with the address from its command line (%s). The address saved here is used when it starts without this option." .Data.RunningMgmt}}</span></div>{{end}}
+<form method="post" action="/settings/network" class="stack wide">
+  <section class="panel">
+    <h2>{{template "icon" "lock"}}{{.T "Web vault and console"}}</h2>
+    <p class="muted">{{.T "Users and browser extensions connect here. Allow only the networks your users work from."}}</p>
+    <label>{{.T "Listen address"}}<input name="mgmt_listen" value="{{.Data.N.MgmtListen}}" required spellcheck="false" class="mono"><small>{{.T ":8443 listens on all addresses; 192.168.1.10:8443 only on one address of this server (for example LAN only)."}}</small></label>
+    <label>{{.T "Allowed networks"}}<textarea name="mgmt_allowed" rows="5" spellcheck="false" placeholder="192.168.1.0/24">{{.Data.MgmtText}}</textarea><small>{{.T "One IP address or network per line (CIDR, e.g. 192.168.1.0/24 or 203.0.113.7). Connections from other addresses are closed before TLS. The server itself (127.0.0.1) is always allowed."}}</small></label>
+    <p class="small">{{.T "Your address:"}} <code>{{.Data.ClientIP}}</code> — {{.T "it must stay in the list, otherwise saving is refused."}}</p>
+    <label>{{.T "Public address"}} <small>{{.T "optional"}}</small><input name="public_url" value="{{.Data.N.PublicURL}}" spellcheck="false" class="mono" placeholder="https://vault.example.com"><small>{{.T "How users reach this server; used in invitation links. Empty: the address of your browser."}}</small></label>
+  </section>
+  <section class="panel">
+    <h2>{{.T "Recommended second layer"}}</h2>
+    <ul class="tips">
+      <li>{{.T "Allow the port on the server's firewall only from the networks of your users."}}</li>
+      <li>{{.T "For access from outside, use a VPN (for example WireGuard) instead of opening the port to the internet."}}</li>
+      <li>{{.T "If you lock yourself out, run on the server: passzit-server --reset-allowlist"}}</li>
+    </ul>
+  </section>
+  <div><button class="primary">{{.T "Save"}}</button></div>
+</form>
+</div>
+</div>
+{{end}}

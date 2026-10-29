@@ -1,0 +1,7 @@
+{{template "app" .}}
+{{define "scripts"}}<script type="module" src="/static/pz/genpage.js?v={{.Asset}}"></script>{{end}}
+{{define "content"}}
+<h1>{{.T "Password generator"}}</h1>
+<section class="panel" id="pz-generator"></section>
+<p class="small muted">{{.T "Passwords are made in your browser with its cryptographic random generator; nothing is sent to the server."}}</p>
+{{end}}
