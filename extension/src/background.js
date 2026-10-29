@@ -5,6 +5,7 @@
 import * as pz from "./pz/crypto.js";
 import { api, settings, saveSettings, call, loadTexts, t } from "./ext.js";
 import { match, parse } from "./domain.js";
+import { parse as totpParse, code as totpCode } from "./pz/totp.js";
 
 const S = {
   keys: null,        // { accountKey, privateKey, publicKey } as Uint8Array
@@ -145,7 +146,7 @@ function summary(it, how) {
   const d = it.data;
   const c = d.connect && d.connect.tool ? { tool: d.connect.tool, host: d.connect.host || "", port: d.connect.port || 0 } : null;
   return { id: it.id, name: d.name || "", username: d.login && d.login.username || (c && d.connect.user) || "", type: d.type, match: how || "",
-    site: (parse((d.login && d.login.urls || [])[0]) || {}).hostname || (c ? c.host : ""), hasPassword: !!(d.login && d.login.password), favorite: !!d.favorite, connect: c };
+    site: (parse((d.login && d.login.urls || [])[0]) || {}).hostname || (c ? c.host : ""), hasPassword: !!(d.login && d.login.password), hasTotp: !!(d.login && d.login.totp), favorite: !!d.favorite, connect: c };
 }
 
 // devicesFor lists the items that belong to a device: a connection to its
@@ -453,9 +454,41 @@ const handlers = {
     if (!S.keys || !it || !it.data) throw new Error(t("Not found."));
     armLock();
     const d = it.data;
-    const v = msg.field === "username" ? (d.login && d.login.username) : msg.field === "password" ? (d.login && d.login.password) : "";
-    if (msg.field === "password") api.alarms.create("pz-clip", { delayInMinutes: Math.max(S.clipSeconds, 30) / 60 });
+    let v = msg.field === "username" ? (d.login && d.login.username) : msg.field === "password" ? (d.login && d.login.password) : "";
+    if (msg.field === "totp") {
+      let cfg = null;
+      try { cfg = totpParse(d.login && d.login.totp); } catch (e) { /* below */ }
+      if (!cfg) throw new Error(t("Invalid authenticator key"));
+      v = (await totpCode(cfg)).value;
+    }
+    if (msg.field === "password" || msg.field === "totp") {
+      api.alarms.create("pz-clip", { delayInMinutes: Math.max(S.clipSeconds, 30) / 60 });
+      server().then((s) => call(s.server, s.token, "POST", "/api/items/" + it.id + "/access", { action: "copy" })).catch(() => {});
+    }
     return { value: v || "", clip: S.clipSeconds };
+  },
+  // addTotp stores an authenticator key (read from a QR code on the page)
+  // in a login, or in a new login for the page.
+  async addTotp(msg) {
+    if (!S.keys) throw new Error(t("Not found."));
+    let cfg = null;
+    try { cfg = totpParse(msg.uri); } catch (e) { /* below */ }
+    if (!cfg || !/^otpauth:\/\/totp\//i.test(msg.uri)) throw new Error(t("Invalid authenticator key"));
+    armLock();
+    if (msg.id) {
+      const it = S.items.get(msg.id);
+      if (!it || !it.data || !it.data.login) throw new Error(t("Not found."));
+      const d = JSON.parse(JSON.stringify(it.data));
+      d.login.totp = msg.uri;
+      await saveItem(it, d);
+      return { ok: true };
+    }
+    const page = parse(await tabURL(await activeTab()));
+    if (!page) throw new Error(t("This page cannot be filled."));
+    const label = cfg.label.includes(":") ? cfg.label.slice(cfg.label.indexOf(":") + 1) : cfg.label;
+    await saveItem({}, { type: "login", name: cfg.issuer || page.hostname, folder: "", favorite: false, notes: "", fields: [], history: [],
+      login: { username: label.trim(), password: "", urls: [page.origin], totp: msg.uri } });
+    return { ok: true };
   },
   async pending(msg) { await savePending(msg.index, msg.action); return { ok: true }; },
   async capture(msg, sender) { await capture(msg, sender); return { ok: true }; },

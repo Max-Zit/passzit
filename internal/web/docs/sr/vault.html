@@ -13,7 +13,7 @@
 <p>U prikazu stavke dugmad za kopiranje kopiraju korisničko ime ili lozinku; kopirane lozinke nestaju iz klipborda posle vremena iz podešavanja naloga. Oko prikazuje skrivenu vrednost. Sajtovi se otvaraju u novoj kartici.</p>
 
 <h2 id="totp">Jednokratni kodovi (prijava u dva koraka)</h2>
-<p>Prijava može da sadrži <i>Ključ autentifikatora (TOTP)</i> koji sajt pokaže kada uključite njegovu prijavu u dva koraka — nalepite tajni ključ ili celu <code>otpauth://</code> adresu. Stavka tada prikazuje trenutni šestocifreni kod i koliko sekundi još važi, spreman za kopiranje. Imajte na umu: ko otvori trezor, tada ima oba faktora; za najvažnije naloge odvojena aplikacija za autentifikaciju ih drži razdvojenim.</p>
+<p>Prijava može da sadrži <i>Ključ autentifikatora (TOTP)</i> koji sajt pokaže kada uključite njegovu prijavu u dva koraka — nalepite tajni ključ ili celu <code>otpauth://</code> adresu. Ako sajt pokazuje samo QR kod, kliknite QR dugme pored polja i izaberite sliku ili snimak ekrana, ili nalepite kopiranu sliku u polje; QR kod se čita u vašem pregledaču. Stavka tada prikazuje trenutni šestocifreni kod i koliko sekundi još važi, spreman za kopiranje. Imajte na umu: ko otvori trezor, tada ima oba faktora; za najvažnije naloge odvojena aplikacija za autentifikaciju ih drži razdvojenim.</p>
 
 <h2 id="files">Priloženi fajlovi</h2>
 <p><b>Priloži fajl</b> u prikazu stavke dodaje fajlove kao što su ključevi, sertifikati ili skenirani dokumenti. Svaki fajl se šifruje u pregledaču sopstvenim ključem, koji se čuva u šifrovanoj stavci — server čuva samo bajtove koje ne može da pročita. Administrator određuje najveći fajl (10 MB) i prostor po korisniku (500 MB). <b>Preuzmi</b> dešifruje fajl u pregledaču; trajnim brisanjem stavke brišu se i njeni fajlovi.</p>

@@ -4,6 +4,8 @@
 import { generate, entropy, loadOptions, saveOptions } from "./pz/generator.js";
 import { api, settings, saveSettings, loadTexts, t, normServer, deviceName } from "./ext.js";
 import { bg, signIn, secondFactor, unlock } from "./client.js";
+import { readQR, authenticatorKeys } from "./pz/qr.js";
+import { parse as totpParse } from "./pz/totp.js";
 const app = document.getElementById("app");
 let tab = ["site", "all", "gen"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "site";
 
@@ -31,6 +33,8 @@ const PATHS = {
   globe: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"],
   refresh: ["M21 12a9 9 0 1 1-3-6.7L21 8", "M21 3v5h-5"],
   terminal: ["M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z", "m7 9 3 3-3 3M13 15h4"],
+  qr: ["M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z", "M14 14h2v2h-2zM18 14h2M14 18v2M18 18h2v2h-2"],
+  clock: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M12 7v5l3 2"],
   alert: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M12 8v5M12 16.5v.01"],
 };
 
@@ -172,6 +176,7 @@ async function showMain() {
   body.append(el("div", { class: "site" }, icon("globe"), p.host || t("No website")));
   if (p.host && !p.secure) body.append(el("div", { class: "warn" }, t("This page is not encrypted (HTTP). Logins saved for HTTPS are not offered here.")));
   body.append(itemList(p.matches, true, t("No saved login for this website."), p.helper));
+  if (p.host) body.append(el("button", { type: "button", class: "ghost qrscan", onclick: () => scanPage(p) }, icon("qr"), t("Read an authenticator QR code on this page")));
   if (p.device) {
     body.append(el("div", { class: "site" }, icon("globe"), t("Device %s", p.device)),
       itemList(p.deviceMatches, false, t("No saved login for this device."), p.helper));
@@ -193,7 +198,8 @@ function itemList(items, canFill, emptyText, helper) {
         "aria-label": t("Connect with %s", TOOLS[m.connect.tool] || m.connect.tool), onclick: () => doConnect(m) }, icon("terminal")) : null,
       m.username ? el("button", { type: "button", class: "iconbtn", title: t("Copy the user name"), "aria-label": t("Copy the user name"), onclick: () => copySecret(m.id, "username") }, icon("user")) : null,
       m.hasPassword ? el("button", { type: "button", class: "iconbtn", title: t("Copy the password"), "aria-label": t("Copy the password"), onclick: () => copySecret(m.id, "password") }, icon("key")) : null,
-      canFill ? el("button", { type: "button", class: "fill", onclick: () => doFill(m.id) }, t("Fill")) : null))));
+      m.hasTotp ? el("button", { type: "button", class: "iconbtn", title: t("Copy the one-time code"), "aria-label": t("Copy the one-time code"), onclick: () => copySecret(m.id, "totp") }, icon("clock")) : null,
+      canFill ? el("button", { type: "button", class: "fill", onclick: () => doFill(m) }, t("Fill")) : null))));
 }
 
 async function doConnect(m) {
@@ -213,18 +219,61 @@ async function doConnect(m) {
   } catch (e) { toast(e.message); }
 }
 
-async function doFill(id) {
+async function doFill(m) {
   try {
-    await bg("fill", { id });
-    window.close();
+    await bg("fill", { id: m.id });
+    if (!m.hasTotp) return window.close();
+    // The sign-in usually asks for the one-time code next.
+    const r = await bg("secret", { id: m.id, field: "totp" });
+    await navigator.clipboard.writeText(r.value);
+    toast(t("Filled. The one-time code is on the clipboard (cleared in %d seconds).", Math.max(r.clip, 30)));
+    setTimeout(() => window.close(), 1500);
   } catch (e) { toast(e.message); }
+}
+
+// scanPage reads an authenticator QR code on the visible page (the browser
+// gives the extension a picture of the tab only after a click on PassZit)
+// and saves the key in a login of the site or in a new one.
+async function scanPage(p) {
+  let keys;
+  try {
+    const shot = await api.tabs.captureVisibleTab({ format: "png" });
+    keys = authenticatorKeys(await readQR(await (await fetch(shot)).blob()));
+  } catch (e) { return toast(t("The page could not be read.")); }
+  if (!keys.length) return toast(t("No authenticator QR code was found on this page."));
+  const uri = keys[0];
+  let cfg = null;
+  try { cfg = totpParse(uri); } catch (e) { return toast(t("Invalid authenticator key")); }
+  const err = errBox();
+  const save = async (m) => {
+    if (m && m.hasTotp && !window.confirm(t("%s already has an authenticator key. Replace it?", m.name || m.site))) return;
+    try {
+      await bg("addTotp", { uri, id: m ? m.id : "" });
+      toast(t("The authenticator key was saved."));
+      showMain();
+    } catch (e) { showErr(err, e); }
+  };
+  const who = [cfg.issuer, cfg.label].filter(Boolean).join(" · ");
+  app.replaceChildren(el("div", { class: "pane" },
+    el("b", { text: t("Authenticator key found") }),
+    who ? el("div", { class: "small muted", text: who }) : null,
+    keys.length > 1 ? el("div", { class: "small muted", text: t("The page has %d authenticator codes; the first one is used.", keys.length) }) : null,
+    el("p", { class: "small", text: t("Save it in a login of this site:") }),
+    el("ul", { class: "list" }, ...p.matches.map((m) => el("li", { class: "row" },
+      el("span", { class: "av" }, (m.name || "?")[0].toUpperCase()),
+      el("span", { class: "who" }, el("b", { text: m.name || m.site }), el("small", { text: m.username || m.site })),
+      el("span", { class: "acts" }, el("button", { type: "button", class: "fill", onclick: () => save(m) }, t("Save")))))),
+    err,
+    el("div", { class: "btns" },
+      el("button", { type: "button", class: "primary", onclick: () => save(null) }, t("New login")),
+      el("button", { type: "button", class: "secondary", onclick: () => showMain() }, t("Cancel")))));
 }
 
 async function copySecret(id, field) {
   try {
     const r = await bg("secret", { id, field });
     await navigator.clipboard.writeText(r.value);
-    toast(field === "password" ? t("Copied. The clipboard is cleared in %d seconds.", Math.max(r.clip, 30)) : t("Copied."));
+    toast(field === "password" || field === "totp" ? t("Copied. The clipboard is cleared in %d seconds.", Math.max(r.clip, 30)) : t("Copied."));
   } catch (e) { toast(e.message); }
 }
 

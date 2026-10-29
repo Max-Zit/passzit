@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"rsc.io/qr"
 
 	"github.com/max-zit/passzit/internal/vaultcrypto"
 )
@@ -50,6 +51,9 @@ func browserPath() string {
 	}
 	return ""
 }
+
+// qrText is the authenticator key the browser test reads from a QR code.
+const qrText = "otpauth://totp/PassZit:ana@example.com?secret=JBSWY3DPEHPK3PXP&issuer=PassZit"
 
 // TestJavaScriptCrypto runs the browser crypto (static/pz/crypto.js, the
 // Argon2id WebAssembly module and the generator) in a headless browser and
@@ -97,6 +101,11 @@ func TestJavaScriptCrypto(t *testing.T) {
 		default:
 		}
 	})
+	mux.HandleFunc("/qr.png", func(w http.ResponseWriter, r *http.Request) {
+		q, _ := qr.Encode(qrText, qr.M)
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(q.PNG())
+	})
 	mux.HandleFunc("/jstest.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
 		http.ServeFile(w, r, filepath.Join("testdata", "jstest.js"))
@@ -132,6 +141,7 @@ func TestJavaScriptCrypto(t *testing.T) {
 		FileSealed                          string `json:"fileSealed"`
 		FileRoundTrip                       bool   `json:"fileRoundTrip"`
 		Send1, Send2                        bool
+		QR                                  string `json:"qr"`
 		Recovery, RecoveryParsed            string
 		Fingerprint                         string
 		AccountRoundTrip                    bool
@@ -196,6 +206,9 @@ func TestJavaScriptCrypto(t *testing.T) {
 	}
 	if len(got.Sites)+len(got.Matches) > 0 {
 		t.Errorf("domain matching: %v %v", got.Sites, got.Matches)
+	}
+	if got.QR != qrText {
+		t.Errorf("QR code read as %q", got.QR)
 	}
 	if !got.Send1 || !got.Send2 {
 		t.Errorf("secret links: %v %v", got.Send1, got.Send2)

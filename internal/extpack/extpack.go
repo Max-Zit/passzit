@@ -22,7 +22,7 @@ import (
 // Targets are the builds.
 var Targets = []string{"chromium", "firefox"}
 
-var shared = []string{"crypto.js", "generator.js", "words.js", "argon2.wasm", "wasm_exec.js"}
+var shared = []string{"crypto.js", "generator.js", "words.js", "totp.js", "qr.js", "argon2.wasm", "qr.wasm", "wasm_exec.js"}
 
 // Options describe a build.
 type Options struct {

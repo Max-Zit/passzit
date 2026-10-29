@@ -25,7 +25,7 @@ done
 # Browser extensions (Chromium browsers and Firefox).
 go run ./tools/extpack -version "$V" >/dev/null
 # Licenses of everything linked into the programs (fails on an unknown license).
-go run ./tools/licenses -out THIRD_PARTY_LICENSES.md "dist/passzit-server-$V-linux-amd64" "dist/passzit-server-$V-linux-arm64" "dist/passzit-server-$V-windows-amd64.exe" "dist/passzit-helper-$V-windows-amd64.exe"
+go run ./tools/licenses -out THIRD_PARTY_LICENSES.md "dist/passzit-server-$V-linux-amd64" "dist/passzit-server-$V-linux-arm64" "dist/passzit-server-$V-windows-amd64.exe" "dist/passzit-helper-$V-windows-amd64.exe" ./tools/argon2wasm ./tools/qrwasm
 cp THIRD_PARTY_LICENSES.md "dist/THIRD_PARTY_LICENSES-$V.md"
 
 # Linux packages of the server.

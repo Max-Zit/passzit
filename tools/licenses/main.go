@@ -3,7 +3,10 @@
 // cache. It fails when a license is not known to be compatible with the
 // AGPL-3.0, so a new dependency is checked before a release.
 //
-//	go run ./tools/licenses -out THIRD_PARTY_LICENSES.md bin/passzit-server
+//	go run ./tools/licenses -out THIRD_PARTY_LICENSES.md bin/passzit-server ./tools/qrwasm
+//
+// A package directory (./tools/…) stands for a browser module: its
+// dependencies are listed for GOOS=js GOARCH=wasm.
 package main
 
 import (
@@ -66,6 +69,24 @@ func licenseText(dir string) (string, error) {
 	return "", fmt.Errorf("no license file in %s", dir)
 }
 
+// wasmDeps lists the modules of a browser module (outside the main module).
+func wasmDeps(pkg string) map[string]string {
+	cmd := exec.Command("go", "list", "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{end}}{{end}}", pkg) // #nosec G204 -- a package of this repository
+	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+	out, err := cmd.Output()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, pkg+":", err)
+		os.Exit(1)
+	}
+	mods := map[string]string{}
+	for _, l := range strings.Split(string(out), "\n") {
+		if f := strings.Fields(l); len(f) == 2 {
+			mods[f[0]] = f[1]
+		}
+	}
+	return mods
+}
+
 func modCache() string { return goEnv("GOMODCACHE") }
 
 func goEnv(name string) string {
@@ -101,6 +122,14 @@ func main() {
 	mods := map[string]string{}
 	goVersion := ""
 	for _, bin := range flag.Args() {
+		if strings.HasPrefix(bin, "./") {
+			if st, err := os.Stat(bin); err == nil && st.IsDir() {
+				for p, v := range wasmDeps(bin) {
+					mods[p] = v
+				}
+				continue
+			}
+		}
 		bi, err := buildinfo.ReadFile(bin)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, bin+":", err)

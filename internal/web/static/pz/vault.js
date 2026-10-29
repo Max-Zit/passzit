@@ -10,6 +10,7 @@ import { generatorPanel } from "./genui.js";
 import { detect, importEncrypted, exportEncrypted, exportCSV, dedupeKey } from "./transfer.js";
 import { authFor, strength } from "./common.js";
 import { parse as totpParse, code as totpCode } from "./totp.js";
+import { readQR, authenticatorKeys } from "./qr.js";
 import { generate as sshGenerate, fingerprint as sshFingerprint } from "./sshkey.js";
 import { initSharing, loadKnown, completePending, createVault, openVault as openVaultDialog, rotateBanner, canEditVault, vaultLabel } from "./sharing.js";
 import { initSends, openSends, itemText } from "./sends.js";
@@ -666,10 +667,27 @@ function renderEditor() {
   };
   for (const u of d.login.urls) addURL(u);
   const totp = el("input", { name: "totp", value: d.login.totp || "", autocomplete: "off", spellcheck: "false", class: "mono", placeholder: "otpauth://totp/… " + t("or the key") });
+  // A QR code (a picture, a screenshot or a pasted image) is read here in
+  // the browser.
+  const takeQR = async (blob) => {
+    try {
+      const keys = authenticatorKeys(await readQR(blob));
+      if (!keys.length) return toast(t("No authenticator QR code was found in the picture."), true);
+      totp.value = keys[0];
+      toast(keys.length > 1 ? t("The picture has %d authenticator codes; the first one was taken.", keys.length) : t("The authenticator key was read."));
+    } catch (e) { toast(t("The picture could not be read."), true); }
+  };
+  const qrFile = el("input", { type: "file", accept: "image/*", hidden: true, onchange: () => { if (qrFile.files[0]) takeQR(qrFile.files[0]); qrFile.value = ""; } });
+  const qrBtn = el("button", { type: "button", class: "iconbtn", title: t("Read a QR code"), "aria-label": t("Read a QR code"), onclick: () => qrFile.click() }, icon("qr"));
+  totp.addEventListener("paste", (ev) => {
+    const f = [...(ev.clipboardData && ev.clipboardData.files || [])].find((x) => x.type.startsWith("image/"));
+    if (f) { ev.preventDefault(); takeQR(f); }
+  });
   const loginPart = el("div", { class: "stack", hidden: d.type !== "login" },
     el("label", null, t("User name"), user),
     el("label", null, t("Password"), el("span", { class: "pwfield" }, pass, showBtn, genBtn)),
-    el("label", null, t("Authenticator key (TOTP)"), totp, el("small", { text: t("The secret key or otpauth:// address a website shows when you set up two-factor sign-in. PassZit then shows the codes.") })),
+    el("label", null, t("Authenticator key (TOTP)"), el("span", { class: "pwfield" }, totp, qrBtn, qrFile),
+      el("small", { text: t("The secret key or otpauth:// address a website shows when you set up two-factor sign-in, or its QR code: choose a picture or a screenshot, or paste it here. PassZit then shows the codes.") })),
     el("div", null, el("label", { text: t("Websites") }), urls,
       button(t("Add a website"), { class: "ghost sm", icon: "plus", onclick: () => addURL("") })));
   // other item types

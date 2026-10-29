@@ -30,6 +30,10 @@
 <h2 id="lock">Locking</h2>
 <p>The extension locks after the same inactivity time as the web vault and when the browser closes; the lock button locks at once. Unlocking needs only the master password. The keys are kept in the browser's memory, never on disk.</p>
 
+<h2 id="totp">One-time codes</h2>
+<p>Logins with an authenticator key get a clock button that copies the current one-time code. After <b>Fill</b> such a login, PassZit also puts the code on the clipboard, because most sign-ins ask for it on the next page. The code is cleared from the clipboard like a password.</p>
+<p>When you switch on two-factor sign-in at a website and it shows a QR code, open PassZit and click <i>Read an authenticator QR code on this page</i>. The browser gives PassZit a picture of the visible tab (only after this click); PassZit reads the code in your browser and saves the key in a login of the site you choose, or in a new login. Then enter the code PassZit shows to finish the setup at the website.</p>
+
 <h2 id="generator">Generator and search</h2>
 <p><i>Generator</i> makes passwords and passphrases like the one in the web vault; <i>Search</i> finds any item of your vault to copy its user name or password.</p>
 

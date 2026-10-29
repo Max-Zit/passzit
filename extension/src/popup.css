@@ -65,3 +65,8 @@ button:disabled { opacity: .6; cursor: default; }
 [hidden] { display: none !important; }
 input[type=checkbox], input[type=range] { accent-color: var(--accent); }
 code.cmd { display: block; margin-top: 4px; padding: 6px; border-radius: 6px; background: var(--panel-2, #eef); font-size: 11px; word-break: break-all; user-select: all; }
+button.qrscan { display: flex; align-items: center; gap: 6px; width: 100%; justify-content: center; margin-top: 8px; font-size: 12.5px; }
+button.qrscan .ic { width: 15px; height: 15px; }
+.pane { display: flex; flex-direction: column; gap: 8px; }
+.pane .btns { display: flex; gap: 6px; }
+.pane .btns button { flex: 1; }
