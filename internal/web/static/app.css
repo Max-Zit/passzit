@@ -421,7 +421,9 @@ input.sep { width: 4em; display: inline-block; }
   .vgrid { grid-template-columns: minmax(240px, 320px) 1fr; }
   .vfilters { grid-column: 1 / -1; position: static; display: flex; flex-wrap: wrap; gap: 4px; }
   .vfilters .navlabel { display: none; }
-  .vfilters .navlabel:has(button) { display: inline-flex; gap: 4px; margin: 0; padding: 0 4px 0 10px; border: 1px dashed var(--line-2); border-radius: 8px; }
+  .vfilters .navlabel:has(button) { display: inline-flex; gap: 4px; margin: 0; padding: 0 4px 0 10px; border: 1px dashed var(--line-2); border-radius: 8px; white-space: nowrap; flex: none; }
+  /* the vaults keep a row of their own */
+  .vfilters .navlabel.brk { display: block; flex-basis: 100%; height: 0; margin: 0; overflow: hidden; }
   .vfilters a { border: 1px solid var(--line); padding: 5px 10px; background: var(--panel); }
 }
 @media (max-width: 760px) {
@@ -431,6 +433,7 @@ input.sep { width: 4em; display: inline-block; }
   .vback { display: inline-flex; }
   .vfilters { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
   .vfilters a { flex: none; }
+  .vfilters .navlabel.brk { display: none; }
   .rowline.field3 { flex-wrap: wrap; }
 }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }

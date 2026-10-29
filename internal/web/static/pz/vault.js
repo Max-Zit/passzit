@@ -325,7 +325,27 @@ function renderFilters() {
     return el("a", { href: "#", class: on ? "on" : "", onclick: (ev) => { ev.preventDefault(); S.view = view; S.folder = folder || ""; S.selected = ""; S.editing = null; render(); } },
       icon(ic), el("span", { text: label }), el("small", { text: String(count(view, folder)) }));
   };
-  const nav = el("nav", { class: "vfilters", "aria-label": t("Filters") },
+  const nav = el("nav", { class: "vfilters", "aria-label": t("Filters") });
+  // vaults first: the personal one, then the team vaults by name (a new
+  // one appears among them)
+  const vaultLink = (id, v) => {
+    const a = link("vault", vaultLabel(id), v.kind === "personal" ? "lock" : "users", id);
+    a.onclick = (ev) => { ev.preventDefault(); S.view = "vault"; S.vault = id; S.selected = ""; S.editing = null; render(); };
+    if (S.view === "vault" && S.vault === id) a.classList.add("on"); else a.classList.remove("on");
+    if (v.needsRotation && v.rights === "manage") a.append(el("span", { class: "dot warn", title: t("Needs a new key") }));
+    return a;
+  };
+  const all = [...S.vaults.entries()];
+  for (const [id, v] of all.filter(([, x]) => x.kind === "personal")) nav.append(vaultLink(id, v));
+  const canCreate = !S.acct.shared_admins_only || S.acct.role === "admin";
+  const teams = all.filter(([, x]) => x.kind !== "personal").sort((a, b) => vaultLabel(a[0]).localeCompare(vaultLabel(b[0]), undefined, { sensitivity: "base" }));
+  if (teams.length || canCreate) {
+    nav.append(el("span", { class: "navlabel" }, t("Team vaults"), canCreate
+      ? el("button", { type: "button", class: "iconbtn sm", title: t("New shared vault"), "aria-label": t("New shared vault"), onclick: createVault }, icon("plus")) : null));
+  }
+  for (const [id, v] of teams) nav.append(vaultLink(id, v));
+  if (!teams.length && canCreate) nav.append(el("a", { href: "#", class: "muted", onclick: (ev) => { ev.preventDefault(); createVault(); } }, icon("plus"), el("span", { text: t("New shared vault") })));
+  nav.append(el("span", { class: "navlabel brk", text: t("Items") }),
     link("all", t("All items"), "grid"), link("fav", t("Favorites"), "star"),
     el("span", { class: "navlabel", text: t("Types") }),
     ...Object.entries(TYPES).map(([k, v]) => link(k, t(v.plural), v.icon)),
@@ -333,18 +353,6 @@ function renderFilters() {
       el("button", { type: "button", class: "iconbtn sm", title: t("New folder"), "aria-label": t("New folder"), onclick: newFolder }, icon("plus"))));
   const folders = [...S.folders.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, undefined, { sensitivity: "base" }));
   for (const [id, f] of folders) nav.append(link("folder", f.name, "folder", id));
-  // vaults: the personal one and the shared ones
-  const canCreate = !S.acct.shared_admins_only || S.acct.role === "admin";
-  nav.append(el("span", { class: "navlabel" }, t("Vaults"), canCreate
-    ? el("button", { type: "button", class: "iconbtn sm", title: t("New shared vault"), "aria-label": t("New shared vault"), onclick: createVault }, icon("plus")) : null));
-  const vaults = [...S.vaults.entries()].sort((a, b) => (a[1].kind === "personal" ? -1 : b[1].kind === "personal" ? 1 : vaultLabel(a[0]).localeCompare(vaultLabel(b[0]))));
-  for (const [id, v] of vaults) {
-    const a = link("vault", vaultLabel(id), v.kind === "personal" ? "lock" : "users", id);
-    a.onclick = (ev) => { ev.preventDefault(); S.view = "vault"; S.vault = id; S.selected = ""; S.editing = null; render(); };
-    if (S.view === "vault" && S.vault === id) a.classList.add("on"); else a.classList.remove("on");
-    if (v.needsRotation && v.rights === "manage") a.append(el("span", { class: "dot warn", title: t("Needs a new key") }));
-    nav.append(a);
-  }
   nav.append(el("span", { class: "navlabel" }), link("trash", t("Trash"), "trash"),
     el("span", { class: "navlabel", text: t("Tools") }),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openHealth(); } }, icon("shield"), el("span", { text: t("Password health") })),
