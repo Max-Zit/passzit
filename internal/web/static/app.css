@@ -366,7 +366,7 @@ input.sep { width: 4em; display: inline-block; }
 .vlist-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 12px 4px 6px; }
 .vlist-title h2 { margin: 0; font-size: 15px; }
 .vitems { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.vitems a { display: flex; gap: 12px; align-items: center; padding: 8px; border-radius: 10px; color: var(--text); }
+.vitems a { display: flex; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 8px; color: var(--text); }
 .vitems a:hover { text-decoration: none; background: var(--panel-2); }
 .vitems a.on { background: var(--accent-soft); }
 .vitems .empty { padding: 24px 8px; }
@@ -379,11 +379,11 @@ input.sep { width: 4em; display: inline-block; }
 .kchip.on .ic, .kchip.on small { color: var(--accent); }
 .vitems > li > a { padding-left: calc(8px + var(--depth, 0) * 20px); }
 .vgroup { display: flex; align-items: center; position: relative; }
-.vfolder { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px; padding-left: calc(8px + var(--depth, 0) * 20px); border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
-.vfolder span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vfolder { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 8px; padding-left: calc(8px + var(--depth, 0) * 20px); border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.vfolder .vfname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vfolder small { color: var(--muted); font-weight: 500; font-size: 12px; }
-.vfolder .ic { width: 16px; height: 16px; color: var(--muted); flex: none; }
-.vfolder .ic + .ic { width: 20px; height: 20px; color: #d97706; }
+.vfolder > .ic { width: 14px; height: 14px; color: var(--muted); flex: none; }
+.vfolder .vfname { flex: 1; }
 .vfolder:hover { background: var(--panel-2); }
 .vfolder.on { background: var(--accent-soft); }
 .vfacts { display: none; gap: 2px; position: absolute; right: 6px; background: var(--panel-2); border-radius: 8px; }
@@ -392,15 +392,12 @@ input.sep { width: 4em; display: inline-block; }
 .searchfield > .iconbtn .ic { position: static; transform: none; }
 .searchfield:has(> .iconbtn) input { padding-right: 38px; }
 .searchfield .iconbtn.on { color: var(--accent); background: var(--accent-soft); }
-.vicon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent-2), #a855f7); }
-.vicon[data-type="note"] { background: linear-gradient(135deg, #0ea5e9, #14b8a6); }
-.vicon[data-kind="rdp"] { background: linear-gradient(135deg, #2563eb, #0ea5e9); }
-.vicon[data-kind="ssh"], .vicon[data-kind="sshkey"] { background: linear-gradient(135deg, #334155, #0f766e); }
-.vicon[data-kind="winbox"] { background: linear-gradient(135deg, #dc2626, #f97316); }
-.vicon[data-kind="card"] { background: linear-gradient(135deg, #b45309, #eab308); }
-.vicon[data-kind="identity"] { background: linear-gradient(135deg, #7c3aed, #db2777); }
-.vicon .ic { width: 18px; height: 18px; }
-.vicon.lg { width: 48px; height: 48px; border-radius: 14px; font-size: 20px; }
+/* items and folders share one quiet icon style */
+.vicon { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; flex: none; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); }
+.vicon .ic { width: 16px; height: 16px; }
+.vicon.lg { width: 40px; height: 40px; border-radius: 10px; }
+.vicon.lg .ic { width: 20px; height: 20px; }
+.vitems a.on .vicon, .vfolder.on .vicon { color: var(--accent); border-color: var(--accent); }
 .vname { display: grid; min-width: 0; flex: 1; }
 .vname b, .vname small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vname b { font-weight: 600; }
@@ -476,3 +473,10 @@ pre.vnotes, code.vvalue { background: none; border: 0; padding: 0; color: var(--
 .elist { list-style: none; padding: 0; display: grid; gap: 10px; }
 .elist li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 .elist .row { gap: 6px; }
+.fkinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin-top: 4px; }
+.fkind { position: relative; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-weight: 500; }
+.fkind input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+.fkind .ic { width: 16px; height: 16px; color: var(--muted); }
+.fkind:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.fkind:has(input:checked) .ic { color: var(--accent); }
+.fkind:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }

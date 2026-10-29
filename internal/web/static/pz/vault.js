@@ -295,21 +295,56 @@ function folderPath(f) {
 
 function byName(a, b) { return itemName(a).localeCompare(itemName(b), undefined, { sensitivity: "base" }); }
 
+// FOLDER_KINDS are what a folder stands for; each shows its own icon.
+const FOLDER_KINDS = [
+  { key: "folder", label: "Folder", icon: "folder" },
+  { key: "customer", label: "Customer", icon: "briefcase" },
+  { key: "site", label: "Site", icon: "pin" },
+  { key: "branch", label: "Branch office", icon: "building" },
+  { key: "department", label: "Department", icon: "users" },
+  { key: "datacenter", label: "Data center", icon: "server" },
+  { key: "network", label: "Network", icon: "network" },
+  { key: "project", label: "Project", icon: "flag" },
+];
+
+function folderKind(f) { return FOLDER_KINDS.find((k) => k.key === (f && f.data && f.data.kind)) || FOLDER_KINDS[0]; }
+
+// folderDialog asks for the name and the kind of a folder.
+function folderDialog(title, name, kind) {
+  return new Promise((resolve) => {
+    const inp = el("input", { value: name, maxlength: 100, required: true });
+    const kinds = el("div", { class: "fkinds", role: "radiogroup", "aria-label": t("Kind") }, ...FOLDER_KINDS.map((k) =>
+      el("label", { class: "fkind" }, el("input", { type: "radio", name: "fkind", value: k.key, checked: k.key === kind }), icon(k.icon), el("span", { text: t(k.label) }))));
+    const f = el("form", { method: "dialog", class: "stack" }, el("h2", { text: title }), el("label", null, t("Name"), inp),
+      el("div", null, el("label", { text: t("Kind") }), kinds),
+      el("div", { class: "row end" }, button(t("Cancel"), { class: "ghost", onclick: () => { d.close(); } }), button(t("Save"), { type: "submit", class: "primary" })));
+    const d = el("dialog", { class: "dlg" }, f);
+    let result = null;
+    f.addEventListener("submit", () => { result = { name: inp.value.trim(), kind: (kinds.querySelector("input:checked") || {}).value || "folder" }; });
+    d.addEventListener("close", () => { d.remove(); resolve(result && result.name ? result : null); });
+    document.body.append(d);
+    d.showModal();
+    inp.focus();
+  });
+}
+
 async function newVaultFolder(vaultID, parent) {
-  const name = await prompt1(t("New folder"), t("Name"), "");
-  if (!name) return;
+  // below a customer the usual next level is a site
+  const up = parent ? S.items.get(parent) : null;
+  const r = await folderDialog(t("New folder"), "", up && folderKind(up).key === "customer" ? "site" : "folder");
+  if (!r) return;
   try {
-    const f = await saveItem({ vault_id: vaultID }, { type: "folder", name, parent: parent || "" });
+    const f = await saveItem({ vault_id: vaultID }, { type: "folder", name: r.name, kind: r.kind, parent: parent || "" });
     S.closed.delete(f.id);
     S.cwd = f.id;
     render();
   } catch (e) { toast(e.message, true); }
 }
 
-async function renameVaultFolder(f) {
-  const name = await prompt1(t("Rename the folder"), t("Name"), f.data.name);
-  if (!name || name === f.data.name) return;
-  try { await saveItem(f, Object.assign({}, f.data, { name })); render(); } catch (e) { toast(e.message, true); }
+async function editVaultFolder(f) {
+  const r = await folderDialog(t("Edit the folder"), f.data.name, folderKind(f).key);
+  if (!r || (r.name === f.data.name && r.kind === folderKind(f).key)) return;
+  try { await saveItem(f, Object.assign({}, f.data, { name: r.name, kind: r.kind })); render(); } catch (e) { toast(e.message, true); }
 }
 
 // deleteVaultFolder moves what the folder holds one level up and puts the
@@ -589,11 +624,11 @@ function listRows() {
         if (S.cwd === f.id || closed) { if (closed) S.closed.delete(f.id); else S.closed.add(f.id); }
         S.cwd = f.id;
         render();
-      } }, icon(closed ? "chevr" : "chevd"), icon(closed ? "folder" : "folderopen"), el("span", { text: f.data.name || "?" }), el("small", { text: String(total(f.id, new Set())) }));
+      } }, icon(closed ? "chevr" : "chevd"), el("span", { class: "vicon", title: t(folderKind(f).label) }, icon(folderKind(f).icon)), el("span", { class: "vfname", text: f.data.name || "?" }), el("small", { text: String(total(f.id, new Set())) }));
       if (depth) btn.style.setProperty("--depth", String(depth));
       const acts = editable ? el("span", { class: "vfacts" },
         button("", { class: "ghost sm", icon: "folderplus", aria: t("New folder in %s", f.data.name), title: t("New folder in %s", f.data.name), onclick: () => newVaultFolder(S.vault, f.id) }),
-        button("", { class: "ghost sm", icon: "edit", aria: t("Rename the folder"), title: t("Rename the folder"), onclick: () => renameVaultFolder(f) }),
+        button("", { class: "ghost sm", icon: "edit", aria: t("Edit the folder"), title: t("Edit the folder"), onclick: () => editVaultFolder(f) }),
         button("", { class: "ghost sm", icon: "trash", aria: t("Delete the folder"), title: t("Delete the folder"), onclick: () => deleteVaultFolder(f) })) : null;
       out.push(el("li", { class: "vgroup" }, btn, acts));
       if (!closed) walk(f.id, depth + 1, seen);
