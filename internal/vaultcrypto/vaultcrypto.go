@@ -127,6 +127,7 @@ func AADItem(vaultID, itemID string) string {
 func AADFolder(folderID string) string { return "passzit/folder/v1|" + folderID }
 func AADSession() string               { return "passzit/session/v1" }
 func AADExport() string                { return "passzit/export/v1" }
+func AADFile(fileID string) string     { return "passzit/file/v1|" + fileID }
 
 // Random returns n random bytes.
 func Random(n int) []byte {

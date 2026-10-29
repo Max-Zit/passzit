@@ -392,6 +392,16 @@ input.sep { width: 4em; display: inline-block; }
 .vnotes { white-space: pre-wrap; margin: 0; font: inherit; overflow-wrap: anywhere; }
 .vhist ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
 .vhist li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vfiles { list-style: none; padding: 0; margin: 4px 0 8px; display: grid; gap: 4px; }
+.vfiles li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; }
+.vfiles .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vfiles svg { flex: none; }
+.health { margin-top: 16px; }
+.health h3 { margin: 0 0 4px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.health .vitems { list-style: none; padding: 0; margin: 6px 0 0; }
+.health .vitems a { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 8px; color: inherit; text-decoration: none; }
+.health .vitems a:hover { background: var(--panel-2); }
+.healthscore { font-size: 20px; }
 .vactions { gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .veditor h2 { margin: 0; }
 .rows { display: grid; gap: 8px; margin: 4px 0 8px; }

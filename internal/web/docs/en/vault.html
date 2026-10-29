@@ -1,13 +1,26 @@
 <h1>Working with the vault</h1>
-<p class="lead">The vault holds your logins and secure notes. It opens after the sign-in, and again with the master password after it locked.</p>
+<p class="lead">The vault holds your logins, secure notes, cards, identities and SSH keys. It opens after the sign-in, and again with the master password after it locked.</p>
 
 <h2 id="items">Items</h2>
 <ul>
   <li><b>Login</b> — name, user name, password, one or more websites, notes and own fields.</li>
   <li><b>Secure note</b> — a name and text, for licence keys, Wi-Fi passwords, PINs and the like.</li>
+  <li><b>Card</b> — cardholder, number, expiry and security code. The number is shown with its brand and hidden until you click the eye.</li>
+  <li><b>Identity</b> — name, address, e-mail, phone and company, for forms you fill in again and again.</li>
+  <li><b>SSH key</b> — a private and public key with an optional passphrase. <i>Generate an Ed25519 key</i> makes a new key in the browser; paste the public key into <code>~/.ssh/authorized_keys</code> on a server.</li>
 </ul>
 <p>Click <b>New item</b>, fill in the fields and <b>Save</b>. The dice button next to the password opens the generator; <i>Use this password</i> puts the result into the item. <i>More fields</i> adds own fields — mark them <i>Hidden</i> for secrets.</p>
 <p>In the item view, the copy buttons copy the user name or password; copied passwords disappear from the clipboard again after the time in your account settings. The eye shows a hidden value. Websites open in a new tab.</p>
+
+<h2 id="totp">One-time codes (two-factor sign-in)</h2>
+<p>A login can hold the <i>Authenticator key (TOTP)</i> a website shows when you switch on its two-factor sign-in — paste the secret key or the whole <code>otpauth://</code> address. The item then shows the current six-digit code with the seconds it is still valid, ready to copy. Keep in mind: whoever opens the vault then has both factors; for the most important accounts a separate authenticator app keeps them apart.</p>
+
+<h2 id="files">Attached files</h2>
+<p><b>Attach a file</b> in the item view adds files such as key files, certificates or scans. Each file is encrypted in the browser with its own key, which is kept inside the encrypted item — the server stores only bytes it cannot read. The administrator sets the largest file (10 MB) and the storage per user (500 MB). <b>Download</b> decrypts a file in the browser; deleting the item forever deletes its files too.</p>
+
+<h2 id="health">Password health</h2>
+<p><b>Password health</b> under <i>Tools</i> lists logins with <b>weak</b> passwords, passwords <b>reused</b> on several websites and passwords <b>not changed for a year</b>, with a score of how many logins are fine. The check runs completely in the browser.</p>
+<p>If the administrator switched it on, <b>Known data breaches</b> checks your passwords against the Have I Been Pwned list of leaked passwords. Only the first five characters of each password's SHA-1 hash are sent; the answer contains hundreds of hashes and the match is found in the browser, so neither PassZit's server nor the service learns a password.</p>
 
 <h2 id="history">Password history</h2>
 <p>When you change the password of a login, the old one is kept in the item's <i>Password history</i> (the last ten), encrypted like everything else. The item shows when the password was last changed.</p>

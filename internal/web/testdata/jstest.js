@@ -5,6 +5,8 @@ import * as pz from "/static/pz/crypto.js";
 import { password, passphrase, randomInt } from "/static/pz/generator.js";
 import { siteOf, match } from "/ext/domain.js";
 import * as tr from "/static/pz/transfer.js";
+import * as totp from "/static/pz/totp.js";
+import * as sshkey from "/static/pz/sshkey.js";
 
 const out = {};
 try {
@@ -22,6 +24,8 @@ try {
   try { await pz.open(pz.unhex(c.key), c.goSealed, "other"); out.wrongAAD = "opened"; } catch (e) { out.wrongAAD = e.name; }
   // values made here are opened by Go
   out.jsSealedTo = await pz.sealTo(pz.unb64u(c.pub), pz.utf8("from javascript"), "y");
+  out.fileSealed = pz.b64u(await pz.sealBytes(pz.unhex(c.key), pz.utf8("file from javascript"), pz.AAD.file("f-1")));
+  out.fileRoundTrip = pz.fromUtf8(await pz.openBytes(pz.unhex(c.key), pz.unb64u(out.fileSealed), pz.AAD.file("f-1"))) === "file from javascript";
   out.recovery = pz.formatRecoveryKey(pz.unhex(c.recoveryRaw));
   out.recoveryParsed = pz.hex(pz.parseRecoveryKey(c.recoveryText.toLowerCase().replace(/-/g, " ")));
   out.fingerprint = await pz.fingerprint(pz.unb64u(c.pub));
@@ -80,6 +84,24 @@ try {
   expect("encrypted export", back.items[0].name === "x" && wrong === "DecryptError" && !enc.includes('"x"'), { back, wrong });
   try { tr.detect("just some text"); imp.push("garbage accepted"); } catch (e) { /* refused */ }
   out.imports = imp;
+  // TOTP: RFC 6238 test vectors (T = 59 s, 8 digits) and otpauth addresses
+  const tv = [];
+  for (const [alg, b32, want] of c.totp) {
+    const cfg = totp.parse("otpauth://totp/x?secret=" + b32 + "&algorithm=" + alg + "&digits=8");
+    const r2 = await totp.code(cfg, 59000);
+    if (r2.value !== want || r2.remaining !== 1) tv.push(alg + " " + r2.value + " want " + want);
+  }
+  const plain = await totp.code(totp.parse(c.totp[0][1].toLowerCase().replace(/(.{4})/g, "$1 ")), 1111111109000);
+  if (plain.value !== "081804") tv.push("plain base32 " + plain.value);
+  out.totp = tv;
+  // SSH keys made in the browser are checked by Go
+  out.ssh = await sshkey.generate("test@passzit");
+  // every page script and extension module must at least parse
+  out.syntax = [];
+  for (const m of ["/static/pz/vault.js", "/static/pz/auth.js", "/static/pz/account.js", "/static/pz/genpage.js", "/static/pz/genui.js", "/static/pz/common.js",
+    "/ext/popup.js", "/ext/background.js", "/ext/client.js", "/ext/ext.js", "/ext/domain.js"]) {
+    try { await import(m); } catch (e) { if (e instanceof SyntaxError) out.syntax.push(m + ": " + e.message); }
+  }
   out.uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(pz.uuid());
 } catch (e) {
   out.error = String(e && e.stack || e);

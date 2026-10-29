@@ -23,6 +23,7 @@ type accountResp struct {
 	PolicyKDF        vaultcrypto.KDF `json:"policy_kdf"`
 	MinLength        int             `json:"min_length"`
 	TrashDays        int             `json:"trash_days"`
+	BreachCheck      bool            `json:"breach_check"`
 }
 
 func (s *Server) apiAccount(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +36,7 @@ func (s *Server) apiAccount(w http.ResponseWriter, r *http.Request) {
 	p := s.policy(r.Context())
 	lock, clip := s.clientPrefs(r.Context(), u)
 	writeJSON(w, http.StatusOK, accountResp{Email: u.Email, Name: u.DisplayName, Role: u.Role, HasRecovery: u.HasRecovery, AccountKeys: k,
-		LockMinutes: lock, ClipboardSeconds: clip, PolicyKDF: p.KDF, MinLength: p.MinPasswordLength, TrashDays: p.TrashDays})
+		LockMinutes: lock, ClipboardSeconds: clip, PolicyKDF: p.KDF, MinLength: p.MinPasswordLength, TrashDays: p.TrashDays, BreachCheck: p.BreachCheck})
 }
 
 // apiSessionKey hands the browser the key it encrypts its unlocked keys

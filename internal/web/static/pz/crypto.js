@@ -26,6 +26,7 @@ export const AAD = {
   folder: (folderID) => "passzit/folder/v1|" + folderID,
   session: () => "passzit/session/v1",
   export: () => "passzit/export/v1",
+  file: (fileID) => "passzit/file/v1|" + fileID,
 };
 
 // ---- encodings
@@ -319,5 +320,28 @@ export async function recoveryKeys(recoveryText) {
     return { auth: await derive(raw, INFO.recoveryAuth), wrap: await derive(raw, INFO.recoveryWrap) };
   } finally {
     wipe(raw);
+  }
+}
+
+// ---- files: the same format as sealed values, but as bytes (no base64)
+
+export async function sealBytes(key, plain, aad) {
+  const n = random(12);
+  const k = await aesKey(key, "encrypt");
+  const ct = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv: n, additionalData: utf8(aad) }, k, plain));
+  const out = new Uint8Array(1 + 12 + ct.length);
+  out[0] = VERSION;
+  out.set(n, 1);
+  out.set(ct, 13);
+  return out;
+}
+
+export async function openBytes(key, raw, aad) {
+  if (raw.length < 1 + 12 + 16 || raw[0] !== VERSION) throw new DecryptError();
+  const k = await aesKey(key, "decrypt");
+  try {
+    return new Uint8Array(await subtle.decrypt({ name: "AES-GCM", iv: raw.subarray(1, 13), additionalData: utf8(aad) }, k, raw.subarray(13)));
+  } catch (e) {
+    throw new DecryptError();
   }
 }

@@ -239,11 +239,17 @@ type Policy struct {
 	MinPasswordLength int `json:"min_password_length"`
 	// TrashDays: items in the trash are deleted after this time.
 	TrashDays int `json:"trash_days"`
+	// MaxFileMB limits one attached file, StorageMB all files of a user.
+	MaxFileMB int `json:"max_file_mb"`
+	StorageMB int `json:"storage_mb"`
+	// BreachCheck lets browsers check passwords against the Have I Been
+	// Pwned list (k-anonymity: only 5 characters of a hash leave the server).
+	BreachCheck bool `json:"breach_check"`
 }
 
 // DefaultPolicy: lock after 15 minutes, clear the clipboard after 30 s,
 // Argon2id with 64 MiB, 3 passes, 4 lanes.
-var DefaultPolicy = Policy{LockMinutes: 15, ClipboardSeconds: 30, KDF: vaultcrypto.DefaultKDF, MinPasswordLength: 12, TrashDays: 30}
+var DefaultPolicy = Policy{LockMinutes: 15, ClipboardSeconds: 30, KDF: vaultcrypto.DefaultKDF, MinPasswordLength: 12, TrashDays: 30, MaxFileMB: 10, StorageMB: 500}
 
 // Validate checks the ranges.
 func (p Policy) Validate() error {
@@ -256,6 +262,8 @@ func (p Policy) Validate() error {
 		return errors.New("the minimum master password length must be 10–64")
 	case p.TrashDays < 1 || p.TrashDays > 365:
 		return errors.New("the trash must keep items for 1–365 days")
+	case p.MaxFileMB < 1 || p.MaxFileMB > 100 || p.StorageMB < p.MaxFileMB || p.StorageMB > 100000:
+		return errors.New("files may be 1–100 MB, the storage of a user at least one file and at most 100000 MB")
 	}
 	return p.KDF.Validate()
 }
@@ -341,6 +349,11 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/sync", s.apiSync)
 	api("GET /api/revision", s.apiRevision)
 	api("POST /api/items", s.apiPutItems)
+	api("PUT /api/items/{item}/files/{id}", s.apiPutAttachment)
+	api("GET /api/files/{id}", s.apiGetAttachment)
+	api("DELETE /api/files/{id}", s.apiDeleteAttachment)
+	api("GET /api/storage", s.apiStorage)
+	api("GET /api/breach/{prefix}", s.apiBreach)
 	api("PUT /api/items/{id}", s.apiPutItem)
 	api("POST /api/items/{id}/trash", s.apiTrashItem)
 	api("POST /api/items/{id}/restore", s.apiRestoreItem)

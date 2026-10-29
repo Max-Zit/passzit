@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -12,11 +13,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/max-zit/passzit/internal/vaultcrypto"
 )
+
+func b32(s string) string { return base32.StdEncoding.EncodeToString([]byte(s)) }
 
 // browserPath finds a Chromium-based browser for the JavaScript tests
 // (PASSZIT_BROWSER overrides).
@@ -70,7 +76,9 @@ func TestJavaScriptCrypto(t *testing.T) {
 	rparsed, _ := vaultcrypto.ParseRecoveryKey(rtext)
 	c := map[string]any{"password": v.Password, "salt": v.SaltHex, "kdf": v.KDF, "key": v.KeyHex, "nonce": v.NonceHex, "aad": v.AAD, "plain": v.Plain,
 		"goSealed": goSealed, "pub": vaultcrypto.B64.EncodeToString(pub), "priv": vaultcrypto.B64.EncodeToString(priv), "goSealedTo": goSealedTo,
-		"recoveryRaw": hex.EncodeToString(rraw), "recoveryText": rtext}
+		"recoveryRaw": hex.EncodeToString(rraw), "recoveryText": rtext,
+		"totp": [][]string{{"SHA1", b32("12345678901234567890"), "94287082"}, {"SHA256", b32("12345678901234567890123456789012"), "46119246"},
+			{"SHA512", b32("1234567890123456789012345678901234567890123456789012345678901234"), "90693936"}}}
 
 	sub, _ := fs.Sub(staticFS, "static")
 	mux := http.NewServeMux()
@@ -121,13 +129,17 @@ func TestJavaScriptCrypto(t *testing.T) {
 		Master, Auth, Wrap, PBKDF2, Sealed  string
 		GoOpen, GoOpenSealed, WrongAAD      string
 		JSSealedTo                          string `json:"jsSealedTo"`
+		FileSealed                          string `json:"fileSealed"`
+		FileRoundTrip                       bool   `json:"fileRoundTrip"`
 		Recovery, RecoveryParsed            string
 		Fingerprint                         string
 		AccountRoundTrip                    bool
 		Account                             map[string]string
 		GenPassword, GenPhrase, Uniform, UU bool
 		UUID                                bool `json:"uuid"`
-		Sites, Matches, Imports             []string
+		Sites, Matches, Imports, TOTP       []string
+		Syntax                              []string
+		SSH                                 struct{ PrivateKey, PublicKey, Fingerprint string }
 		Error                               string
 	}
 	if err := json.Unmarshal(raw, &got); err != nil {
@@ -155,12 +167,28 @@ func TestJavaScriptCrypto(t *testing.T) {
 	if p, err := vaultcrypto.OpenSealed(priv, got.JSSealedTo, "y"); err != nil || string(p) != "from javascript" {
 		t.Errorf("Go cannot open the browser's sealed value: %q %v", p, err)
 	}
+	if p, err := vaultcrypto.Open(key, got.FileSealed, vaultcrypto.AADFile("f-1")); err != nil || string(p) != "file from javascript" || !got.FileRoundTrip {
+		t.Errorf("browser file does not open in Go: %q %v", p, err)
+	}
 	// an account made in the browser opens in Go with the same password
 	salt, _ := vaultcrypto.B64.DecodeString(got.Account["salt"])
 	mk, _ := vaultcrypto.MasterKey("p\u00e4ssw\u00f6rd-Test-123", salt, vaultcrypto.KDF{Alg: "argon2id", M: 19456, T: 2, P: 1})
 	ak, err := vaultcrypto.Open(vaultcrypto.Derive(mk, vaultcrypto.InfoWrap), got.Account["wrapped_account_key"], vaultcrypto.AADAccountKey())
 	if err != nil || vaultcrypto.B64.EncodeToString(ak) != got.Account["account_key"] || vaultcrypto.B64.EncodeToString(vaultcrypto.Derive(mk, vaultcrypto.InfoAuth)) != got.Account["auth"] {
 		t.Errorf("browser account does not open in Go: %v", err)
+	}
+	if len(got.Syntax) > 0 {
+		t.Errorf("scripts that do not parse: %v", got.Syntax)
+	}
+	if len(got.TOTP) > 0 {
+		t.Errorf("TOTP: %v", got.TOTP)
+	}
+	if k, err := ssh.ParseRawPrivateKey([]byte(got.SSH.PrivateKey)); err != nil {
+		t.Errorf("browser SSH key does not parse: %v", err)
+	} else if signer, err := ssh.NewSignerFromKey(k); err != nil {
+		t.Errorf("SSH signer: %v", err)
+	} else if pub := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey()))); !strings.HasPrefix(got.SSH.PublicKey, pub) || ssh.FingerprintSHA256(signer.PublicKey()) != got.SSH.Fingerprint {
+		t.Errorf("SSH public key %q / %q, fingerprint %q / %q", got.SSH.PublicKey, pub, got.SSH.Fingerprint, ssh.FingerprintSHA256(signer.PublicKey()))
 	}
 	if len(got.Imports) > 0 {
 		t.Errorf("import/export: %v", got.Imports)

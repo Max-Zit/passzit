@@ -24,6 +24,8 @@
   <li><b>Lock the vault after inactivity</b> (15 minutes) and <b>clear copied passwords</b> (30 seconds) — users may choose shorter times.</li>
   <li><b>Minimum master password length</b> (12) for new accounts and changed passwords.</li>
   <li><b>Empty the trash</b> after a number of days (30).</li>
+  <li><b>Files:</b> the largest attached file (10 MB) and the storage for files per user (500 MB). Files are encrypted in the browser; the server cannot read them.</li>
+  <li><b>Breach check</b> (off by default): lets users compare their passwords with the Have I Been Pwned list. The server then asks api.pwnedpasswords.com with a five-character hash prefix and padding — it needs internet access for it, and neither side learns a password.</li>
   <li><b>Key derivation (Argon2id):</b> memory, passes and lanes. Stronger settings make stolen data harder to attack but every unlock slower; accounts move to new settings at their next unlock.</li>
 </ul>
 

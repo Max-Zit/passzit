@@ -166,7 +166,8 @@ func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request, status int, 
 
 func (s *Server) handlePolicySave(w http.ResponseWriter, r *http.Request) {
 	p := Policy{LockMinutes: formInt(r, "lock_minutes"), ClipboardSeconds: formInt(r, "clipboard_seconds"),
-		MinPasswordLength: formInt(r, "min_password_length"), TrashDays: formInt(r, "trash_days")}
+		MinPasswordLength: formInt(r, "min_password_length"), TrashDays: formInt(r, "trash_days"),
+		MaxFileMB: formInt(r, "max_file_mb"), StorageMB: formInt(r, "storage_mb"), BreachCheck: r.FormValue("breach_check") == "1"}
 	p.KDF.Alg = "argon2id"
 	p.KDF.M, p.KDF.T, p.KDF.P = formInt(r, "kdf_m")*1024, formInt(r, "kdf_t"), formInt(r, "kdf_p")
 	if err := p.Validate(); err != nil {
@@ -177,7 +178,7 @@ func (s *Server) handlePolicySave(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	s.audit(r, "settings.policy", "settings", "lock %dmin, clipboard %ds, argon2id m=%dMiB t=%d p=%d, min length %d, trash %d days",
-		p.LockMinutes, p.ClipboardSeconds, p.KDF.M/1024, p.KDF.T, p.KDF.P, p.MinPasswordLength, p.TrashDays)
+	s.audit(r, "settings.policy", "settings", "lock %dmin, clipboard %ds, argon2id m=%dMiB t=%d p=%d, min length %d, trash %d days, files %dMB / %dMB per user, breach check %v",
+		p.LockMinutes, p.ClipboardSeconds, p.KDF.M/1024, p.KDF.T, p.KDF.P, p.MinPasswordLength, p.TrashDays, p.MaxFileMB, p.StorageMB, p.BreachCheck)
 	s.redirect(w, r, "/settings/policy", "Saved.")
 }

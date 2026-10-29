@@ -61,7 +61,7 @@ func newEnv(t *testing.T) *env {
 	srv.SetClock(func() time.Time { return e.clock })
 	st.SetClock(func() time.Time { return e.clock })
 	srv.SetSetupToken("setup-token-123")
-	if err := srv.store.SetSetting(ctx, settingPolicy, Policy{LockMinutes: 15, ClipboardSeconds: 30, KDF: fastKDF, MinPasswordLength: 12, TrashDays: 30}); err != nil {
+	if err := srv.store.SetSetting(ctx, settingPolicy, Policy{LockMinutes: 15, ClipboardSeconds: 30, KDF: fastKDF, MinPasswordLength: 12, TrashDays: 30, MaxFileMB: 1, StorageMB: 2}); err != nil {
 		t.Fatal(err)
 	}
 	h := srv.Handler()
@@ -632,12 +632,12 @@ func TestPagesRender(t *testing.T) {
 func TestPolicyAndPrefs(t *testing.T) {
 	e := newEnv(t)
 	admin := e.setupAdmin()
-	code, _ := admin.form("/settings/policy", url.Values{"lock_minutes": {"10"}, "clipboard_seconds": {"20"}, "min_password_length": {"14"}, "trash_days": {"7"},
+	code, _ := admin.form("/settings/policy", url.Values{"lock_minutes": {"10"}, "clipboard_seconds": {"20"}, "min_password_length": {"14"}, "trash_days": {"7"}, "max_file_mb": {"1"}, "storage_mb": {"2"},
 		"kdf_m": {"8"}, "kdf_t": {"3"}, "kdf_p": {"4"}})
 	if code != http.StatusBadRequest {
 		t.Fatalf("too weak key derivation accepted: %d", code)
 	}
-	if code, _ := admin.form("/settings/policy", url.Values{"lock_minutes": {"10"}, "clipboard_seconds": {"20"}, "min_password_length": {"14"}, "trash_days": {"7"},
+	if code, _ := admin.form("/settings/policy", url.Values{"lock_minutes": {"10"}, "clipboard_seconds": {"20"}, "min_password_length": {"14"}, "trash_days": {"7"}, "max_file_mb": {"1"}, "storage_mb": {"2"},
 		"kdf_m": {"32"}, "kdf_t": {"3"}, "kdf_p": {"2"}}); code != http.StatusSeeOther {
 		t.Fatalf("policy: %d", code)
 	}
@@ -847,4 +847,127 @@ func TestBatchImportAndEvents(t *testing.T) {
 	if code, _ := admin.do("POST", "/api/account/verify", verifyReq{CurrentAuth: b64(vaultcrypto.Random(32))}, nil); code != http.StatusForbidden {
 		t.Fatalf("wrong master password accepted: %d", code)
 	}
+}
+
+// raw sends an opaque body (attachments).
+func (c *client) raw(method, path string, body []byte) (int, []byte) {
+	c.e.t.Helper()
+	req, _ := http.NewRequest(method, c.e.ts.URL+path, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/octet-stream")
+	if method != http.MethodGet {
+		req.Header.Set("Origin", c.e.ts.URL)
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		c.e.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, out
+}
+
+func TestAttachmentsAndBreach(t *testing.T) {
+	e := newEnv(t)
+	admin := e.setupAdmin()
+	avid := admin.personal()
+	item := newUUID()
+	admin.must("PUT", "/api/items/"+item, putItemReq{VaultID: avid, Data: admin.sealItem(avid, item, map[string]any{"name": "x"})}, nil)
+	blob := vaultcrypto.Random(900 << 10)
+	blob[0] = 1 // the sealed-file format version
+	f1 := newUUID()
+	if code, out := admin.raw("PUT", "/api/items/"+item+"/files/"+f1, blob); code != http.StatusOK {
+		t.Fatalf("upload: %d %s", code, out)
+	}
+	if code, out := admin.raw("GET", "/api/files/"+f1, nil); code != http.StatusOK || !bytes.Equal(out, blob) {
+		t.Fatalf("download: %d, %d bytes", code, len(out))
+	}
+	// one file may not exceed the limit, all files not the quota
+	if code, _ := admin.raw("PUT", "/api/items/"+item+"/files/"+newUUID(), append([]byte{1}, make([]byte, 1<<20+100)...)); code == http.StatusOK {
+		t.Fatal("too large file accepted")
+	}
+	if code, _ := admin.raw("PUT", "/api/items/"+item+"/files/"+newUUID(), blob); code != http.StatusOK {
+		t.Fatalf("second file: %d", code)
+	}
+	if code, _ := admin.raw("PUT", "/api/items/"+item+"/files/"+newUUID(), blob); code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("over quota: %d", code)
+	}
+	var st map[string]int64
+	admin.must("GET", "/api/storage", nil, &st)
+	if st["used"] != 2*int64(len(blob)) || st["quota"] != 2<<20 {
+		t.Fatalf("storage %v", st)
+	}
+	// another user cannot read, add or delete files
+	bob := e.inviteUser(admin, "bob@example.com", "Bob-Master-Password-22")
+	if code, _ := bob.raw("GET", "/api/files/"+f1, nil); code != http.StatusNotFound {
+		t.Fatalf("bob reads a file: %d", code)
+	}
+	if code, _ := bob.raw("PUT", "/api/items/"+item+"/files/"+newUUID(), []byte("x")); code == http.StatusOK {
+		t.Fatal("bob attaches to admin's item")
+	}
+	if code, _ := bob.do("DELETE", "/api/files/"+f1, nil, nil); code != http.StatusNotFound {
+		t.Fatalf("bob deletes a file: %d", code)
+	}
+	admin.must("DELETE", "/api/files/"+f1, nil, nil)
+	if code, _ := admin.raw("GET", "/api/files/"+f1, nil); code != http.StatusNotFound {
+		t.Fatalf("deleted file: %d", code)
+	}
+	// purging the item removes its files
+	admin.must("POST", "/api/items/"+item+"/trash", nil, nil)
+	admin.must("DELETE", "/api/items/"+item, nil, nil)
+	admin.must("GET", "/api/storage", nil, &st)
+	if st["used"] != 0 {
+		t.Fatalf("files left after purge: %v", st)
+	}
+
+	// breach check: off by default, then proxied with padding
+	var gotPadding string
+	hibp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPadding = r.Header.Get("Add-Padding")
+		if r.URL.Path != "/range/5BAA6" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, "1E4C9B93F3F0682250B6CF8331B7EE68FD8:3861493\r\n0000000000000000000000000000000000A:0\r\n")
+	}))
+	defer hibp.Close()
+	old := BreachURL
+	BreachURL = hibp.URL + "/range/"
+	defer func() { BreachURL = old }()
+	if code, _ := admin.do("GET", "/api/breach/5BAA6", nil, nil); code != http.StatusForbidden {
+		t.Fatalf("breach check while off: %d", code)
+	}
+	p := DefaultPolicy
+	p.KDF = fastKDF
+	p.BreachCheck = true
+	if err := e.st.SetSetting(context.Background(), settingPolicy, p); err != nil {
+		t.Fatal(err)
+	}
+	var a accountResp
+	admin.must("GET", "/api/account", nil, &a)
+	if !a.BreachCheck {
+		t.Fatal("breach_check not in the account")
+	}
+	if code, _ := admin.do("GET", "/api/breach/5baa6", nil, nil); code != http.StatusBadRequest {
+		t.Fatalf("bad prefix: %d", code)
+	}
+	code, body := admin.do("GET", "/api/breach/5BAA6", nil, nil)
+	if code != http.StatusOK || !strings.Contains(body, "1E4C9B93F3F0682250B6CF8331B7EE68FD8:3861493") || gotPadding != "true" {
+		t.Fatalf("breach: %d %q padding=%q", code, body, gotPadding)
+	}
+}
+
+// inviteUser lets admin invite a user who then creates an account with 2FA.
+func (e *env) inviteUser(admin *client, email, pw string) *client {
+	e.t.Helper()
+	code, page := admin.form("/users/invite", url.Values{"email": {email}, "role": {"user"}})
+	m := regexp.MustCompile(`/invite/(pzi_[A-Za-z0-9_-]+)`).FindStringSubmatch(page)
+	if code != http.StatusOK || m == nil {
+		e.t.Fatalf("invite: %d", code)
+	}
+	u := e.client()
+	body := u.newAccount(email, pw)
+	body["invite"] = m[1]
+	u.must("POST", "/api/invite", body, nil)
+	u.enroll()
+	return u
 }

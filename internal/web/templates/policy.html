@@ -17,6 +17,15 @@
     </div>
   </section>
   <section class="panel">
+    <h2>{{template "icon" "file"}}{{.T "Files and breach check"}}</h2>
+    <div class="cols">
+      <label>{{.T "Largest attached file (MB)"}}<input type="number" name="max_file_mb" value="{{.Data.MaxFileMB}}" min="1" max="100" required></label>
+      <label>{{.T "Storage for files per user (MB)"}}<input type="number" name="storage_mb" value="{{.Data.StorageMB}}" min="1" max="100000" required></label>
+    </div>
+    <label class="check"><input type="checkbox" name="breach_check" value="1" {{if .Data.BreachCheck}}checked{{end}}> {{.T "Let users check their passwords against known data breaches (Have I Been Pwned)"}}</label>
+    <p class="small muted">{{.T "The browser sends only the first 5 characters of a password's SHA-1 hash; this server asks api.pwnedpasswords.com for all hashes starting with them, padded with random entries. Neither this server nor the service learns a password. The server needs access to the internet for it."}}</p>
+  </section>
+  <section class="panel">
     <h2>{{template "icon" "key"}}{{.T "Key derivation (Argon2id)"}}</h2>
     <p class="muted">{{.T "How much work the browser does to turn a master password into keys. More memory and passes make guessing a stolen password hash slower, but every unlock takes longer (with the default: about 0.7 s on a normal PC). Accounts are moved to new settings at their next unlock."}}</p>
     <div class="cols">
