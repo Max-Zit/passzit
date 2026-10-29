@@ -25,6 +25,7 @@
   <li><b>Najmanja dužina glavne lozinke</b> (12) za nove naloge i promenjene lozinke.</li>
   <li><b>Pražnjenje korpe</b> posle određenog broja dana (30).</li>
   <li><b>Fajlovi:</b> najveći priloženi fajl (10 MB) i prostor za fajlove po korisniku (500 MB). Fajlovi se šifruju u pregledaču; server ne može da ih pročita.</li>
+  <li><b>Deljenje i izvoz:</b> deljene trezore prave samo administratori; bez izvoza (web trezor i ekstenzija ga ne nude — ko može da otvori stavku i dalje može da je kopira).</li>
   <li><b>Provera curenja</b> (podrazumevano isključena): omogućava korisnicima da uporede lozinke sa listom Have I Been Pwned. Server tada pita api.pwnedpasswords.com sa prefiksom heša od pet znakova i dopunom — za to mu treba pristup internetu, a nijedna strana ne saznaje lozinku.</li>
   <li><b>Izvođenje ključa (Argon2id):</b> memorija, prolazi i trake. Jača podešavanja otežavaju napad na ukradene podatke, ali usporavaju svako otključavanje; nalozi prelaze na nova podešavanja pri sledećem otključavanju.</li>
 </ul>
@@ -43,3 +44,15 @@
 
 <h2 id="updates">Ažuriranja i server</h2>
 <p>Nove verzije (samo potpisana izdanja), kanal ažuriranja (Stabilni ili Testni), automatska instalacija u izabranom satu, vremenska zona i restart servisa. Na appliance-u se ovde podešava i mreža servera. Detalji: <a href="/docs/install#updates">Instalacija servera</a>.</p>
+
+<h2 id="groups">Grupe</h2>
+<p>U delu <b>Grupe</b> administratori prave grupe i biraju njihove članove; upravnici trezora zatim daju grupi pristup deljenom trezoru. Vidi <a href="/docs/sharing#groups">Deljeni trezori i grupe</a>.</p>
+
+<h2 id="company">Prijava preko kompanije</h2>
+<p><b>Podešavanja → Prijava preko kompanije</b> povezuje PassZit sa nalozima kompanije. Glavna lozinka uvek ostaje — ona je ključ trezora; ovo dodaje ko sme da se prijavi:</p>
+<ul>
+  <li><b>Jedinstvena prijava</b> sa OpenID Connect (Microsoft Entra ID, Google, Okta, Keycloak …) ili SAML 2.0 (ADFS, Entra ID, Okta …). Stranica za prijavu prikazuje <i>Prijava preko …</i>; provajder identiteta potvrđuje adresu, zatim korisnik unosi glavnu lozinku. Bez <i>Posle provajdera identiteta traži i PassZit-ov drugi faktor</i> prijava kod provajdera zamenjuje kod autentifikatora. <i>Korisnici moraju da se prijave preko provajdera identiteta</i> zaustavlja osobe koje su tamo onemogućene (administratori uvek mogu da se prijave, pa pokvaren provajder ne zaključava sve). Nalozi se i dalje prave samo uz pozivnicu.</li>
+  <li><b>Active Directory / LDAP</b>: pri svakoj prijavi (i ekstenzija) PassZit servisnim nalogom traži adresu; nalozi koji ne postoje ili su onemogućeni ne mogu da se prijave. <i>Potraži</i> testira podešavanja na nekoj adresi.</li>
+  <li>Oba mogu da usklađuju <b>PassZit grupe</b> sa istoimenim grupama kompanije pri svakoj prijavi.</li>
+</ul>
+<p>Ekstenzije pregledača ne mogu da koriste jedinstvenu prijavu; prijavljuju se glavnom lozinkom i kodom autentifikatora (i proveravaju se u direktorijumu).</p>

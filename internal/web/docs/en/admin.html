@@ -25,6 +25,7 @@
   <li><b>Minimum master password length</b> (12) for new accounts and changed passwords.</li>
   <li><b>Empty the trash</b> after a number of days (30).</li>
   <li><b>Files:</b> the largest attached file (10 MB) and the storage for files per user (500 MB). Files are encrypted in the browser; the server cannot read them.</li>
+  <li><b>Sharing and export:</b> only administrators make shared vaults; no exports (the web vault and the extension offer none — anyone who can open an item can still copy it).</li>
   <li><b>Breach check</b> (off by default): lets users compare their passwords with the Have I Been Pwned list. The server then asks api.pwnedpasswords.com with a five-character hash prefix and padding — it needs internet access for it, and neither side learns a password.</li>
   <li><b>Key derivation (Argon2id):</b> memory, passes and lanes. Stronger settings make stolen data harder to attack but every unlock slower; accounts move to new settings at their next unlock.</li>
 </ul>
@@ -43,3 +44,15 @@
 
 <h2 id="updates">Updates and server</h2>
 <p>New versions (only signed releases), the update channel (Stable or Testing), automatic installation in a chosen hour, the time zone and a restart of the service. On the appliance the server's network is set here as well. Details: <a href="/docs/install#updates">Installing the server</a>.</p>
+
+<h2 id="groups">Groups</h2>
+<p>Under <b>Groups</b> administrators make groups and choose their members; vault managers then give a group access to a shared vault. See <a href="/docs/sharing#groups">Shared vaults and groups</a>.</p>
+
+<h2 id="company">Company sign-in</h2>
+<p><b>Settings → Company sign-in</b> connects PassZit with the company's accounts. The master password always stays — it is the key to the vault; these add who may sign in:</p>
+<ul>
+  <li><b>Single sign-on</b> with OpenID Connect (Microsoft Entra ID, Google, Okta, Keycloak …) or SAML 2.0 (ADFS, Entra ID, Okta …). The sign-in page shows <i>Sign in with …</i>; the identity provider confirms the address, then the user enters the master password. Without <i>Also ask for PassZit's own second factor</i> the identity provider's sign-in replaces the authenticator code. <i>Users must sign in through the identity provider</i> stops people who were disabled there (administrators can always sign in, so a broken provider does not lock everyone out). Accounts still come only by invitation.</li>
+  <li><b>Active Directory / LDAP</b>: at every sign-in (also of extensions) PassZit looks the address up with a service account; missing or disabled accounts cannot sign in. <i>Look up</i> tests the settings with an address.</li>
+  <li>Both can keep <b>PassZit groups</b> in step with company groups of the same name at every sign-in.</li>
+</ul>
+<p>Browser extensions cannot use single sign-on; they sign in with the master password and the authenticator code (and are checked against the directory).</p>

@@ -252,3 +252,24 @@ onSubmit("f-recover", async (f) => {
 wireStrength(root);
 wireReveal(root);
 loadTexts();
+
+// The second step with a security key or passkey instead of a code.
+import("./keys.js").then(({ keysSupported, signInWithKey }) => {
+  const p = document.getElementById("key-login");
+  if (!p || !keysSupported()) return;
+  p.hidden = false;
+  const b = p.querySelector("button");
+  b.addEventListener("click", async () => {
+    clearError();
+    b.disabled = true;
+    try {
+      const res = await signInWithKey();
+      if (res.next === "done") await unlockAfterLogin();
+    } catch (e) {
+      if (e.name === "NotAllowedError" || e.name === "AbortError") fail(new Error(t("The security key did not answer, or the request was cancelled.")));
+      else fail(e);
+    } finally {
+      b.disabled = false;
+    }
+  });
+});

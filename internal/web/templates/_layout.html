@@ -26,6 +26,7 @@
     {{if .User.IsAdmin}}
     <span class="navlabel">{{.T "Administration"}}</span>
     <a href="/users" class="{{if eq .Nav "users"}}on{{end}}">{{template "icon" "users"}}{{.T "Users"}}</a>
+    <a href="/groups" class="{{if eq .Nav "groups"}}on{{end}}">{{template "icon" "layers"}}{{.T "Groups"}}</a>
     <a href="/audit" class="{{if eq .Nav "audit"}}on{{end}}">{{template "icon" "audit"}}{{.T "Audit log"}}</a>
     <a href="/settings/policy" class="{{if eq .Nav "settings"}}on{{end}}">{{template "icon" "settings"}}{{.T "Settings"}}</a>
     {{end}}
@@ -80,6 +81,7 @@
   <a href="/settings/policy" class="{{if eq .Title "Vault policy"}}on{{end}}">{{template "icon" "vault"}}<span>{{.T "Vault policy"}}<small>{{.T "Auto-lock, clipboard, key derivation"}}</small></span></a>
   <a href="/settings/security" class="{{if eq .Title "Sign-in and security"}}on{{end}}">{{template "icon" "lock"}}<span>{{.T "Sign-in and security"}}<small>{{.T "Sessions, invitations, blocked addresses"}}</small></span></a>
   <a href="/settings/network" class="{{if eq .Title "Network and access"}}on{{end}}">{{template "icon" "network"}}<span>{{.T "Network and access"}}<small>{{.T "Console port, allowed networks, public address"}}</small></span></a>
+  <a href="/settings/directory" class="{{if eq .Title "Company sign-in"}}on{{end}}">{{template "icon" "users"}}<span>{{.T "Company sign-in"}}<small>{{.T "Single sign-on, Active Directory / LDAP"}}</small></span></a>
   <a href="/settings/backup" class="{{if eq .Title "Console backup"}}on{{end}}">{{template "icon" "disk"}}<span>{{.T "Console backup"}}<small>{{.T "Daily encrypted backups, SFTP copy"}}</small></span></a>
   <a href="/settings/version" class="{{if eq .Title "Updates and server"}}on{{end}}">{{template "icon" "download"}}<span>{{.T "Updates and server"}}<small>{{.T "New versions, time zone, restart"}}</small></span></a>
 </nav>{{end}}

@@ -2,7 +2,7 @@
 // key. Both need the current master password; the keys are re-wrapped
 // here in the browser.
 import * as pz from "./crypto.js";
-import { api, t, loadTexts, showError, nextFrame, confirmBox, unlockWithPassword, authFor, saveKeys, wireStrength, wireReveal, wireLogout, copy } from "./common.js";
+import { api, t, loadTexts, showError, nextFrame, confirmBox, unlockWithPassword, authFor, saveKeys, loadKeys, wireStrength, wireReveal, wireLogout, copy } from "./common.js";
 
 await loadTexts();
 const errBox = document.getElementById("pz-error");
@@ -91,3 +91,35 @@ if (pb) pb.addEventListener("click", () => {
 wireStrength();
 wireReveal();
 wireLogout();
+
+// The fingerprint of the own public key, computed here from the unlocked
+// keys (not taken from the server, which could show a different one).
+(async () => {
+  const box = document.getElementById("pz-fingerprint");
+  try {
+    const keys = await loadKeys();
+    if (box && keys && keys.publicKey) box.textContent = await pz.fingerprint(keys.publicKey);
+  } catch (e) { /* locked */ }
+})();
+
+// Security keys and passkeys
+import("./keys.js").then(({ keysSupported, registerKey }) => {
+  const f = document.getElementById("f-key");
+  if (!f) return;
+  if (!keysSupported()) {
+    f.hidden = true;
+    document.getElementById("key-unsupported").hidden = false;
+    return;
+  }
+  wire("f-key", async () => {
+    try {
+      await registerKey(f.name.value.trim());
+    } catch (e) {
+      if (e.name === "NotAllowedError" || e.name === "AbortError") throw new Error(t("The security key did not answer, or the request was cancelled."));
+      if (e.name === "InvalidStateError") throw new Error(t("This security key is registered already."));
+      throw e;
+    }
+    location.href = "/account#keys";
+    location.reload();
+  });
+});

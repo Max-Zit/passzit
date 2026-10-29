@@ -101,7 +101,7 @@ try {
   out.ssh = await sshkey.generate("test@passzit");
   // every page script and extension module must at least parse
   out.syntax = [];
-  for (const m of ["/static/pz/vault.js", "/static/pz/auth.js", "/static/pz/account.js", "/static/pz/genpage.js", "/static/pz/genui.js", "/static/pz/common.js",
+  for (const m of ["/static/pz/vault.js", "/static/pz/auth.js", "/static/pz/account.js", "/static/pz/genpage.js", "/static/pz/genui.js", "/static/pz/common.js", "/static/pz/sharing.js", "/static/pz/keys.js",
     "/ext/popup.js", "/ext/background.js", "/ext/client.js", "/ext/ext.js", "/ext/domain.js"]) {
     try { await import(m); } catch (e) { if (e instanceof SyntaxError) out.syntax.push(m + ": " + e.message); }
   }

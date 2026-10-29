@@ -9,10 +9,12 @@
 <section data-step="login">
   <h1>{{.T "Sign in"}}</h1>
   <form class="stack" id="f-login">
-    <label>{{.T "E-mail address"}}<input type="email" name="email" required autofocus autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+    {{with .Data.SSOEmail}}<div class="flash ok">{{template "icon" "check"}}<span>{{$.T "%s confirmed you. Enter your master password to unlock the vault." $.Data.SSOLabel}}</span></div>{{end}}
+    <label>{{.T "E-mail address"}}<input type="email" name="email" required {{if not .Data.SSOEmail}}autofocus{{end}} autocomplete="username" autocapitalize="none" spellcheck="false" {{with .Data.SSOEmail}}value="{{.}}" readonly{{end}}></label>
     <label>{{.T "Master password"}}<span class="pwfield"><input type="password" name="password" required autocomplete="current-password"><button type="button" class="iconbtn" data-reveal aria-label="{{.T "Show the password"}}">{{template "icon" "eye"}}</button></span></label>
     <button class="primary">{{template "icon" "lock"}}{{.T "Sign in and unlock"}}</button>
   </form>
+  {{if and .Data.SSOLabel (not .Data.SSOEmail)}}<p class="mt"><a class="btn secondary wide" href="/login/sso">{{template "icon" "key"}}{{.T "Sign in with %s" .Data.SSOLabel}}</a></p>{{end}}
   <p class="small muted mt"><a href="/recover">{{.T "Forgot the master password? Use your recovery key."}}</a></p>
 </section>
 {{end}}
@@ -62,6 +64,7 @@
     <label>{{.T "Code from the authenticator app"}}<input name="code" required inputmode="numeric" autocomplete="one-time-code" class="code"><small>{{.T "Lost your phone? Enter one of your recovery codes instead."}}</small></label>
     <button class="primary">{{.T "Continue"}}</button>
   </form>
+  <p class="mt" id="key-login" hidden><button type="button" class="secondary">{{template "icon" "key"}}{{.T "Use a security key or passkey"}}</button></p>
 </section>
 
 <section data-step="enroll" hidden>

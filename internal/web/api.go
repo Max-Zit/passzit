@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/max-zit/passzit/internal/store"
 	"github.com/max-zit/passzit/internal/vaultcrypto"
@@ -24,6 +25,8 @@ type accountResp struct {
 	MinLength        int             `json:"min_length"`
 	TrashDays        int             `json:"trash_days"`
 	BreachCheck      bool            `json:"breach_check"`
+	NoExport         bool            `json:"no_export"`
+	SharedAdminsOnly bool            `json:"shared_admins_only"`
 }
 
 func (s *Server) apiAccount(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +39,8 @@ func (s *Server) apiAccount(w http.ResponseWriter, r *http.Request) {
 	p := s.policy(r.Context())
 	lock, clip := s.clientPrefs(r.Context(), u)
 	writeJSON(w, http.StatusOK, accountResp{Email: u.Email, Name: u.DisplayName, Role: u.Role, HasRecovery: u.HasRecovery, AccountKeys: k,
-		LockMinutes: lock, ClipboardSeconds: clip, PolicyKDF: p.KDF, MinLength: p.MinPasswordLength, TrashDays: p.TrashDays, BreachCheck: p.BreachCheck})
+		LockMinutes: lock, ClipboardSeconds: clip, PolicyKDF: p.KDF, MinLength: p.MinPasswordLength, TrashDays: p.TrashDays, BreachCheck: p.BreachCheck,
+		NoExport: p.NoExport, SharedAdminsOnly: p.SharedAdminsOnly})
 }
 
 // apiSessionKey hands the browser the key it encrypts its unlocked keys
@@ -192,6 +196,10 @@ func (s *Server) apiEvent(w http.ResponseWriter, r *http.Request) {
 	f, ok := events[q.Event]
 	if !ok || q.Count < 0 {
 		apiError(w, http.StatusBadRequest, "invalid", "Unknown event.")
+		return
+	}
+	if strings.HasPrefix(q.Event, "export") && s.policy(r.Context()).NoExport {
+		apiError(w, http.StatusForbidden, "forbidden", s.msg(r, "Your administrator does not allow exports."))
 		return
 	}
 	u := userFrom(r)

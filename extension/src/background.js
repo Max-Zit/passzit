@@ -63,7 +63,8 @@ async function sync(full) {
   const s = await server();
   const since = full ? 0 : S.revision;
   const d = await call(s.server, s.token, "GET", "/api/sync" + (since ? "?since=" + since : ""));
-  if (d.full) S.items.clear();
+  // A full sync follows vaults gained, lost or with a new key: open all again.
+  if (d.full) { S.items.clear(); S.vaultKeys.clear(); }
   for (const v of d.vaults) {
     if (S.vaultKeys.has(v.id)) continue;
     try {

@@ -1,0 +1,29 @@
+<h1>Shared vaults and groups</h1>
+<p class="lead">Besides the personal vault, PassZit has shared vaults for teams: the router passwords for the IT team, the social media accounts for marketing. Sharing keeps the end-to-end encryption — the server never gets the key of a shared vault.</p>
+
+<h2 id="create">Making a shared vault</h2>
+<p>In the vault, the <b>+</b> next to <i>Vaults</i> makes a new shared vault; you manage it. The gear next to its name opens <b>Members and settings</b>. Items are created in the vault shown on the left, or chosen in the item editor under <i>Vault</i>; changing that field moves an existing item (with its files) to another vault.</p>
+<p>The policy can allow only administrators to make shared vaults (<i>Settings → Vault policy → Sharing and export</i>).</p>
+
+<h2 id="rights">Rights</h2>
+<table>
+  <tr><th>Right</th><th>May</th></tr>
+  <tr><td>Use</td><td>fill and copy logins (web vault and extension), but not show passwords, notes and files</td></tr>
+  <tr><td>Read</td><td>see everything</td></tr>
+  <tr><td>Read and change</td><td>also add, change and delete items</td></tr>
+  <tr><td>Manage</td><td>also members, groups, the name and the vault itself</td></tr>
+</table>
+<p>The server refuses changes without the right. <b>Use</b> is a convenience, not a lock: whoever can fill a password into a page can find it out with some effort. A vault always keeps at least one manager.</p>
+
+<h2 id="members">Adding people</h2>
+<p>Under <i>Add a person</i> choose the user and the right, optionally an end date. Your browser seals the vault key to the person's <b>public key</b>; the server only stores the sealed key.</p>
+<p>The first time, PassZit shows the <b>fingerprint</b> of that key. The person sees the same fingerprint under <i>My account → Your key for sharing</i>; comparing it once (in person or by phone) makes sure nobody put another key in between. PassZit remembers confirmed keys (sealed with your account key) and warns when a person's key changes.</p>
+
+<h2 id="timed">Time-limited access</h2>
+<p>With an end date the access ends by itself at the end of that day, for example for an external technician. The audit log records the end.</p>
+
+<h2 id="rotation">Leaving and a new key</h2>
+<p>When someone leaves a vault — removed, the access ended, left a group, or the account deleted — they still know the old vault key. PassZit therefore gives the vault a <b>new key</b>: when a manager removes a person in the browser it happens at once; otherwise the vault is marked and the next manager who opens it sees <i>Replace the key now</i>. The browser seals every item again with the new key and the new key to every remaining member. What the person saw before cannot be taken back — change important passwords if needed.</p>
+
+<h2 id="groups">Groups</h2>
+<p>Administrators make <b>groups</b> under <i>Groups</i> and choose their members. A manager gives a group access to a vault in its settings. Because the server cannot seal keys, a manager's browser gives the access: right away when the group is added, and later automatically when a manager opens the vault (new members of the group get access then). Leaving a group ends its access at once. Groups can follow the company directory or the identity provider (<a href="/docs/admin#company">Company sign-in</a>).</p>

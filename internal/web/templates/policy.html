@@ -26,6 +26,12 @@
     <p class="small muted">{{.T "The browser sends only the first 5 characters of a password's SHA-1 hash; this server asks api.pwnedpasswords.com for all hashes starting with them, padded with random entries. Neither this server nor the service learns a password. The server needs access to the internet for it."}}</p>
   </section>
   <section class="panel">
+    <h2>{{template "icon" "users"}}{{.T "Sharing and export"}}</h2>
+    <label class="check"><input type="checkbox" name="shared_admins_only" value="1" {{if .Data.SharedAdminsOnly}}checked{{end}}> {{.T "Only administrators may create shared vaults"}}</label>
+    <label class="check"><input type="checkbox" name="no_export" value="1" {{if .Data.NoExport}}checked{{end}}> {{.T "Users may not export their vaults"}}</label>
+    <p class="small muted">{{.T "Without export, the web vault and the extension offer no export file. Anyone who can open an item can still read and copy it: these rules prevent mistakes, they are no protection against a member with bad intent."}}</p>
+  </section>
+  <section class="panel">
     <h2>{{template "icon" "key"}}{{.T "Key derivation (Argon2id)"}}</h2>
     <p class="muted">{{.T "How much work the browser does to turn a master password into keys. More memory and passes make guessing a stolen password hash slower, but every unlock takes longer (with the default: about 0.7 s on a normal PC). Accounts are moved to new settings at their next unlock."}}</p>
     <div class="cols">

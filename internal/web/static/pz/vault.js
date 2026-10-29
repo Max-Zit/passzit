@@ -11,6 +11,7 @@ import { detect, importEncrypted, exportEncrypted, exportCSV, dedupeKey } from "
 import { authFor, strength } from "./common.js";
 import { parse as totpParse, code as totpCode } from "./totp.js";
 import { generate as sshGenerate, fingerprint as sshFingerprint } from "./sshkey.js";
+import { initSharing, loadKnown, completePending, createVault, openVault as openVaultDialog, rotateBanner, canEditVault, vaultLabel } from "./sharing.js";
 
 const root = document.getElementById("pz-vault");
 const S = {
@@ -22,6 +23,7 @@ const S = {
   revision: 0,
   view: "all",        // all, fav, login, note, trash, folder
   folder: "",
+  vault: "",          // the vault shown with view "vault"
   q: "",
   selected: "",
   editing: null,      // a draft while the editor is open
@@ -38,6 +40,7 @@ const TYPES = {
 // ---- start, unlock, lock
 
 async function start() {
+  initSharing({ S, render, sync, dialog, prompt1 });
   await loadTexts();
   wireLogout();
   let keys = null;
@@ -143,6 +146,7 @@ async function poll() {
   try {
     const { revision } = await api("GET", "/api/revision");
     if (revision > S.revision) { await sync(S.revision); render(); }
+    if (await completePending(false)) { await sync(S.revision); render(); }
   } catch (e) { /* next time */ }
 }
 
@@ -164,21 +168,35 @@ async function openVault() {
   lb.onclick = () => lock();
   startTimers();
   render();
+  // Shared vaults: confirmed keys, then access that groups give.
+  await loadKnown();
+  if (await completePending(true)) { await sync(S.revision); render(); }
 }
 
 async function sync(since) {
   const d = await api("GET", "/api/sync" + (since ? "?since=" + since : ""));
   if (d.full) { S.items.clear(); S.folders.clear(); }
+  // The vault list is always complete: vaults gained, lost, renamed or with a new key.
+  const vaults = new Map();
   for (const v of d.vaults) {
-    if (S.vaults.has(v.id)) continue;
-    let key = null;
+    const old = S.vaults.get(v.id);
+    let key = old && old.wrapped === v.wrapped_key ? old.key : null;
     try {
-      key = v.kind === "personal"
-        ? await pz.open(S.keys.accountKey, v.wrapped_key, pz.AAD.vaultKey(v.id))
-        : await pz.openSealed(S.keys.privateKey, S.keys.publicKey, v.wrapped_key, pz.AAD.vaultKey(v.id));
+      if (!key) {
+        key = v.kind === "personal"
+          ? await pz.open(S.keys.accountKey, v.wrapped_key, pz.AAD.vaultKey(v.id))
+          : await pz.openSealed(S.keys.privateKey, S.keys.publicKey, v.wrapped_key, pz.AAD.vaultKey(v.id));
+      }
     } catch (e) { console.warn("vault key", v.id, e); }
-    S.vaults.set(v.id, { key, rights: v.rights, kind: v.kind });
+    let name = "";
+    if (v.kind === "shared" && key && v.data) {
+      try { name = pz.fromUtf8(await pz.open(key, v.data, pz.AAD.vaultName(v.id))); } catch (e) { name = "?"; }
+    }
+    vaults.set(v.id, { key, rights: v.rights, kind: v.kind, wrapped: v.wrapped_key, name, keyVersion: v.key_version, needsRotation: !!v.needs_rotation, expiresAt: v.expires_at || null });
   }
+  S.vaults = vaults;
+  if (S.view === "vault" && !S.vaults.has(S.vault)) { S.view = "all"; S.vault = ""; }
+  for (const id of [...S.items.keys()]) if (!S.vaults.has(S.items.get(id).vault_id)) S.items.delete(id);
   for (const id of d.removed) { S.items.delete(id); S.folders.delete(id); }
   for (const f of d.folders) {
     let name = "?";
@@ -186,6 +204,7 @@ async function sync(since) {
     S.folders.set(f.id, { revision: f.revision, name });
   }
   for (const it of d.items) S.items.set(it.id, await decryptItem(it));
+  for (const [id, it] of S.items) if (!S.vaults.has(it.vault_id)) S.items.delete(id);
   S.revision = Math.max(S.revision, d.revision);
 }
 
@@ -213,6 +232,19 @@ async function saveItem(item, data) {
   const now = new Date().toISOString();
   const saved = { id, vault_id: vaultID, revision: res.revision, created_at: item.created_at || now, updated_at: now, deleted_at: null, data };
   S.items.set(id, saved);
+  S.revision = Math.max(S.revision, res.revision);
+  return saved;
+}
+
+// moveItem seals an item with the key of another vault and moves it there
+// (its files go with it).
+async function moveItem(item, toVault, data) {
+  const v = S.vaults.get(toVault);
+  if (!v || !v.key) throw new Error(t("This vault cannot be opened."));
+  const sealed = await pz.sealJSON(v.key, data, pz.AAD.item(toVault, item.id));
+  const res = await api("POST", "/api/items/" + item.id + "/move", { vault_id: toVault, data: sealed, revision: item.revision });
+  const saved = Object.assign({}, item, { vault_id: toVault, revision: res.revision, updated_at: new Date().toISOString(), data });
+  S.items.set(item.id, saved);
   S.revision = Math.max(S.revision, res.revision);
   return saved;
 }
@@ -246,6 +278,7 @@ function visibleItems() {
     const d = it.data;
     const trashed = !!it.deleted_at;
     if (S.view === "trash" ? !trashed : trashed) continue;
+    if (S.view === "vault" && it.vault_id !== S.vault) continue;
     if (d) {
       if (S.view === "fav" && !d.favorite) continue;
       if (TYPES[S.view] && d.type !== S.view) continue;
@@ -273,6 +306,7 @@ function count(view, folder) {
     const d = it.data;
     if (view === "trash") { if (it.deleted_at) n++; continue; }
     if (it.deleted_at) continue;
+    if (view === "vault") { if (it.vault_id === folder) n++; continue; }
     if (view === "all") n++;
     else if (!d) continue;
     else if (view === "fav" && d.favorite) n++;
@@ -296,11 +330,23 @@ function renderFilters() {
       el("button", { type: "button", class: "iconbtn sm", title: t("New folder"), "aria-label": t("New folder"), onclick: newFolder }, icon("plus"))));
   const folders = [...S.folders.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, undefined, { sensitivity: "base" }));
   for (const [id, f] of folders) nav.append(link("folder", f.name, "folder", id));
+  // vaults: the personal one and the shared ones
+  const canCreate = !S.acct.shared_admins_only || S.acct.role === "admin";
+  nav.append(el("span", { class: "navlabel" }, t("Vaults"), canCreate
+    ? el("button", { type: "button", class: "iconbtn sm", title: t("New shared vault"), "aria-label": t("New shared vault"), onclick: createVault }, icon("plus")) : null));
+  const vaults = [...S.vaults.entries()].sort((a, b) => (a[1].kind === "personal" ? -1 : b[1].kind === "personal" ? 1 : vaultLabel(a[0]).localeCompare(vaultLabel(b[0]))));
+  for (const [id, v] of vaults) {
+    const a = link("vault", vaultLabel(id), v.kind === "personal" ? "lock" : "users", id);
+    a.onclick = (ev) => { ev.preventDefault(); S.view = "vault"; S.vault = id; S.selected = ""; S.editing = null; render(); };
+    if (S.view === "vault" && S.vault === id) a.classList.add("on"); else a.classList.remove("on");
+    if (v.needsRotation && v.rights === "manage") a.append(el("span", { class: "dot warn", title: t("Needs a new key") }));
+    nav.append(a);
+  }
   nav.append(el("span", { class: "navlabel" }), link("trash", t("Trash"), "trash"),
     el("span", { class: "navlabel", text: t("Tools") }),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openHealth(); } }, icon("shield"), el("span", { text: t("Password health") })),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openImport(); } }, icon("upload"), el("span", { text: t("Import") })),
-    el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openExport(); } }, icon("download"), el("span", { text: t("Export") })));
+    S.acct.no_export ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openExport(); } }, icon("download"), el("span", { text: t("Export") })));
   return nav;
 }
 
@@ -338,17 +384,24 @@ function renderList() {
     if (list) list.replaceChildren(...listRows());
   });
   const head = el("div", { class: "vlist-head" }, el("div", { class: "searchfield" }, icon("search"), search));
-  if (S.view !== "trash") head.append(button(t("New item"), { class: "primary", icon: "plus", onclick: () => startEdit(null) }));
+  if (S.view !== "trash" && (S.view !== "vault" || canEditVault(S.vault))) head.append(button(t("New item"), { class: "primary", icon: "plus", onclick: () => startEdit(null) }));
   let title = TYPES[S.view] ? t(TYPES[S.view].plural) : { all: t("All items"), fav: t("Favorites"), trash: t("Trash") }[S.view];
   if (S.view === "folder") title = (S.folders.get(S.folder) || {}).name || "";
+  if (S.view === "vault") title = vaultLabel(S.vault);
   const tools = el("div", { class: "vlist-title" }, el("h2", { text: title }));
+  if (S.view === "vault" && (S.vaults.get(S.vault) || {}).kind === "shared") {
+    const v = S.vaults.get(S.vault);
+    tools.append(el("span", { class: "row" }, el("small", { class: "muted", text: rightsText(v.rights) }),
+      button("", { class: "ghost sm", icon: "settings", aria: t("Members and settings"), title: t("Members and settings"), onclick: () => openVaultDialog(S.vault) })));
+  }
   if (S.view === "folder") {
     tools.append(el("span", { class: "row" },
       button("", { class: "ghost sm", icon: "edit", aria: t("Rename the folder"), title: t("Rename the folder"), onclick: renameFolder }),
       button("", { class: "ghost sm", icon: "trash", aria: t("Delete the folder"), title: t("Delete the folder"), onclick: deleteFolder })));
   }
   if (S.view === "trash") tools.append(el("small", { class: "muted", text: t("Items in the trash are deleted after %d days.", S.acct.trash_days || 30) }));
-  return el("section", { class: "vlist panel" }, head, tools, el("ul", { class: "vitems", id: "vlist-items" }, ...listRows()));
+  const banner = S.view === "vault" ? rotateBanner(S.vault) : null;
+  return el("section", { class: "vlist panel" }, head, tools, banner, el("ul", { class: "vitems", id: "vlist-items" }, ...listRows()));
 }
 
 function listRows() {
@@ -417,9 +470,12 @@ async function deleteFolder() {
 
 // ---- detail
 
+let noShow = false; // "use" rights: secrets may be copied or filled, not shown
+
 function renderDetail() {
   if (S.editing) return renderEditor();
   const it = S.items.get(S.selected);
+  noShow = !!it && useOnly(it);
   if (!it) {
     return el("div", { class: "empty" }, icon("lock"), el("p", { text: t("Choose an item, or add a new one.") }),
       el("p", { class: "small muted", text: t("%d items · encrypted in your browser", count("all")) }));
@@ -461,12 +517,12 @@ function renderDetail() {
     if (k.passphrase) rows.push(field(t("Passphrase of the key"), k.passphrase, { copy: true, secret: true }));
   }
   for (const f of d.fields || []) rows.push(field(f.name || t("Field"), f.value, { copy: true, secret: f.hidden }));
-  if (d.notes) rows.push(el("div", { class: "vfield" }, el("label", { text: t("Notes") }), el("pre", { class: "vnotes", text: d.notes })));
+  if (d.notes) rows.push(el("div", { class: "vfield" }, el("label", { text: t("Notes") }), noShow ? el("p", { class: "small muted", text: t("Hidden: you may use this item, not read it.") }) : el("pre", { class: "vnotes", text: d.notes })));
   const folder = d.folder && S.folders.get(d.folder);
   const meta = el("p", { class: "small muted" },
     t("Changed %s", fmtDate(it.updated_at)), " · ", t("Created %s", fmtDate(it.created_at)),
     d.passwordChanged ? " · " + t("Password changed %s", fmtDate(d.passwordChanged)) : "");
-  const hist = (d.history || []).length ? el("details", { class: "vhist" }, el("summary", { text: t("Password history (%d)", d.history.length) }),
+  const hist = !noShow && (d.history || []).length ? el("details", { class: "vhist" }, el("summary", { text: t("Password history (%d)", d.history.length) }),
     el("ul", null, ...d.history.slice().reverse().map((h) => el("li", null, el("code", { class: "mono", text: "••••••••" }),
       el("small", { class: "muted", text: " " + fmtDate(h.changed) + " " }),
       button("", { class: "ghost sm", icon: "eye", aria: t("Show"), onclick: (ev) => { const c = ev.currentTarget.parentElement.querySelector("code"); c.textContent = c.textContent === "••••••••" ? h.password : "••••••••"; } }),
@@ -474,13 +530,15 @@ function renderDetail() {
   return el("div", { class: "vview" }, back,
     el("div", { class: "vview-head" },
       avatar(it, "lg"),
-      el("div", null, el("h2", { text: itemName(it) }), el("small", { class: "muted" }, t(TYPES[d.type] ? TYPES[d.type].label : "Item"), folder ? " · " + folder.name : "")),
-      it.deleted_at ? null : el("button", { type: "button", class: "iconbtn" + (d.favorite ? " fav-on" : ""), title: t("Favorite"), "aria-pressed": d.favorite ? "true" : "false", onclick: () => toggleFav(it) }, icon("star"))),
+      el("div", null, el("h2", { text: itemName(it) }), el("small", { class: "muted" }, t(TYPES[d.type] ? TYPES[d.type].label : "Item"), folder ? " · " + folder.name : "",
+        (S.vaults.get(it.vault_id) || {}).kind === "shared" ? " · " + vaultLabel(it.vault_id) : "")),
+      it.deleted_at || !canEditItem(it) ? null : el("button", { type: "button", class: "iconbtn" + (d.favorite ? " fav-on" : ""), title: t("Favorite"), "aria-pressed": d.favorite ? "true" : "false", onclick: () => toggleFav(it) }, icon("star"))),
     it.deleted_at ? el("div", { class: "flash warn" }, icon("trash"), el("span", { text: t("In the trash since %s.", fmtDate(it.deleted_at)) })) : null,
-    ...rows, attachmentsBlock(it), hist, meta, itemActions(it));
+    ...rows, noShow ? null : attachmentsBlock(it), hist, meta, itemActions(it));
 }
 
 function itemActions(it) {
+  if (!canEditItem(it)) return null;
   if (it.deleted_at) {
     return el("div", { class: "row vactions" },
       button(t("Restore"), { class: "primary", icon: "restore", onclick: () => act(it, "restore", t("Restored.")) }),
@@ -517,7 +575,7 @@ function field(label, value, o) {
   const opt = o || {};
   const v = el(opt.mono || opt.secret ? "code" : "span", { class: "vvalue" + (opt.mono || opt.secret ? " mono" : ""), text: opt.secret ? "••••••••••" : value });
   const tools = el("span", { class: "vtools" });
-  if (opt.secret) {
+  if (opt.secret && !noShow) {
     tools.append(el("button", { type: "button", class: "iconbtn sm", title: t("Show"), "aria-label": t("Show"), onclick: (ev) => {
       const shown = v.textContent !== "••••••••••";
       v.textContent = shown ? "••••••••••" : value;
@@ -647,12 +705,16 @@ function renderEditor() {
   };
   for (const f of d.fields || []) addField(f);
   const fav = el("input", { type: "checkbox", checked: d.favorite });
+  const curVault = e.item ? e.item.vault_id : S.view === "vault" && canEditVault(S.vault) ? S.vault : personalVault();
+  const editable = [...S.vaults.keys()].filter((id) => canEditVault(id));
+  const vaultSel = el("select", { name: "vault" }, ...editable.map((id) => el("option", { value: id, selected: id === curVault }, vaultLabel(id))));
   const err = el("div", { class: "flash err", role: "alert", hidden: true });
   const save = button(t("Save"), { type: "submit", class: "primary", icon: "check" });
   const form = el("form", { class: "stack veditor" },
     el("h2", { text: isNew ? t("New item") : t("Edit %s", d.name || "") }), err,
     el("div", { class: "grid2" }, el("label", null, t("Type"), type), el("label", null, t("Folder"), folder)),
     el("label", null, t("Name"), name),
+    editable.length > 1 ? el("label", null, t("Vault"), vaultSel) : null,
     loginPart, cardPart, identityPart, sshPart,
     el("label", null, t("Notes"), notes),
     el("div", null, el("label", { text: t("More fields") }), fields, button(t("Add a field"), { class: "ghost sm", icon: "plus", onclick: () => addField({ name: "", value: "", hidden: false }) })),
@@ -691,7 +753,8 @@ function renderEditor() {
     if (!out.name) { err.textContent = t("Enter a name."); err.hidden = false; return; }
     save.disabled = true;
     try {
-      const saved = await saveItem(e.item || {}, out);
+      const target = vaultSel.value || curVault;
+      const saved = e.item && target !== e.item.vault_id ? await moveItem(e.item, target, out) : await saveItem(e.item || { vault_id: target }, out);
       S.editing = null;
       S.selected = saved.id;
       toast(t("Saved."));
@@ -726,7 +789,7 @@ function fmtSize(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFi
 
 function attachmentsBlock(it) {
   const files = it.data.attachments || [];
-  const canEdit = !it.deleted_at;
+  const canEdit = !it.deleted_at && canEditItem(it);
   if (!files.length && !canEdit) return null;
   const input = el("input", { type: "file", hidden: true, multiple: true });
   input.addEventListener("change", async () => {
@@ -1007,12 +1070,13 @@ function openExport() {
       const items = [...S.items.values()].filter((i) => i.data && !i.deleted_at)
         .map((i) => Object.assign({}, i.data, { folderName: i.data.folder && S.folders.get(i.data.folder) ? S.folders.get(i.data.folder).name : "" }));
       if (fmtEnc.checked) {
+        // The server records the export first (and refuses it when the policy forbids exports).
+        await api("POST", "/api/account/event", { event: "export", count: items.length });
         const out = await exportEncrypted({ version: 1, exported_at: new Date().toISOString(), items }, p1.value, S.acct.policy_kdf || pz.DEFAULT_KDF);
         download("passzit-export-" + today() + ".json", out, "application/json");
-        await api("POST", "/api/account/event", { event: "export", count: items.length }).catch(() => {});
       } else {
+        await api("POST", "/api/account/event", { event: "export.plain", count: items.length });
         download("passzit-export-" + today() + ".csv", exportCSV(items), "text/csv");
-        await api("POST", "/api/account/event", { event: "export.plain", count: items.length }).catch(() => {});
       }
       master.value = p1.value = p2.value = "";
       d.close();
@@ -1051,3 +1115,13 @@ function cardBrand(number) {
   if (/^(5[06-9]|6)/.test(n)) return "Maestro";
   return "";
 }
+
+// ---- rights in shared vaults
+
+function rightsText(r) {
+  return { use: t("You may use the items"), view: t("You may read the items"), edit: t("You may read and change the items"), manage: t("You manage this vault") }[r] || "";
+}
+
+function rightsOf(it) { return (S.vaults.get(it.vault_id) || {}).rights || "view"; }
+function canEditItem(it) { return rightsOf(it) === "edit" || rightsOf(it) === "manage"; }
+function useOnly(it) { return rightsOf(it) === "use"; }

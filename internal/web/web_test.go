@@ -265,6 +265,8 @@ func (c *client) sync(since int64) store.Sync {
 				c.e.t.Fatal("vault key:", err)
 			}
 			c.vaults[v.ID] = k
+		} else if k, err := vaultcrypto.OpenSealed(c.keys.private, v.WrappedKey, vaultcrypto.AADVaultKey(v.ID)); err == nil {
+			c.vaults[v.ID] = k
 		}
 	}
 	return s
@@ -602,7 +604,7 @@ func TestPagesRender(t *testing.T) {
 		t.Fatalf("setup page: %d", code)
 	}
 	admin := e.setupAdmin()
-	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/settings/version", "/settings/backup", "/docs"}
+	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/settings/version", "/settings/backup", "/settings/directory", "/groups", "/docs"}
 	for _, p := range DocPages {
 		pages = append(pages, "/docs/"+p.Slug)
 	}

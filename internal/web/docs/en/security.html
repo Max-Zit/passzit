@@ -9,7 +9,7 @@
   <li>Everything about an item is encrypted: name, user name, password, websites, notes, fields, folder and history. The server sees only that an item exists, its size and when it changed.</li>
 </ol>
 <p>The server hashes the auth key once more with argon2id before storing it. Even the auth key does not help an attacker: the wrap key cannot be computed from it.</p>
-<p>Each account also has an X25519 key pair; it will be used to share vaults with other users (later versions) without the server being able to read the shared keys.</p>
+<p>Each account also has an X25519 key pair. A <b>shared vault</b> has its own key, sealed to the public key of every member (ephemeral X25519, HKDF and AES-GCM); the server stores only the sealed keys. Because the server hands out the public keys, PassZit shows their fingerprints, remembers the confirmed ones and warns when one changes. When someone leaves a shared vault, it gets a new key. See <a href="/docs/sharing">Shared vaults and groups</a>.</p>
 
 <h2 id="recovery">Forgotten master password</h2>
 <p>Because the server never knows the master password, nobody can reset it. There are two ways back into a vault:</p>

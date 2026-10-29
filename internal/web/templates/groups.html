@@ -1,0 +1,43 @@
+{{template "app" .}}
+{{define "content"}}
+<h1>{{.T "Groups"}}</h1>
+{{with .Data.Edit}}
+<section class="panel accent">
+  <h2>{{template "icon" "users"}}{{.Name}}</h2>
+  <form method="post" action="/groups/{{.ID}}" class="stack">
+    <div class="cols">
+      <label>{{$.T "Name"}}<input name="name" value="{{.Name}}" required maxlength="80"></label>
+      <label>{{$.T "Description"}} <small>{{$.T "optional"}}</small><input name="description" value="{{.Description}}" maxlength="300"></label>
+    </div>
+    <fieldset class="box">
+      <legend>{{$.T "Members"}}</legend>
+      <div class="checklist">{{range $.Data.Users}}<label class="check"><input type="checkbox" name="member" value="{{.ID}}" {{if index $.Data.Member .ID}}checked{{end}}>{{.Email}}{{with .DisplayName}} <small class="muted">{{.}}</small>{{end}}</label>{{end}}</div>
+    </fieldset>
+    <p class="small muted">{{$.T "Members who leave the group lose the access it gave at once; those vaults then get a new key the next time a manager opens them. New members get access when a manager of the vault opens it."}}</p>
+    <div class="row"><button class="primary">{{$.T "Save"}}</button> <a class="btn ghost" href="/groups">{{$.T "Cancel"}}</a></div>
+  </form>
+  <form method="post" action="/groups/{{.ID}}/delete" class="mt" data-confirm="{{$.T "Delete the group %s? Its members lose the access it gave." .Name}}"><button class="ghost danger">{{template "icon" "trash"}}{{$.T "Delete the group"}}</button></form>
+</section>
+{{end}}
+<section class="panel">
+  <p class="muted">{{.T "Groups make sharing easier: a vault manager gives a group access to a shared vault, and everyone in the group can open it. PassZit cannot give access by itself — the vault key is sealed to each member in a manager's browser."}}</p>
+  {{if .Data.Groups}}
+  <div class="table-wrap"><table>
+    <thead><tr><th>{{.T "Name"}}</th><th>{{.T "Members"}}</th><th class="hide-sm">{{.T "Vaults"}}</th><th></th></tr></thead>
+    <tbody>{{range .Data.Groups}}<tr>
+      <td><b>{{.Name}}</b>{{with .Description}}<br><small class="muted">{{.}}</small>{{end}}</td>
+      <td>{{len .Members}}{{if .Emails}} <small class="muted">{{range $i, $e := .Emails}}{{if lt $i 3}}{{if $i}}, {{end}}{{$e}}{{end}}{{end}}{{if gt (len .Emails) 3}} …{{end}}</small>{{end}}</td>
+      <td class="hide-sm">{{.Vaults}}</td>
+      <td class="actions"><a class="btn secondary sm" href="/groups/{{.ID}}">{{template "icon" "edit"}}{{$.T "Edit"}}</a></td>
+    </tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<p class="muted">{{.T "No groups yet."}}</p>{{end}}
+</section>
+<section class="panel">
+  <h2>{{template "icon" "plus"}}{{.T "New group"}}</h2>
+  <form method="post" action="/groups/0" class="row">
+    <input name="name" required maxlength="80" aria-label="{{.T "Name"}}" placeholder="{{.T "Name"}}">
+    <button class="primary">{{.T "Create"}}</button>
+  </form>
+</section>
+{{end}}

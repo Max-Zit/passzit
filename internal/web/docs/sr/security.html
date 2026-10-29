@@ -9,7 +9,7 @@
   <li>Sve u vezi sa stavkom je šifrovano: naziv, korisničko ime, lozinka, sajtovi, beleške, polja, fascikla i istorija. Server vidi samo da stavka postoji, njenu veličinu i kada je menjana.</li>
 </ol>
 <p>Server ključ za prijavu još jednom heširuje argon2id-om pre čuvanja. Čak ni ključ za prijavu ne pomaže napadaču: iz njega se ne može izračunati ključ za omotavanje.</p>
-<p>Svaki nalog ima i X25519 par ključeva; služiće za deljenje trezora sa drugim korisnicima (u narednim verzijama), a da server ne može da pročita deljene ključeve.</p>
+<p>Svaki nalog ima i X25519 par ključeva. <b>Deljeni trezor</b> ima sopstveni ključ, zapečaćen javnim ključem svakog člana (privremeni X25519, HKDF i AES-GCM); server čuva samo zapečaćene ključeve. Pošto server deli javne ključeve, PassZit prikazuje njihove otiske, pamti potvrđene i upozorava kada se neki promeni. Kada neko napusti deljeni trezor, trezor dobija novi ključ. Vidi <a href="/docs/sharing">Deljeni trezori i grupe</a>.</p>
 
 <h2 id="recovery">Zaboravljena glavna lozinka</h2>
 <p>Pošto server nikada ne zna glavnu lozinku, niko je ne može resetovati. Postoje dva puta nazad u trezor:</p>

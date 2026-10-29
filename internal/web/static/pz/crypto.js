@@ -27,6 +27,8 @@ export const AAD = {
   session: () => "passzit/session/v1",
   export: () => "passzit/export/v1",
   file: (fileID) => "passzit/file/v1|" + fileID,
+  vaultName: (vaultID) => "passzit/vault/v1|" + vaultID,
+  knownKeys: () => "passzit/known-keys/v1",
 };
 
 // ---- encodings

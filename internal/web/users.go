@@ -198,6 +198,7 @@ type accountData struct {
 	Codes    []string
 	CodesN   int
 	Policy   Policy
+	Keys     []store.SecurityKey
 }
 
 func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) {
@@ -216,6 +217,10 @@ func (s *Server) showAccount(w http.ResponseWriter, r *http.Request, status int,
 		d.CodesN = len(tf.Codes)
 	}
 	d.Policy = s.policy(r.Context())
+	if d.Keys, err = s.store.SecurityKeys(r.Context(), u.ID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	p := &Page{Title: "My account", Nav: "account", Data: d}
 	if errMsg != "" {
 		p.Error = translate(s.lang(r, u), errMsg)

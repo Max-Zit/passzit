@@ -16,6 +16,12 @@
 <p>At the first sign-in you scan a QR code with an authenticator app (Microsoft Authenticator, Google Authenticator, Authy, 2FAS, …) and get ten <b>recovery codes</b>. Each code replaces the app once. With a code of the app you can make new recovery codes; the old ones stop working.</p>
 <p>Lost the phone and the codes? An administrator can reset your second factor; you set it up again at the next sign-in. Your vault is not affected.</p>
 
+<h2 id="keys">Security keys and passkeys</h2>
+<p>Under <i>Security keys and passkeys</i> you can add a security key (YubiKey, Titan …) or a passkey of your device (Windows Hello, Touch ID, Android). At sign-in, after the master password, <i>Use a security key or passkey</i> replaces the code of the authenticator app. The app and the recovery codes stay as a fallback, and browser extensions still use the app. Keys work only on the HTTPS address they were added on.</p>
+
+<h2 id="share-key">Your key for sharing</h2>
+<p>The fingerprint of your public key, computed in your browser. People who share a vault with you see the same fingerprint; compare it once with them.</p>
+
 <h2 id="locking">Locking and the clipboard</h2>
 <p>You can choose a shorter lock time and a shorter clipboard time than the policy allows. Empty fields use the policy's values.</p>
 

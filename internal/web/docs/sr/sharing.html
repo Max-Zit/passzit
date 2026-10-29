@@ -1,0 +1,29 @@
+<h1>Deljeni trezori i grupe</h1>
+<p class="lead">Pored ličnog trezora, PassZit ima deljene trezore za timove: lozinke rutera za IT tim, naloge društvenih mreža za marketing. Deljenje zadržava šifrovanje s kraja na kraj — server nikada ne dobija ključ deljenog trezora.</p>
+
+<h2 id="create">Pravljenje deljenog trezora</h2>
+<p>U trezoru, <b>+</b> pored <i>Trezori</i> pravi novi deljeni trezor kojim vi upravljate. Zupčanik pored njegovog imena otvara <b>Članove i podešavanja</b>. Stavke se prave u trezoru izabranom levo, ili se trezor bira u uređivaču stavke pod <i>Trezor</i>; promena tog polja premešta postojeću stavku (sa fajlovima) u drugi trezor.</p>
+<p>Pravila mogu da dozvole pravljenje deljenih trezora samo administratorima (<i>Podešavanja → Pravila trezora → Deljenje i izvoz</i>).</p>
+
+<h2 id="rights">Prava</h2>
+<table>
+  <tr><th>Pravo</th><th>Sme da</th></tr>
+  <tr><td>Korišćenje</td><td>popunjava i kopira prijave (web trezor i ekstenzija), ali ne prikazuje lozinke, beleške i fajlove</td></tr>
+  <tr><td>Čitanje</td><td>vidi sve</td></tr>
+  <tr><td>Čitanje i izmena</td><td>i dodaje, menja i briše stavke</td></tr>
+  <tr><td>Upravljanje</td><td>i članove, grupe, naziv i sam trezor</td></tr>
+</table>
+<p>Server odbija izmene bez prava. <b>Korišćenje</b> je olakšica, ne brava: ko može da unese lozinku u stranicu, uz malo truda može i da je sazna. Trezor uvek zadržava bar jednog upravnika.</p>
+
+<h2 id="members">Dodavanje osoba</h2>
+<p>U delu <i>Dodaj osobu</i> izaberite korisnika i pravo, po želji i datum završetka. Vaš pregledač pečati ključ trezora <b>javnim ključem</b> te osobe; server čuva samo zapečaćen ključ.</p>
+<p>Prvi put PassZit prikazuje <b>otisak</b> tog ključa. Osoba vidi isti otisak u delu <i>Moj nalog → Vaš ključ za deljenje</i>; jedno poređenje (uživo ili telefonom) osigurava da niko nije podmetnuo drugi ključ. PassZit pamti potvrđene ključeve (zapečaćene ključem vašeg naloga) i upozorava kada se ključ neke osobe promeni.</p>
+
+<h2 id="timed">Vremenski ograničen pristup</h2>
+<p>Sa datumom završetka pristup sam prestaje na kraju tog dana, na primer za spoljnog tehničara. Dnevnik revizije beleži kraj.</p>
+
+<h2 id="rotation">Odlazak i novi ključ</h2>
+<p>Kada neko napusti trezor — uklonjen je, pristup je istekao, izašao je iz grupe ili mu je nalog obrisan — i dalje zna stari ključ trezora. Zato PassZit trezoru daje <b>novi ključ</b>: kada upravnik ukloni osobu u pregledaču, to se dešava odmah; inače se trezor označi i prvi sledeći upravnik koji ga otvori vidi <i>Zameni ključ sada</i>. Pregledač ponovo šifruje svaku stavku novim ključem i pečati novi ključ za svakog preostalog člana. Ono što je osoba već videla ne može se vratiti — po potrebi promenite važne lozinke.</p>
+
+<h2 id="groups">Grupe</h2>
+<p>Administratori prave <b>grupe</b> u delu <i>Grupe</i> i biraju njihove članove. Upravnik daje grupi pristup trezoru u njegovim podešavanjima. Pošto server ne može da pečati ključeve, pristup daje pregledač upravnika: odmah kada se grupa doda, a kasnije automatski kada upravnik otvori trezor (tada novi članovi grupe dobijaju pristup). Izlazak iz grupe odmah prekida njen pristup. Grupe mogu da prate direktorijum kompanije ili provajdera identiteta (<a href="/docs/admin#company">Prijava preko kompanije</a>).</p>

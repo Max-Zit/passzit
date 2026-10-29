@@ -30,6 +30,11 @@ type VaultRef struct {
 	Kind       string `json:"kind"`
 	WrappedKey string `json:"wrapped_key"`
 	Rights     string `json:"rights"`
+	// Data is the sealed name of a shared vault.
+	Data          string     `json:"data,omitempty"`
+	KeyVersion    int        `json:"key_version"`
+	NeedsRotation bool       `json:"needs_rotation,omitempty"`
+	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 }
 
 // Item is a sealed item.
@@ -84,14 +89,24 @@ func (s *Store) SyncData(ctx context.Context, userID, since int64) (*Sync, error
 			since = 0
 		}
 	}
+	if since > 0 {
+		// A vault gained, lost or with a new key: everything again.
+		var changed bool
+		if err := tx.QueryRow(ctx, `SELECT (SELECT revision FROM users WHERE id=$1) > $2`, userID, since).Scan(&changed); err != nil {
+			return nil, err
+		}
+		if changed {
+			since = 0
+		}
+	}
 	out.Full = since == 0
-	rows, err := tx.Query(ctx, `SELECT v.id::text, v.kind, m.wrapped_key, m.rights FROM vault_members m JOIN vaults v ON v.id=m.vault_id WHERE m.user_id=$1 ORDER BY v.created_at`, userID)
+	rows, err := tx.Query(ctx, `SELECT v.id::text, v.kind, m.wrapped_key, m.rights, v.data, v.key_version, v.needs_rotation, m.expires_at FROM vault_members m JOIN vaults v ON v.id=m.vault_id WHERE m.user_id=$1 ORDER BY v.created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var v VaultRef
-		if err := rows.Scan(&v.ID, &v.Kind, &v.WrappedKey, &v.Rights); err != nil {
+		if err := rows.Scan(&v.ID, &v.Kind, &v.WrappedKey, &v.Rights, &v.Data, &v.KeyVersion, &v.NeedsRotation, &v.ExpiresAt); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -278,7 +293,8 @@ func (s *Store) RestoreItem(ctx context.Context, userID int64, id string) (int64
 // PurgeItem deletes an item from the trash for good.
 func (s *Store) PurgeItem(ctx context.Context, userID int64, id string) (int64, error) {
 	return s.itemAction(ctx, userID, id, `WITH d AS (DELETE FROM items WHERE id=$1 AND deleted_at IS NOT NULL AND $2::timestamptz IS NOT NULL RETURNING id, vault_id)
-		INSERT INTO tombstones(id, kind, vault_id, revision) SELECT id, 'item', vault_id, nextval('revisions') FROM d RETURNING revision`)
+		INSERT INTO tombstones(id, kind, vault_id, revision) SELECT id, 'item', vault_id, nextval('revisions') FROM d
+		ON CONFLICT (id) DO UPDATE SET vault_id=EXCLUDED.vault_id, revision=EXCLUDED.revision, at=now() RETURNING revision`)
 }
 
 // PutFolder creates or renames a folder.
@@ -348,7 +364,8 @@ func (s *Store) CurrentRevision(ctx context.Context, userID int64) (int64, error
 // forgets old removals.
 func (s *Store) Housekeeping(ctx context.Context, trashBefore time.Time) (int64, error) {
 	tag, err := s.db.Exec(ctx, `WITH d AS (DELETE FROM items WHERE deleted_at < $1 RETURNING id, vault_id)
-		INSERT INTO tombstones(id, kind, vault_id, revision) SELECT id, 'item', vault_id, nextval('revisions') FROM d`, trashBefore)
+		INSERT INTO tombstones(id, kind, vault_id, revision) SELECT id, 'item', vault_id, nextval('revisions') FROM d
+		ON CONFLICT (id) DO UPDATE SET vault_id=EXCLUDED.vault_id, revision=EXCLUDED.revision, at=now()`, trashBefore)
 	if err != nil {
 		return 0, err
 	}

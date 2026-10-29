@@ -74,6 +74,10 @@ func (s *Server) apiExtLogin(w http.ResponseWriter, r *http.Request) {
 	if device == "" {
 		device = "Browser extension"
 	}
+	if msg := s.directoryCheck(r, u, false); msg != "" {
+		apiError(w, http.StatusForbidden, "directory", msg)
+		return
+	}
 	n := store.NewSession{UserID: u.ID, Kind: store.KindExt, Device: device, IP: ip, UserAgent: r.UserAgent()}
 	if s.DevNo2FA {
 		n.Stage, n.Life = store.StageFull, s.extLife(r)

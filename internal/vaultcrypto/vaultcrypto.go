@@ -124,10 +124,12 @@ func AADVaultKey(vaultID string) string { return "passzit/vault-key/v1|" + vault
 func AADItem(vaultID, itemID string) string {
 	return "passzit/item/v1|" + vaultID + "|" + itemID
 }
-func AADFolder(folderID string) string { return "passzit/folder/v1|" + folderID }
-func AADSession() string               { return "passzit/session/v1" }
-func AADExport() string                { return "passzit/export/v1" }
-func AADFile(fileID string) string     { return "passzit/file/v1|" + fileID }
+func AADFolder(folderID string) string   { return "passzit/folder/v1|" + folderID }
+func AADSession() string                 { return "passzit/session/v1" }
+func AADExport() string                  { return "passzit/export/v1" }
+func AADFile(fileID string) string       { return "passzit/file/v1|" + fileID }
+func AADVaultName(vaultID string) string { return "passzit/vault/v1|" + vaultID }
+func AADKnownKeys() string               { return "passzit/known-keys/v1" }
 
 // Random returns n random bytes.
 func Random(n int) []byte {

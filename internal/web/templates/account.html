@@ -57,6 +57,11 @@
   </div>
 </section>
 
+<section class="panel">
+  <h2>{{template "icon" "key"}}{{.T "Your key for sharing"}}</h2>
+  <p class="muted">{{.T "When someone shares a vault with you, they see this fingerprint of your public key. Compare it with them (in person or by phone) the first time: then nobody could have put another key in between."}}</p>
+  <p><code class="mono" id="pz-fingerprint">{{.T "Unlock the vault to see it."}}</code></p>
+</section>
 {{if .User.TOTPEnabled}}
 <section class="panel">
   <h2>{{template "icon" "shield"}}{{.T "Two-factor sign-in"}}</h2>
@@ -67,6 +72,20 @@
   </form>
 </section>
 {{end}}
+<section class="panel" id="keys">
+  <h2>{{template "icon" "key"}}{{.T "Security keys and passkeys"}}</h2>
+  <p class="muted">{{.T "A security key (YubiKey, Titan …) or a passkey of this device (Windows Hello, Touch ID, Android) can replace the code of the authenticator app at sign-in. The authenticator app stays as a fallback."}}</p>
+  {{if .Data.Keys}}<div class="table-wrap"><table>
+    <thead><tr><th>{{.T "Name"}}</th><th class="hide-sm">{{.T "Added"}}</th><th class="hide-sm">{{.T "Last used"}}</th><th></th></tr></thead>
+    <tbody>{{range .Data.Keys}}<tr><td>{{.Name}}</td><td class="hide-sm">{{$.Time .CreatedAt}}</td><td class="hide-sm">{{with .LastUsedAt}}{{$.Time .}}{{else}}—{{end}}</td>
+      <td class="actions"><form method="post" action="/account/keys/delete" class="inline" data-confirm="{{$.T "Remove the security key %s?" .Name}}"><input type="hidden" name="id" value="{{.ID}}"><button class="ghost sm">{{template "icon" "trash"}}{{$.T "Remove"}}</button></form></td></tr>{{end}}</tbody>
+  </table></div>{{end}}
+  <form class="row" id="f-key">
+    <input name="name" maxlength="60" placeholder="{{.T "Name, e.g. YubiKey"}}" aria-label="{{.T "Name"}}">
+    <button class="secondary">{{template "icon" "plus"}}{{.T "Add a security key"}}</button>
+  </form>
+  <p class="small muted" id="key-unsupported" hidden>{{.T "This browser cannot use security keys here (an HTTPS address is needed)."}}</p>
+</section>
 
 <section class="panel">
   <h2>{{template "icon" "screen"}}{{.T "Active sessions"}}</h2>

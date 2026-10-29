@@ -1,0 +1,75 @@
+{{template "app" .}}
+{{define "content"}}
+{{$s := .Data.SSO}}{{$l := .Data.LDAP}}
+<h1>{{.T "Settings"}}</h1>
+<div class="settings">
+{{template "settingstabs" .}}
+<div class="settings-body">
+<p class="muted">{{.T "The master password stays the key to every vault: nobody — not the directory, not the identity provider — can open a vault without it. Company sign-in adds to it: who may sign in is decided in the company directory."}}</p>
+
+<section class="panel">
+  <h2>{{template "icon" "key"}}{{.T "Single sign-on"}}</h2>
+  <form method="post" action="/settings/directory/sso" class="stack">
+    <label>{{.T "Protocol"}}<select name="protocol">
+      <option value="" {{if eq $s.Protocol ""}}selected{{end}}>{{.T "Off"}}</option>
+      <option value="oidc" {{if eq $s.Protocol "oidc"}}selected{{end}}>OpenID Connect (Microsoft Entra ID, Google, Okta, Keycloak …)</option>
+      <option value="saml" {{if eq $s.Protocol "saml"}}selected{{end}}>SAML 2.0 (ADFS, Entra ID, Okta …)</option>
+    </select></label>
+    <label>{{.T "Name on the sign-in page"}}<input name="label" value="{{$s.Label}}" maxlength="40" placeholder="Microsoft"></label>
+    <fieldset class="box">
+      <legend>OpenID Connect</legend>
+      <label>{{.T "Issuer"}}<input name="issuer" value="{{$s.Issuer}}" placeholder="https://login.microsoftonline.com/TENANT/v2.0" spellcheck="false"></label>
+      <div class="cols">
+        <label>{{.T "Client ID"}}<input name="client_id" value="{{$s.ClientID}}" spellcheck="false"></label>
+        <label>{{.T "Client secret"}} {{if .Data.HasSecret}}<small>{{.T "saved; leave empty to keep it"}}</small>{{end}}<input type="password" name="client_secret" autocomplete="new-password"></label>
+      </div>
+      <p class="small muted">{{.T "Redirect address to register at the identity provider:"}} <code>{{.Data.Base}}/login/sso/callback</code></p>
+    </fieldset>
+    <fieldset class="box">
+      <legend>SAML 2.0</legend>
+      <label>{{.T "Metadata URL of the identity provider"}}<input name="metadata_url" value="{{$s.MetadataURL}}" placeholder="https://…/FederationMetadata.xml" spellcheck="false"></label>
+      <label>{{.T "or its metadata XML"}}<textarea name="metadata_xml" rows="3" spellcheck="false">{{$s.MetadataXML}}</textarea></label>
+      <p class="small muted">{{.T "This server's metadata:"}} <code>{{.Data.Base}}/login/sso/metadata</code> · {{.T "Reply address (ACS):"}} <code>{{.Data.Base}}/login/sso/saml</code></p>
+    </fieldset>
+    <div class="cols">
+      <label>{{.T "Claim with the e-mail address"}}<input name="email_claim" value="{{$s.EmailClaim}}" placeholder="email" spellcheck="false"></label>
+      <label>{{.T "Claim with the groups"}}<input name="groups_claim" value="{{$s.GroupsClaim}}" placeholder="groups" spellcheck="false"></label>
+    </div>
+    <label>{{.T "CA certificate"}} <small>{{.T "optional; for an identity provider with a company CA"}}</small><textarea name="ca_cert" rows="2" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----">{{$s.CACert}}</textarea></label>
+    <label class="check"><input type="checkbox" name="required" value="1" {{if $s.Required}}checked{{end}}> {{.T "Users must sign in through the identity provider (administrators may still sign in without it)"}}</label>
+    <label class="check"><input type="checkbox" name="require_totp" value="1" {{if $s.RequireTOTP}}checked{{end}}> {{.T "Also ask for PassZit's own second factor after the identity provider"}}</label>
+    <label class="check"><input type="checkbox" name="sync_groups" value="1" {{if $s.SyncGroups}}checked{{end}}> {{.T "PassZit groups follow the identity provider's groups of the same name"}}</label>
+    <p class="small muted">{{.T "Accounts still come only by invitation: the identity provider confirms an address, the account with that address must exist. Browser extensions sign in with the authenticator app."}}</p>
+    <div><button class="primary">{{.T "Save"}}</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>{{template "icon" "users"}}{{.T "Active Directory / LDAP"}}</h2>
+  <p class="muted">{{.T "At every sign-in (web vault and extensions) PassZit looks the address up in the directory with a service account: missing or disabled accounts cannot sign in. Groups can follow the directory too."}}</p>
+  {{with .Data.TestResult}}<div class="flash {{if $.Data.TestOK}}ok{{else}}err{{end}}" role="status">{{template "icon" "check"}}<span>{{.}}</span></div>{{end}}
+  <form method="post" action="/settings/directory/ldap" class="stack">
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{if $l.Enabled}}checked{{end}}> {{.T "Check accounts in the directory"}}</label>
+    <div class="cols">
+      <label>{{.T "Server"}}<input name="url" value="{{$l.URL}}" placeholder="ldaps://dc1.example.local" spellcheck="false"></label>
+      <label class="check"><input type="checkbox" name="starttls" value="1" {{if $l.StartTLS}}checked{{end}}> {{.T "StartTLS (for ldap://)"}}</label>
+    </div>
+    <div class="cols">
+      <label>{{.T "Service account (DN)"}}<input name="bind_dn" value="{{$l.BindDN}}" placeholder="CN=passzit,OU=Service,DC=example,DC=local" spellcheck="false"></label>
+      <label>{{.T "Password"}} {{if .Data.HasBindPW}}<small>{{.T "saved; leave empty to keep it"}}</small>{{end}}<input type="password" name="bind_password" autocomplete="new-password"></label>
+    </div>
+    <label>{{.T "Base DN"}}<input name="base_dn" value="{{$l.BaseDN}}" placeholder="DC=example,DC=local" spellcheck="false"></label>
+    <label>{{.T "User filter"}}<input name="user_filter" value="{{$l.UserFilter}}" class="mono" spellcheck="false"><small>{{.T "{email} is replaced by the address of the person signing in."}}</small></label>
+    <label>{{.T "CA certificate"}} <small>{{.T "optional"}}</small><textarea name="ca_cert" rows="2" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----">{{$l.CACert}}</textarea></label>
+    <label class="check"><input type="checkbox" name="nested_groups" value="1" {{if $l.NestedGroups}}checked{{end}}> {{.T "Follow groups in groups (Active Directory)"}}</label>
+    <label class="check"><input type="checkbox" name="sync_groups" value="1" {{if $l.SyncGroups}}checked{{end}}> {{.T "PassZit groups follow the directory groups of the same name"}}</label>
+    <div><button class="primary">{{.T "Save"}}</button></div>
+  </form>
+  <form method="post" action="/settings/directory/ldap/test" class="row mt">
+    <input type="email" name="email" placeholder="ana@example.com" aria-label="{{.T "E-mail address"}}" required>
+    <button class="secondary">{{.T "Look up"}}</button>
+  </form>
+</section>
+</div>
+</div>
+{{end}}

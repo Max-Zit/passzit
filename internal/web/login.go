@@ -230,6 +230,9 @@ type authPage struct {
 	Invite    string
 	Next      string
 	MinLength int
+	// SSOLabel names the identity provider; SSOEmail is the address it
+	// confirmed (the master password follows).
+	SSOLabel, SSOEmail string
 }
 
 func (s *Server) authPage(w http.ResponseWriter, r *http.Request, title string, d *authPage) {
@@ -253,7 +256,14 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/setup", http.StatusSeeOther)
 		return
 	}
-	s.authPage(w, r, "Sign in", &authPage{Mode: "login", Next: safeNext(r.FormValue("next"))})
+	d := &authPage{Mode: "login", Next: safeNext(r.FormValue("next"))}
+	if c := s.SSO(r.Context()); c.Protocol != "" {
+		d.SSOLabel = c.label()
+		if e := r.FormValue("sso"); e != "" && len(e) < 200 {
+			d.SSOEmail = e
+		}
+	}
+	s.authPage(w, r, "Sign in", d)
 }
 
 func (s *Server) handleInvitePage(w http.ResponseWriter, r *http.Request) {
@@ -350,9 +360,25 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusUnauthorized, "wrong", s.msg(r, "Wrong e-mail address or master password."))
 		return
 	}
+	// Company sign-in: single sign-on required, the directory says the
+	// account is still active.
+	if msg := s.directoryCheck(r, u, true); msg != "" {
+		apiError(w, http.StatusForbidden, "directory", msg)
+		return
+	}
 	if s.DevNo2FA {
 		x := &store.Session{UserID: u.ID, IP: ip, UserAgent: r.UserAgent()}
 		if s.finishLogin(w, r, x, u, "master password only, test mode") {
+			writeJSON(w, http.StatusOK, loginResp{Next: "done"})
+		}
+		return
+	}
+	// The identity provider confirmed the person a moment ago (with its own
+	// second factor): with the master password that is enough.
+	if c := s.SSO(r.Context()); c.Protocol != "" && !c.RequireTOTP && ssoConfirmed(r, u) {
+		setConfirmedCookie(w, r, "", -1)
+		x := &store.Session{UserID: u.ID, IP: ip, UserAgent: r.UserAgent()}
+		if s.finishLogin(w, r, x, u, "single sign-on ("+c.label()+") and master password") {
 			writeJSON(w, http.StatusOK, loginResp{Next: "done"})
 		}
 		return

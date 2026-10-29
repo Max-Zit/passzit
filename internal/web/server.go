@@ -27,11 +27,13 @@ import (
 
 // Server serves the console and the vault API.
 type Server struct {
-	store *store.Store
-	log   *slog.Logger
-	tmpl  map[string]*template.Template
-	now   func() time.Time
-	guard *loginGuard
+	store      *store.Store
+	log        *slog.Logger
+	tmpl       map[string]*template.Template
+	now        func() time.Time
+	guard      *loginGuard
+	challenges challengeStore
+	sso        ssoCache
 
 	// MgmtACL guards the console listener.
 	MgmtACL *netacl.List
@@ -250,6 +252,11 @@ type Policy struct {
 	// BreachCheck lets browsers check passwords against the Have I Been
 	// Pwned list (k-anonymity: only 5 characters of a hash leave the server).
 	BreachCheck bool `json:"breach_check"`
+	// SharedAdminsOnly: only administrators create shared vaults.
+	SharedAdminsOnly bool `json:"shared_admins_only,omitempty"`
+	// NoExport: users may not export their vaults (the web vault and the
+	// extension refuse it; a member who can read items can still copy them).
+	NoExport bool `json:"no_export,omitempty"`
 }
 
 // DefaultPolicy: lock after 15 minutes, clear the clipboard after 30 s,
@@ -328,6 +335,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/invite", s.apiInvite)
 	mux.HandleFunc("POST /api/login", s.apiLogin)
 	mux.HandleFunc("POST /api/login/2fa", s.apiLogin2FA)
+	mux.HandleFunc("POST /api/login/key/start", s.apiKeyLoginStart)
+	mux.HandleFunc("POST /api/login/key", s.apiKeyLogin)
+	mux.HandleFunc("GET /login/sso", s.handleSSOStart)
+	mux.HandleFunc("GET /login/sso/callback", s.handleOIDCCallback)
+	mux.HandleFunc("POST /login/sso/saml", s.handleSAMLACS)
+	mux.HandleFunc("GET /login/sso/metadata", s.handleSAMLMetadata)
 	mux.HandleFunc("GET /api/login/enroll", s.apiEnrollStart)
 	mux.HandleFunc("POST /api/login/enroll", s.apiEnrollFinish)
 	mux.HandleFunc("POST /api/recover/start", s.apiRecoverStart)
@@ -347,6 +360,7 @@ func (s *Server) Handler() http.Handler {
 	app("POST /account/profile", s.handleAccountProfile)
 	app("POST /account/codes", s.handleAccountCodes)
 	app("POST /account/sessions/signout", s.handleAccountSignout)
+	app("POST /account/keys/delete", s.handleKeyDelete)
 	app("POST /account/sessions/{id}/signout", s.handleSessionSignout)
 	app("GET /docs", s.handleDocs)
 	app("GET /docs/search", s.handleDocsSearch)
@@ -373,6 +387,23 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/items/{id}/trash", s.apiTrashItem)
 	api("POST /api/items/{id}/restore", s.apiRestoreItem)
 	api("DELETE /api/items/{id}", s.apiPurgeItem)
+	api("POST /api/account/keys/start", s.apiKeyRegisterStart)
+	api("POST /api/account/keys", s.apiKeyRegister)
+	api("GET /api/directory", s.apiDirectory)
+	api("GET /api/groups", s.apiGroups)
+	api("POST /api/vaults", s.apiCreateVault)
+	api("GET /api/vaults/pending", s.apiPendingAccess)
+	api("PUT /api/vaults/{id}", s.apiRenameVault)
+	api("DELETE /api/vaults/{id}", s.apiDeleteVault)
+	api("GET /api/vaults/{id}/members", s.apiVaultMembers)
+	api("PUT /api/vaults/{id}/members", s.apiPutMember)
+	api("DELETE /api/vaults/{id}/members/{user}", s.apiRemoveMember)
+	api("POST /api/vaults/{id}/rotate", s.apiRotateVault)
+	api("PUT /api/vaults/{id}/groups", s.apiPutVaultGroup)
+	api("DELETE /api/vaults/{id}/groups/{group}", s.apiRemoveVaultGroup)
+	api("POST /api/items/{id}/move", s.apiMoveItem)
+	api("GET /api/account/known-keys", s.apiKnownKeys)
+	api("PUT /api/account/known-keys", s.apiSetKnownKeys)
 	api("PUT /api/folders/{id}", s.apiPutFolder)
 	api("DELETE /api/folders/{id}", s.apiDeleteFolder)
 
@@ -383,6 +414,10 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /users/{id}", s.handleUserUpdate)
 	admin("POST /users/{id}/reset-2fa", s.handleUserReset2FA)
 	admin("POST /users/{id}/delete", s.handleUserDelete)
+	admin("GET /groups", s.handleGroups)
+	admin("GET /groups/{id}", s.handleGroup)
+	admin("POST /groups/{id}", s.handleGroupSave)
+	admin("POST /groups/{id}/delete", s.handleGroupDelete)
 	admin("GET /audit", s.handleAudit)
 	admin("GET /settings", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings/policy", http.StatusFound)
@@ -398,6 +433,10 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /settings/timezone", s.handleTimeZone)
 	admin("POST /settings/restart", s.handleRestart)
 	admin("POST /settings/server-network", s.handleServerNetwork)
+	admin("GET /settings/directory", s.handleDirectory)
+	admin("POST /settings/directory/sso", s.handleSSOSave)
+	admin("POST /settings/directory/ldap", s.handleLDAPSave)
+	admin("POST /settings/directory/ldap/test", s.handleLDAPTest)
 	admin("GET /settings/backup", s.handleBackupSettings)
 	admin("POST /settings/backup", s.handleBackupSave)
 	admin("POST /settings/backup/run", s.handleBackupRun)
@@ -568,6 +607,11 @@ func (s *Server) RunHousekeeping(ctx context.Context) {
 	// (and at the start).
 	for first := true; ; first = false {
 		s.RunBackups(ctx)
+		if n, err := s.store.ExpireMemberships(ctx); err != nil {
+			s.log.Warn("ending time-limited access failed", "err", err)
+		} else if n > 0 {
+			_ = s.store.Audit(ctx, "-", "local", "vault.member.expire", "vaults", fmt.Sprintf("time-limited access ended for %d membership(s)", n))
+		}
 		if !first && s.now().Minute() >= 5 {
 			select {
 			case <-ctx.Done():

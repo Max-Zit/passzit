@@ -446,12 +446,36 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	// Shared vaults the user was in need a new key; those only the user
+	// was in go away.
+	if _, err := tx.Exec(ctx, `DELETE FROM vaults v WHERE v.kind='shared' AND EXISTS(SELECT 1 FROM vault_members m WHERE m.vault_id=v.id AND m.user_id=$1)
+		AND NOT EXISTS(SELECT 1 FROM vault_members m WHERE m.vault_id=v.id AND m.user_id<>$1)`, id); err != nil {
+		return err
+	}
+	rows, err := tx.Query(ctx, `UPDATE vaults v SET needs_rotation=true, revision=nextval('revisions') WHERE v.kind='shared'
+		AND EXISTS(SELECT 1 FROM vault_members m WHERE m.vault_id=v.id AND m.user_id=$1) RETURNING v.id::text`, id)
+	if err != nil {
+		return err
+	}
+	shared, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM users WHERE id=$1`, id)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	for _, v := range shared {
+		ids, err := vaultMemberIDs(ctx, tx, v)
+		if err != nil {
+			return err
+		}
+		if err := touchUsers(ctx, tx, ids); err != nil {
+			return err
+		}
 	}
 	// the personal vault and its items go with the user (ON DELETE CASCADE)
 	if err := lastAdminGuard(ctx, tx); err != nil {

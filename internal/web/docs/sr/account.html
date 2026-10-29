@@ -16,6 +16,12 @@
 <p>Pri prvoj prijavi skenirate QR kod aplikacijom za autentifikaciju (Microsoft Authenticator, Google Authenticator, Authy, 2FAS, …) i dobijate deset <b>kodova za oporavak</b>. Svaki kod jednom zamenjuje aplikaciju. Kodom iz aplikacije možete napraviti nove kodove za oporavak; stari tada prestaju da važe.</p>
 <p>Izgubili ste telefon i kodove? Administrator može da resetuje vaš drugi faktor; ponovo ga podešavate pri sledećoj prijavi. Vaš trezor time nije pogođen.</p>
 
+<h2 id="keys">Sigurnosni ključevi i passkey-evi</h2>
+<p>U delu <i>Sigurnosni ključevi i passkey-evi</i> možete dodati sigurnosni ključ (YubiKey, Titan …) ili passkey vašeg uređaja (Windows Hello, Touch ID, Android). Pri prijavi, posle glavne lozinke, <i>Koristi sigurnosni ključ ili passkey</i> zamenjuje kod aplikacije za autentifikaciju. Aplikacija i kodovi za oporavak ostaju kao rezerva, a ekstenzije pregledača i dalje koriste aplikaciju. Ključevi rade samo na HTTPS adresi na kojoj su dodati.</p>
+
+<h2 id="share-key">Vaš ključ za deljenje</h2>
+<p>Otisak vašeg javnog ključa, izračunat u vašem pregledaču. Osobe koje dele trezor sa vama vide isti otisak; jednom ga uporedite sa njima.</p>
+
 <h2 id="locking">Zaključavanje i klipbord</h2>
 <p>Možete izabrati kraće vreme zaključavanja i kraće vreme klipborda nego što pravila dozvoljavaju. Prazna polja koriste vrednosti iz pravila.</p>
 
