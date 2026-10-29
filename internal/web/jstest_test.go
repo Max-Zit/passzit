@@ -97,7 +97,13 @@ func TestJavaScriptCrypto(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	profile := t.TempDir()
+	// Chrome's helper processes may still write into the profile after it
+	// exits: the profile is removed on a best-effort basis.
+	profile, err := os.MkdirTemp("", "pzbrowser")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { time.Sleep(500 * time.Millisecond); _ = os.RemoveAll(profile) }()
 	cmd := exec.CommandContext(ctx, br, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions",
 		"--user-data-dir="+profile, ts.URL+"/") // #nosec G204 -- the test's own browser and server
 	if err := cmd.Start(); err != nil {
