@@ -1,0 +1,3 @@
+# False positives (checked by hand).
+# Dutch text "Ed25519-sleutel genereren" (generate an Ed25519 key), not a key.
+9b72e50bcd63e8a879306136237588cb68d835c0:internal/web/i18n/nl.json:generic-api-key:146
