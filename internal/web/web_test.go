@@ -1,6 +1,7 @@
 package web
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -604,7 +605,7 @@ func TestPagesRender(t *testing.T) {
 		t.Fatalf("setup page: %d", code)
 	}
 	admin := e.setupAdmin()
-	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/settings/version", "/settings/backup", "/settings/directory", "/groups", "/approvals", "/docs"}
+	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/settings/version", "/settings/backup", "/settings/directory", "/groups", "/approvals", "/docs", "/extensions"}
 	for _, p := range DocPages {
 		pages = append(pages, "/docs/"+p.Slug)
 	}
@@ -1079,5 +1080,42 @@ func TestUpdatePage(t *testing.T) {
 	}
 	if code, page := admin.get("/settings/version"); code != http.StatusOK || !strings.Contains(page, "9.9.9") {
 		t.Fatalf("version page: %d", code)
+	}
+}
+
+func TestExtensionDownload(t *testing.T) {
+	e := newEnv(t)
+	c := e.setupAdmin()
+	code, page := c.get("/extensions")
+	if code != http.StatusOK || !strings.Contains(page, "/extensions/passzit-extension-chromium-0.0.0.zip") {
+		t.Fatalf("extensions page: %d", code)
+	}
+	for _, target := range []string{"chromium", "firefox"} {
+		code, body := c.get("/extensions/passzit-extension-" + target + "-0.0.0.zip")
+		if code != http.StatusOK {
+			t.Fatalf("%s: %d", target, code)
+		}
+		zr, err := zip.NewReader(strings.NewReader(body), int64(len(body)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		names := map[string]bool{}
+		for _, f := range zr.File {
+			names[f.Name] = true
+		}
+		for _, want := range []string{"manifest.json", "popup.js", "background.js", "pz/crypto.js", "pz/argon2.wasm", "pz/qr.wasm", "i18n/de.json"} {
+			if !names[want] {
+				t.Errorf("%s: %s missing", target, want)
+			}
+		}
+		if names["offscreen.js"] != (target == "chromium") {
+			t.Errorf("%s: offscreen.js %v", target, names["offscreen.js"])
+		}
+	}
+	if code, _ := c.get("/extensions/passzit-extension-chromium-9.9.9.zip"); code != http.StatusNotFound {
+		t.Fatalf("other version: %d", code)
+	}
+	if code, _ := e.client().get("/extensions/passzit-extension-chromium-0.0.0.zip"); code == http.StatusOK {
+		t.Fatal("download without sign-in")
 	}
 }

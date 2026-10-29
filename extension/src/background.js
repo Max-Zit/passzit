@@ -79,6 +79,7 @@ async function sync(full) {
   for (const it of d.items) S.items.set(it.id, await decryptItem({ id: it.id, vault_id: it.vault_id, revision: it.revision, deleted_at: it.deleted_at, raw: it.data }));
   S.revision = Math.max(S.revision, d.revision);
   await persist();
+  badge().catch(() => {});
 }
 
 async function decryptItem(it) {
@@ -262,7 +263,7 @@ async function tabURL(tab) {
 // checks that the page is still the one the login was chosen for, fills
 // only visible, editable fields, and reports what it did.
 
-function pzFill(expectedOrigin, username, password) {
+function pzFill(expectedOrigin, username, password, code) {
   if (location.origin !== expectedOrigin) return { ok: false, reason: "origin" };
   const visible = (el) => {
     const r = el.getBoundingClientRect();
@@ -282,6 +283,23 @@ function pzFill(expectedOrigin, username, password) {
     el.dispatchEvent(new Event("change", { bubbles: true }));
   };
   const target = pw.find((p) => !/new|confirm|repeat/i.test((p.autocomplete || "") + (p.name || "") + (p.id || ""))) || pw[0];
+  // A page that asks for the one-time code (after the password): one field,
+  // or one box per digit.
+  if (!target && code) {
+    const words = (i) => (i.name || "") + " " + (i.id || "") + " " + (i.placeholder || "") + " " + (i.getAttribute("aria-label") || "");
+    const codeLike = (i) => (textual(i) || i.type === "number") && !looksUser(i);
+    const otp = inputs.find((i) => i.autocomplete === "one-time-code") ||
+      inputs.find((i) => codeLike(i) && /otp|totp|2fa|mfa|one.?time|verif|auth.*code|security.?code|passcode|token|\bcode\b|kod/i.test(words(i)));
+    const boxes = inputs.filter((i) => codeLike(i) && i.maxLength === 1);
+    if (otp && otp.maxLength !== 1) {
+      setValue(otp, code);
+      return { ok: true, code: true };
+    }
+    if (boxes.length === code.length) {
+      boxes.forEach((b, i) => setValue(b, code[i]));
+      return { ok: true, code: true };
+    }
+  }
   let user = null;
   if (target) {
     const scope = target.form ? inputs.filter((i) => i.form === target.form) : inputs;
@@ -293,6 +311,14 @@ function pzFill(expectedOrigin, username, password) {
   if (user && username) setValue(user, username);
   if (target && password) setValue(target, password);
   return { ok: !!(user || target), user: !!user, pass: !!target };
+}
+
+// currentCode is the one-time code of a login ("" without a key).
+async function currentCode(it) {
+  try {
+    const cfg = totpParse(it.data.login && it.data.login.totp);
+    return cfg ? (await totpCode(cfg)).value : "";
+  } catch (e) { return ""; }
 }
 
 async function fill(id, tabId) {
@@ -307,7 +333,7 @@ async function fill(id, tabId) {
   const [res] = await api.scripting.executeScript({
     target: { tabId: tab.id, frameIds: [0] },
     func: pzFill,
-    args: [page.origin, it.data.login.username || "", it.data.login.password || ""],
+    args: [page.origin, it.data.login.username || "", it.data.login.password || "", await currentCode(it)],
   });
   armLock();
   const r = res && res.result;
@@ -374,10 +400,31 @@ async function capture(msg, sender) {
   await badge();
 }
 
+// The icon shows waiting save offers, otherwise (when switched on in the
+// settings, with the permission for all websites) how many logins the
+// website of a tab has: the count is set per tab.
 async function badge() {
   const n = S.pending.length;
   await api.action.setBadgeText({ text: n ? String(n) : "" });
   await api.action.setBadgeBackgroundColor({ color: "#4f46e5" });
+  const s = await settings();
+  if (!s.siteBadge && !n) return;
+  const tabs = await api.tabs.query({}).catch(() => []);
+  for (const tab of tabs) await tabBadge(tab, s);
+}
+
+async function tabBadge(tab, s) {
+  if (!tab || tab.id === undefined || tab.id < 0) return;
+  const n = S.pending.length;
+  let text = n ? String(n) : "", color = "#4f46e5";
+  if (!n && (s || await settings()).siteBadge && S.keys && tab.url && parse(tab.url)) {
+    const m = matchesFor(tab.url).length;
+    if (m) { text = String(m); color = "#0f766e"; }
+  }
+  try {
+    await api.action.setBadgeText({ tabId: tab.id, text });
+    await api.action.setBadgeBackgroundColor({ tabId: tab.id, color });
+  } catch (e) { /* the tab is gone */ }
 }
 
 async function savePending(index, action) {
@@ -492,7 +539,7 @@ const handlers = {
   },
   async pending(msg) { await savePending(msg.index, msg.action); return { ok: true }; },
   async capture(msg, sender) { await capture(msg, sender); return { ok: true }; },
-  async settingsChanged() { await syncCapture(); return { ok: true }; },
+  async settingsChanged() { await syncCapture(); await badge(); return { ok: true }; },
   async sync() { await sync(true); return { ok: true, count: S.items.size }; },
 };
 
@@ -523,6 +570,10 @@ api.commands.onCommand.addListener(async (cmd) => {
   const m = url ? matchesFor(url) : [];
   if (m.length === 1) await fill(m[0].id, tab.id).catch(() => {});
   else await api.action.openPopup().catch(() => {});
+});
+
+api.tabs.onUpdated.addListener((id, info, tab) => {
+  if (info.url || info.status === "complete") restore().then(() => tabBadge(tab)).catch(() => {});
 });
 
 api.runtime.onInstalled.addListener(() => { syncCapture().catch(() => {}); });

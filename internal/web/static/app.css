@@ -113,6 +113,8 @@ a.stat:hover { text-decoration: none; border-color: color-mix(in srgb, var(--acc
 .empty p { margin: 0; }
 .empty h1 { margin: 0; justify-content: center; color: var(--text); }
 .steps, .tips { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.extgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.extgrid h2 { margin-top: 0; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; }

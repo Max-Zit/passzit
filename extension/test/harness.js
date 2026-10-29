@@ -55,6 +55,19 @@ try {
   step("filled values", v.includes("user=alice%40example.com") || v.includes("user=alice@example.com"), v);
   step("password filled", v.includes("pass=S3cret-For-Test!"), v.replace(/pass=[^&]*/, "pass=…"));
   step("hidden field untouched", v.includes("trap=&") || v.endsWith("trap="), v.replace(/pass=[^&]*/, "pass=…"));
+  // the next page asks for the one-time code: Fill puts it in
+  const tabCode = await openTab(site.replace("/login", "/code"));
+  const rc = await attempt("fill the one-time code", () => bg("fill", { id: login.id, tabId: tabCode.id }).then((r) => JSON.stringify(r)));
+  const vc = await valuesIn(tabCode.id);
+  step("code filled", /"code":true/.test(rc || "") && /^otp=\d{6}$/.test(vc), vc.replace(/\d/g, "#"));
+  // the icon counts the logins of the site
+  await saveSettings({ siteBadge: true });
+  await bg("settingsChanged");
+  let badgeText = "";
+  for (let i = 0; i < 20 && badgeText !== "1"; i++) { badgeText = await api.action.getBadgeText({ tabId: tab.id }); if (badgeText !== "1") await sleep(100); }
+  step("icon shows the login count", badgeText === "1", badgeText);
+  await saveSettings({ siteBadge: false });
+  await bg("settingsChanged");
   // another site: refused
   const tab2 = await openTab(other);
   await attempt("fill refused on another site", async () => {

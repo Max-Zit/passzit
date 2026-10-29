@@ -2,6 +2,7 @@
 <p class="lead">PassZit ekstenzija popunjava vaše prijave na sajtovima, nudi čuvanje novih i pravi lozinke — u Chrome-u, Edge-u, Operi, Brave-u, Vivaldiju i Firefox-u. Donosi sopstveni kod, pa server ne može da menja ono što se izvršava u vašem pregledaču.</p>
 
 <h2 id="install">Instalacija</h2>
+<p>Ekstenziju preuzmite sa stranice <b>Ekstenzije pregledača</b> u meniju web trezora: server je pakuje za svoju verziju i prikazuje korake za vaš pregledač.</p>
 <ul>
   <li><b>Chrome, Edge, Opera, Brave, Vivaldi:</b> Chromium paket <code>passzit-extension-chromium-VERZIJA.zip</code>. Dok ne bude u prodavnicama: raspakujte ga, otvorite <code>chrome://extensions</code> (<code>edge://extensions</code>, <code>opera://extensions</code> …), uključite <i>Režim za programere</i> i izaberite <i>Učitaj raspakovano</i>.</li>
   <li><b>Firefox:</b> Firefox paket <code>passzit-extension-firefox-VERZIJA.zip</code> (Firefox 128 ili noviji). Firefox trajno instalira samo potpisane dodatke; dok dodatak ne bude objavljen, učitajte ga za testiranje u <code>about:debugging</code> → <i>Ovaj Firefox</i> → <i>Učitaj privremeni dodatak</i>.</li>
@@ -19,6 +20,7 @@
 <h2 id="fill">Popunjavanje prijava</h2>
 <ul>
   <li>Otvorite stranicu za prijavu i kliknite na PassZit ikonu: <i>Ovaj sajt</i> prikazuje prijave za taj sajt. <b>Popuni</b> unosi korisničko ime i lozinku u stranicu.</li>
+  <li>U meniju (≡) uključite <i>Prikaži na PassZit ikonici koliko prijava sajt ima</i>: kada otvorite sajt sa sačuvanim prijavama, ikonica pokazuje njihov broj, pa odmah vidite da PassZit prepoznaje sajt. Pregledač jednom traži pristup svim sajtovima.</li>
   <li>Tastatura: <b>Ctrl+Shift+L</b> odmah popunjava prijavu kada za sajt postoji tačno jedna, inače otvara listu.</li>
   <li>Dugmad za kopiranje kopiraju korisničko ime ili lozinku; kopirane lozinke se ponovo brišu iz klipborda.</li>
 </ul>
@@ -31,7 +33,7 @@
 <p>Ekstenzija se zaključava posle istog vremena neaktivnosti kao web trezor i kada se pregledač zatvori; dugme za zaključavanje zaključava odmah. Za otključavanje je potrebna samo glavna lozinka. Ključevi se čuvaju u memoriji pregledača, nikada na disku.</p>
 
 <h2 id="totp">Jednokratni kodovi</h2>
-<p>Prijave sa ključem autentifikatora dobijaju dugme sa satom koje kopira trenutni jednokratni kod. Posle <b>Popuni</b> za takvu prijavu PassZit stavlja i kod u klipbord, jer ga većina prijava traži na sledećoj stranici. Kod se briše iz klipborda kao i lozinka.</p>
+<p>Prijave sa ključem autentifikatora dobijaju dugme sa satom koje kopira trenutni jednokratni kod. Posle <b>Popuni</b> za takvu prijavu PassZit stavlja i kod u klipbord, jer ga većina prijava traži na sledećoj stranici. Na stranici koja traži kod, <b>Popuni</b> (ili Ctrl+Shift+L) upisuje kod direktno u polje — i u polja sa po jednom cifrom. Kod se briše iz klipborda kao i lozinka.</p>
 <p>Kada na sajtu uključite prijavu u dva koraka i on prikaže QR kod, otvorite PassZit i kliknite <i>Pročitaj QR kod autentifikatora sa ove stranice</i>. Pregledač daje PassZit-u sliku vidljive kartice (tek posle tog klika); PassZit čita kod u vašem pregledaču i čuva ključ u prijavi sajta koju izaberete, ili u novoj prijavi. Zatim unesite kod koji PassZit prikazuje da biste završili podešavanje na sajtu.</p>
 
 <h2 id="generator">Generator i pretraga</h2>

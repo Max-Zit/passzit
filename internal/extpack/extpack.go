@@ -1,17 +1,19 @@
 // Package extpack builds the PassZit browser extension from extension/src:
 // one build for Chromium browsers (Chrome, Edge, Opera, Brave, Vivaldi) and
-// one for Firefox. The crypto and generator modules, the Argon2id
-// WebAssembly module and the translations come from the server
-// (internal/web), so both clients share one implementation.
+// one for Firefox. The crypto and generator modules, the WebAssembly modules
+// and the translations come from the server (internal/web), so both clients
+// share one implementation. The server packs the same files for its
+// download page; tools/extpack writes them to disk.
 package extpack
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -24,12 +26,30 @@ var Targets = []string{"chromium", "firefox"}
 
 var shared = []string{"crypto.js", "generator.js", "words.js", "totp.js", "qr.js", "argon2.wasm", "qr.wasm", "wasm_exec.js"}
 
+// Sources are the parts of a build: the extension (extension/src), the
+// shared browser modules (internal/web/static/pz) and the catalogs
+// (internal/web/i18n/*.json, at the top of I18n).
+type Sources struct {
+	Ext, Pz, I18n fs.FS
+	Test          fs.FS // extension/test, for test builds only
+}
+
+// DirSources reads the sources from a repository checkout.
+func DirSources(root string) Sources {
+	return Sources{
+		Ext:  os.DirFS(filepath.Join(root, "extension", "src")),
+		Pz:   os.DirFS(filepath.Join(root, "internal", "web", "static", "pz")),
+		I18n: os.DirFS(filepath.Join(root, "internal", "web", "i18n")),
+		Test: os.DirFS(filepath.Join(root, "extension", "test")),
+	}
+}
+
 // Options describe a build.
 type Options struct {
-	Root    string // repository root
+	Root    string // repository root (Build)
 	Target  string // chromium or firefox
 	Version string // x.y.z
-	Out     string // output directory
+	Out     string // output directory (Build)
 	// Test adds the harness (extension/test) and host permissions for
 	// loopback test servers; Key fixes the extension id (Chromium).
 	Test bool
@@ -38,56 +58,74 @@ type Options struct {
 
 var versionRE = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
+// ValidVersion tells whether v can be an extension version.
+func ValidVersion(v string) bool { return versionRE.MatchString(v) }
+
 // Build writes an unpacked extension into o.Out.
 func Build(o Options) error {
-	if !versionRE.MatchString(o.Version) {
-		return fmt.Errorf("the version must look like 0.2.0")
+	files, err := Files(DirSources(o.Root), o)
+	if err != nil {
+		return err
 	}
 	if err := os.RemoveAll(o.Out); err != nil {
 		return err
 	}
-	src := filepath.Join(o.Root, "extension", "src")
-	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || filepath.Base(p) == "manifest.json" {
+	for name, b := range files {
+		dst := filepath.Join(o.Out, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 			return err
 		}
-		if o.Target == "firefox" && strings.HasPrefix(filepath.Base(p), "offscreen") {
+		if err := os.WriteFile(dst, b, 0o600); err != nil { // #nosec G703 -- paths inside the build directory
+			return err
+		}
+	}
+	return nil
+}
+
+// Files returns the files of a build by their path in the extension.
+func Files(src Sources, o Options) (map[string][]byte, error) {
+	if !ValidVersion(o.Version) {
+		return nil, fmt.Errorf("the version must look like 0.2.0")
+	}
+	files := map[string][]byte{}
+	err := fs.WalkDir(src.Ext, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || p == "manifest.json" {
+			return err
+		}
+		if o.Target == "firefox" && strings.HasPrefix(path.Base(p), "offscreen") {
 			return nil
 		}
-		rel, _ := filepath.Rel(src, p)
-		return copyFile(p, filepath.Join(o.Out, rel))
+		b, err := fs.ReadFile(src.Ext, p)
+		files[p] = b
+		return err
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if o.Test {
-		files, _ := filepath.Glob(filepath.Join(o.Root, "extension", "test", "*"))
-		for _, f := range files {
-			if err := copyFile(f, filepath.Join(o.Out, "test", filepath.Base(f))); err != nil {
-				return err
+	if o.Test && src.Test != nil {
+		ents, _ := fs.ReadDir(src.Test, ".")
+		for _, e := range ents {
+			if b, err := fs.ReadFile(src.Test, e.Name()); err == nil && !e.IsDir() {
+				files["test/"+e.Name()] = b
 			}
 		}
 	}
 	for _, f := range shared {
-		if err := copyFile(filepath.Join(o.Root, "internal", "web", "static", "pz", f), filepath.Join(o.Out, "pz", f)); err != nil {
-			return fmt.Errorf("%w (run go run ./tools/buildwasm first)", err)
+		b, err := fs.ReadFile(src.Pz, f)
+		if err != nil {
+			return nil, fmt.Errorf("%w (run go run ./tools/buildwasm first)", err)
 		}
+		files["pz/"+f] = b
 	}
-	if err := writeTexts(o.Root, o.Out); err != nil {
-		return err
+	if err := addTexts(src, files); err != nil {
+		return nil, err
 	}
-	return writeManifest(o)
-}
-
-func copyFile(src, dst string) error {
-	b, err := os.ReadFile(src) // #nosec G304 -- files of this repository
+	m, err := manifest(src, o)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
-		return err
-	}
-	return os.WriteFile(dst, b, 0o600) // #nosec G703 -- paths inside the build directory of this repository
+	files["manifest.json"] = m
+	return files, nil
 }
 
 // TextRE finds the texts the extension translates: t("…").
@@ -95,10 +133,14 @@ var TextRE = regexp.MustCompile(`\bt\("((?:[^"\\]|\\.)+)"`)
 
 // Texts lists the English texts of the extension's scripts.
 func Texts(root string) (map[string]bool, error) {
+	return texts(os.DirFS(filepath.Join(root, "extension", "src")))
+}
+
+func texts(ext fs.FS) (map[string]bool, error) {
 	keys := map[string]bool{}
-	files, _ := filepath.Glob(filepath.Join(root, "extension", "src", "*.js"))
-	for _, f := range files {
-		b, err := os.ReadFile(f) // #nosec G304 -- files of this repository
+	names, _ := fs.Glob(ext, "*.js")
+	for _, f := range names {
+		b, err := fs.ReadFile(ext, f)
 		if err != nil {
 			return nil, err
 		}
@@ -112,16 +154,16 @@ func Texts(root string) (map[string]bool, error) {
 	return keys, nil
 }
 
-// writeTexts puts the translations of the extension's texts into
+// addTexts puts the translations of the extension's texts into
 // i18n/<lang>.json.
-func writeTexts(root, out string) error {
-	keys, err := Texts(root)
+func addTexts(src Sources, files map[string][]byte) error {
+	keys, err := texts(src.Ext)
 	if err != nil {
 		return err
 	}
-	cats, _ := filepath.Glob(filepath.Join(root, "internal", "web", "i18n", "*.json"))
+	cats, _ := fs.Glob(src.I18n, "*.json")
 	for _, c := range cats {
-		raw, err := os.ReadFile(c) // #nosec G304 -- files of this repository
+		raw, err := fs.ReadFile(src.I18n, c)
 		if err != nil {
 			return err
 		}
@@ -136,24 +178,19 @@ func writeTexts(root, out string) error {
 			}
 		}
 		b, _ := json.Marshal(mine)
-		if err := os.MkdirAll(filepath.Join(out, "i18n"), 0o750); err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(out, "i18n", filepath.Base(c)), b, 0o600); err != nil {
-			return err
-		}
+		files["i18n/"+path.Base(c)] = b
 	}
 	return nil
 }
 
-func writeManifest(o Options) error {
-	raw, err := os.ReadFile(filepath.Join(o.Root, "extension", "src", "manifest.json"))
+func manifest(src Sources, o Options) ([]byte, error) {
+	raw, err := fs.ReadFile(src.Ext, "manifest.json")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return err
+		return nil, err
 	}
 	m["version"] = o.Version
 	if o.Target == "firefox" {
@@ -181,49 +218,58 @@ func writeManifest(o Options) error {
 	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return os.WriteFile(filepath.Join(o.Out, "manifest.json"), append(b, '\n'), 0o600)
+	return append(b, '\n'), nil
 }
 
-// Zip packs a build with fixed times and sorted names (same input, same zip).
-func Zip(dir, name string) error {
-	if err := os.MkdirAll(filepath.Dir(name), 0o750); err != nil {
-		return err
+// ZipFiles packs files with fixed times and sorted names (same input, same
+// zip).
+func ZipFiles(files map[string][]byte) ([]byte, error) {
+	names := make([]string, 0, len(files))
+	for n := range files {
+		names = append(names, n)
 	}
-	var files []string
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err == nil && !d.IsDir() {
-			files = append(files, p)
+	sort.Strings(names)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	stamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, n := range names {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: n, Method: zip.Deflate, Modified: stamp})
+		if err != nil {
+			return nil, err
 		}
+		if _, err := w.Write(files[n]); err != nil {
+			return nil, err
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// Zip packs the build directory dir into the file name.
+func Zip(dir, name string) error {
+	files := map[string][]byte{}
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rel, _ := filepath.Rel(dir, p)
+		b, err := os.ReadFile(p) // #nosec G304 G122 -- files of our own build directory
+		files[filepath.ToSlash(rel)] = b
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	sort.Strings(files)
-	f, err := os.Create(name) // #nosec G304 -- the output file of the build
+	b, err := ZipFiles(files)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	zw := zip.NewWriter(f)
-	stamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	for _, p := range files {
-		rel, _ := filepath.Rel(dir, p)
-		w, err := zw.CreateHeader(&zip.FileHeader{Name: filepath.ToSlash(rel), Method: zip.Deflate, Modified: stamp})
-		if err != nil {
-			return err
-		}
-		src, err := os.Open(p) // #nosec G304 -- files of the build
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(w, src)
-		_ = src.Close()
-		if err != nil {
-			return err
-		}
+	if err := os.MkdirAll(filepath.Dir(name), 0o750); err != nil {
+		return err
 	}
-	return zw.Close()
+	return os.WriteFile(name, b, 0o644) // #nosec G306 G703 -- a release file
 }

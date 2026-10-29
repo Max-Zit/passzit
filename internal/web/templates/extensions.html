@@ -1,0 +1,36 @@
+{{template "app" .}}
+{{define "content"}}
+<h1>{{.T "Browser extensions"}}</h1>
+<p class="muted">{{.T "The PassZit extension recognizes the websites you have logins for, fills user name, password and the one-time code, offers to save new logins and opens remote connections."}}</p>
+{{with .Data}}
+<div class="extgrid">
+  <section class="panel">
+    <h2>{{$.T "Chrome, Edge, Brave, Opera, Vivaldi"}}</h2>
+    <p><a class="btn primary" href="/extensions/{{.Chromium}}" download>{{template "icon" "download"}}{{$.T "Download for Chromium browsers"}}</a></p>
+    <ol class="steps">
+      <li>{{$.T "Unzip the file into a folder that stays (for example Documents\\PassZit extension)."}}</li>
+      <li>{{$.T "Open the extensions page of the browser: chrome://extensions, edge://extensions, brave://extensions or opera://extensions."}}</li>
+      <li>{{$.T "Switch on Developer mode and choose Load unpacked, then the folder."}}</li>
+      <li>{{$.T "Pin the PassZit icon next to the address bar."}}</li>
+    </ol>
+  </section>
+  <section class="panel">
+    <h2>{{$.T "Firefox"}}</h2>
+    <p><a class="btn primary" href="/extensions/{{.Firefox}}" download>{{template "icon" "download"}}{{$.T "Download for Firefox"}}</a></p>
+    <ol class="steps">
+      <li>{{$.T "Open about:debugging, then This Firefox."}}</li>
+      <li>{{$.T "Choose Load Temporary Add-on and the downloaded file."}}</li>
+    </ol>
+    <p class="small muted">{{$.T "Firefox keeps add-ons that are not from addons.mozilla.org only until it closes; load it again after a restart."}}</p>
+  </section>
+</div>
+<section class="panel">
+  <h2>{{$.T "Sign in"}}</h2>
+  <p>{{$.T "Click the PassZit icon and enter this server's address, your e-mail address and master password, then the code of your authenticator app."}}</p>
+  <p class="row"><code class="mono" id="ext-server">{{.Server}}</code>
+    <button type="button" class="btn ghost sm" data-copy="#ext-server">{{template "icon" "copy"}}{{$.T "Copy"}}</button></p>
+  <p class="small muted">{{$.T "The browser needs a certificate it trusts for this address. Version %s." .Version}}</p>
+  <p><a href="/docs/extension">{{$.T "More in the user guide"}}</a></p>
+</section>
+{{end}}
+{{end}}

@@ -221,8 +221,9 @@ async function doConnect(m) {
 
 async function doFill(m) {
   try {
-    await bg("fill", { id: m.id });
-    if (!m.hasTotp) return window.close();
+    const filled = await bg("fill", { id: m.id });
+    // The one-time code went into the page, or there is none.
+    if (filled.code || !m.hasTotp) return window.close();
     // The sign-in usually asks for the one-time code next.
     const r = await bg("secret", { id: m.id, field: "totp" });
     await navigator.clipboard.writeText(r.value);
@@ -350,6 +351,19 @@ async function showMenu(st) {
     await saveSettings({ offerSave: save.checked });
     await bg("settingsChanged");
   });
+  // the number of logins of a website on the icon
+  const count = el("input", { type: "checkbox" });
+  count.checked = s.siteBadge;
+  count.addEventListener("change", async () => {
+    showErr(err, "");
+    if (count.checked) {
+      let ok = false;
+      try { ok = await api.permissions.request({ origins: ["https://*/*", "http://*/*"] }); } catch (e) { ok = false; }
+      if (!ok) { count.checked = false; showErr(err, t("For this the browser must let PassZit see the address of your tabs. It did not allow it.")); return; }
+    }
+    await saveSettings({ siteBadge: count.checked });
+    await bg("settingsChanged");
+  });
   // remote connections through passzit-helper
   const helper = el("input", { type: "checkbox" });
   try { helper.checked = await api.permissions.contains({ permissions: ["nativeMessaging"] }); } catch (e) { helper.checked = false; }
@@ -378,6 +392,7 @@ async function showMenu(st) {
     el("p", { class: "small" }, el("b", { text: s.email }), el("br"), el("span", { class: "muted", text: s.server })),
     el("label", { class: "check" }, save, t("Offer to save new and changed logins")),
     el("p", { class: "small muted", text: t("For this the extension needs to see the sign-in forms of the sites you visit. Passwords never leave your browser unencrypted.") }),
+    el("label", { class: "check" }, count, t("Show on the PassZit icon how many logins a website has")),
     el("label", { class: "check" }, helper, t("Open connections (RDP, SSH, WinBox) with the PassZit helper")),
     helperState,
     el("button", { type: "button", class: "secondary", onclick: openVault }, t("Open the web vault")),

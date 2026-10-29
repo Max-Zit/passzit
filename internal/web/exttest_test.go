@@ -35,6 +35,11 @@ const testSignupPage = `<!doctype html><meta charset="utf-8"><title>Sign up</tit
 <label>New password <input name="pass" type="password" autocomplete="new-password"></label>
 <button type="submit">Create account</button></form>`
 
+const testCodePage = `<!doctype html><meta charset="utf-8"><title>Two-step</title>
+<form method="post" action="/testsite/done">
+<label>Code from your app <input name="otp" inputmode="numeric" autocomplete="one-time-code"></label>
+<button>Verify</button></form>`
+
 // extFixture is a PassZit server with a test site, an account with two
 // items, and an endpoint the extension's test harness reports to.
 type extFixture struct {
@@ -59,6 +64,7 @@ func newExtFixture(t *testing.T) *extFixture {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/testsite/login", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, testLoginPage) })
 	mux.HandleFunc("/testsite/signup", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, testSignupPage) })
+	mux.HandleFunc("/testsite/code", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, testCodePage) })
 	mux.HandleFunc("/testsite/open", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		to, _ := json.Marshal(r.FormValue("to"))
@@ -80,7 +86,7 @@ func newExtFixture(t *testing.T) *extFixture {
 	vid := c.personal()
 	id := newUUID()
 	c.must("PUT", "/api/items/"+id, putItemReq{VaultID: vid, Data: c.sealItem(vid, id, map[string]any{"type": "login", "name": "Test site",
-		"login": map[string]any{"username": "alice@example.com", "password": "S3cret-For-Test!", "urls": []string{site}}})}, nil)
+		"login": map[string]any{"username": "alice@example.com", "password": "S3cret-For-Test!", "urls": []string{site}, "totp": "JBSWY3DPEHPK3PXP"}})}, nil)
 	id2 := newUUID()
 	c.must("PUT", "/api/items/"+id2, putItemReq{VaultID: vid, Data: c.sealItem(vid, id2, map[string]any{"type": "note", "name": "Wi-Fi", "notes": "x"})}, nil)
 	f.query = url.Values{"server": {f.ts.URL}, "email": {"alice@example.com"}, "pw": {"Alice-Master-Password-9"}, "site": {site}, "other": {other}}

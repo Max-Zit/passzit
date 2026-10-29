@@ -7,7 +7,7 @@ export const api = globalThis.browser && globalThis.browser.runtime ? globalThis
 // only reaches encrypted data; the master password is never stored)
 
 export async function settings() {
-  const s = await api.storage.local.get({ server: "", email: "", token: "", device: "", offerSave: false });
+  const s = await api.storage.local.get({ server: "", email: "", token: "", device: "", offerSave: false, siteBadge: false });
   return s;
 }
 

@@ -364,6 +364,8 @@ func (s *Server) Handler() http.Handler {
 	app("GET /{$}", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/vault", http.StatusFound) })
 	app("GET /vault", s.handleVault)
 	app("GET /generator", s.handleGenerator)
+	app("GET /extensions", s.handleExtensions)
+	app("GET /extensions/{file}", s.handleExtensionDownload)
 	app("GET /account", s.handleAccount)
 	app("POST /account/profile", s.handleAccountProfile)
 	app("POST /account/codes", s.handleAccountCodes)
