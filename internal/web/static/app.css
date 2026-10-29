@@ -370,8 +370,24 @@ input.sep { width: 4em; display: inline-block; }
 .vitems a:hover { text-decoration: none; background: var(--panel-2); }
 .vitems a.on { background: var(--accent-soft); }
 .vitems .empty { padding: 24px 8px; }
+.kindbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 4px 10px; }
+.kchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
+.kchip .ic { width: 14px; height: 14px; color: var(--muted); }
+.kchip small { color: var(--muted); font-size: 11.5px; }
+.kchip:hover { border-color: var(--accent); }
+.kchip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.kchip.on .ic, .kchip.on small { color: var(--accent); }
+.vgroup button { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 6px 4px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; cursor: pointer; text-align: left; }
+.vgroup button span { flex: 1; }
+.vgroup .ic { width: 14px; height: 14px; }
+.vgroup button:hover { color: var(--text); }
 .vicon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent-2), #a855f7); }
 .vicon[data-type="note"] { background: linear-gradient(135deg, #0ea5e9, #14b8a6); }
+.vicon[data-kind="rdp"] { background: linear-gradient(135deg, #2563eb, #0ea5e9); }
+.vicon[data-kind="ssh"], .vicon[data-kind="sshkey"] { background: linear-gradient(135deg, #334155, #0f766e); }
+.vicon[data-kind="winbox"] { background: linear-gradient(135deg, #dc2626, #f97316); }
+.vicon[data-kind="card"] { background: linear-gradient(135deg, #b45309, #eab308); }
+.vicon[data-kind="identity"] { background: linear-gradient(135deg, #7c3aed, #db2777); }
 .vicon .ic { width: 18px; height: 18px; }
 .vicon.lg { width: 48px; height: 48px; border-radius: 14px; font-size: 20px; }
 .vname { display: grid; min-width: 0; flex: 1; }

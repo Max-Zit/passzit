@@ -23,7 +23,9 @@ const S = {
   items: new Map(),   // id → { id, vault_id, revision, created_at, updated_at, deleted_at, data | null }
   folders: new Map(), // id → { revision, name }
   revision: 0,
-  view: "all",        // all, fav, login, note, trash, folder
+  view: "vault",      // vault, folder, trash ("all": search results, jumps)
+  kind: "",           // a kind of item shown in the list (KINDS key or "fav")
+  closed: new Set(),  // folder groups closed in the list
   folder: "",
   vault: "",          // the vault shown with view "vault"
   q: "",
@@ -198,7 +200,7 @@ async function sync(since) {
     vaults.set(v.id, { key, rights: v.rights, kind: v.kind, wrapped: v.wrapped_key, name, keyVersion: v.key_version, needsRotation: !!v.needs_rotation, expiresAt: v.expires_at || null });
   }
   S.vaults = vaults;
-  if (S.view === "vault" && !S.vaults.has(S.vault)) { S.view = "all"; S.vault = ""; }
+  if (S.view === "vault" && !S.vaults.has(S.vault)) S.vault = personalVault();
   for (const id of [...S.items.keys()]) if (!S.vaults.has(S.items.get(id).vault_id)) S.items.delete(id);
   for (const id of d.removed) { S.items.delete(id); S.folders.delete(id); }
   for (const f of d.folders) {
@@ -283,14 +285,13 @@ function visibleItems() {
     if (S.view === "trash" ? !trashed : trashed) continue;
     if (S.view === "vault" && it.vault_id !== S.vault) continue;
     if (d) {
-      if (S.view === "fav" && !d.favorite) continue;
-      if (TYPES[S.view] && d.type !== S.view) continue;
+      if (S.kind === "fav" ? !d.favorite : S.kind && kindOf(d) !== S.kind) continue;
       if (S.view === "folder" && (d.folder || "") !== S.folder) continue;
       if (q) {
         const hay = [d.name, d.login && d.login.username, ...(d.login && d.login.urls || []), d.notes].join("\n").toLowerCase();
         if (!hay.includes(q)) continue;
       }
-    } else if (S.view !== "all" && S.view !== "trash") continue;
+    } else if (S.view === "folder") continue;
     out.push(it);
   }
   return out.sort((a, b) => itemName(a).localeCompare(itemName(b), undefined, { sensitivity: "base" }));
@@ -322,7 +323,7 @@ function count(view, folder) {
 function renderFilters() {
   const link = (view, label, ic, folder) => {
     const on = S.view === view && (view !== "folder" || S.folder === folder);
-    return el("a", { href: "#", class: on ? "on" : "", onclick: (ev) => { ev.preventDefault(); S.view = view; S.folder = folder || ""; S.selected = ""; S.editing = null; render(); } },
+    return el("a", { href: "#", class: on ? "on" : "", onclick: (ev) => { ev.preventDefault(); S.view = view; S.folder = folder || ""; S.kind = ""; S.selected = ""; S.editing = null; render(); } },
       icon(ic), el("span", { text: label }), el("small", { text: String(count(view, folder)) }));
   };
   const nav = el("nav", { class: "vfilters", "aria-label": t("Filters") });
@@ -330,7 +331,7 @@ function renderFilters() {
   // one appears among them)
   const vaultLink = (id, v) => {
     const a = link("vault", vaultLabel(id), v.kind === "personal" ? "lock" : "users", id);
-    a.onclick = (ev) => { ev.preventDefault(); S.view = "vault"; S.vault = id; S.selected = ""; S.editing = null; render(); };
+    a.onclick = (ev) => { ev.preventDefault(); S.view = "vault"; S.vault = id; S.kind = ""; S.selected = ""; S.editing = null; render(); };
     if (S.view === "vault" && S.vault === id) a.classList.add("on"); else a.classList.remove("on");
     if (v.needsRotation && v.rights === "manage") a.append(el("span", { class: "dot warn", title: t("Needs a new key") }));
     return a;
@@ -345,11 +346,7 @@ function renderFilters() {
   }
   for (const [id, v] of teams) nav.append(vaultLink(id, v));
   if (!teams.length && canCreate) nav.append(el("a", { href: "#", class: "muted", onclick: (ev) => { ev.preventDefault(); createVault(); } }, icon("plus"), el("span", { text: t("New shared vault") })));
-  nav.append(el("span", { class: "navlabel brk", text: t("Items") }),
-    link("all", t("All items"), "grid"), link("fav", t("Favorites"), "star"),
-    el("span", { class: "navlabel", text: t("Types") }),
-    ...Object.entries(TYPES).map(([k, v]) => link(k, t(v.plural), v.icon)),
-    el("span", { class: "navlabel" }, t("Folders"),
+  nav.append(el("span", { class: "navlabel brk" }, t("Folders"),
       el("button", { type: "button", class: "iconbtn sm", title: t("New folder"), "aria-label": t("New folder"), onclick: newFolder }, icon("plus"))));
   const folders = [...S.folders.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, undefined, { sensitivity: "base" }));
   for (const [id, f] of folders) nav.append(link("folder", f.name, "folder", id));
@@ -413,7 +410,42 @@ function renderList() {
   }
   if (S.view === "trash") tools.append(el("small", { class: "muted", text: t("Items in the trash are deleted after %d days.", S.acct.trash_days || 30) }));
   const banner = S.view === "vault" ? rotateBanner(S.vault) : null;
-  return el("section", { class: "vlist panel" }, head, tools, banner, el("ul", { class: "vitems", id: "vlist-items" }, ...listRows()));
+  return el("section", { class: "vlist panel" }, head, tools, banner, S.view === "trash" ? null : kindBar(), el("ul", { class: "vitems", id: "vlist-items" }, ...listRows()));
+}
+
+// KIND_ICONS are the list icons of the kinds of items (websites show their
+// first letter).
+const KIND_ICONS = { rdp: "monitor", ssh: "terminal", winbox: "router", sshkey: "key", note: "note", card: "card", identity: "user" };
+
+// kindOf is the KINDS key of an item: devices by the program that opens them.
+function kindOf(d) {
+  if (!d) return "";
+  if (d.type === "login") return d.connect && KIND_ICONS[d.connect.tool] ? d.connect.tool : "web";
+  return d.type || "";
+}
+
+// kindBar shows what the vault (or folder) holds: one chip per kind with
+// its count; a chip shows only that kind.
+function kindBar() {
+  const counts = new Map();
+  let all = 0, fav = 0;
+  for (const it of S.items.values()) {
+    if (it.deleted_at || !it.data) continue;
+    if (S.view === "vault" && it.vault_id !== S.vault) continue;
+    if (S.view === "folder" && (it.data.folder || "") !== S.folder) continue;
+    all++;
+    if (it.data.favorite) fav++;
+    const k = kindOf(it.data);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const PLURAL = { web: t("Websites"), rdp: "RDP", ssh: "SSH", winbox: "WinBox", sshkey: t("SSH keys"), note: t("Secure notes"), card: t("Cards"), identity: t("Identities") };
+  const chip = (key, label, ic, n) => el("button", { type: "button", class: "kchip" + (S.kind === key ? " on" : ""), "aria-pressed": String(S.kind === key),
+    onclick: () => { S.kind = S.kind === key && key ? "" : key; S.selected = ""; S.editing = null; render(); } },
+    ic ? icon(ic) : null, el("span", { text: label }), el("small", { text: String(n) }));
+  const bar = el("div", { class: "kindbar", role: "toolbar", "aria-label": t("Kinds of items") }, chip("", t("All"), "", all));
+  if (fav) bar.append(chip("fav", t("Favorites"), "star", fav));
+  for (const k of KINDS.map((x) => x.key)) if (counts.get(k)) bar.append(chip(k, PLURAL[k], KIND_ICONS[k] || "link", counts.get(k)));
+  return bar;
 }
 
 function listRows() {
@@ -421,14 +453,34 @@ function listRows() {
   if (!items.length) {
     return [el("li", { class: "empty" }, S.q ? t("Nothing found.") : S.view === "trash" ? t("The trash is empty.") : t("No items yet. Add your first login with New item."))];
   }
-  return items.map((it) => {
+  const row = (it) => {
     const d = it.data || {};
     const sub = subtitle(d);
     return el("li", null, el("a", { href: "#", class: it.id === S.selected ? "on" : "", onclick: (ev) => { ev.preventDefault(); S.selected = it.id; S.editing = null; render(); } },
       avatar(it, ""),
       el("span", { class: "vname" }, el("b", { text: itemName(it) }), el("small", { text: sub || "" })),
       d.favorite ? el("span", { class: "vfav", title: t("Favorite") }, icon("star")) : null));
-  });
+  };
+  // In a vault the items are grouped by folder, like a tree; a group can
+  // be closed.
+  if (S.view !== "vault" || S.q || !items.some((it) => it.data && it.data.folder && S.folders.has(it.data.folder))) return items.map(row);
+  const groups = new Map();
+  for (const it of items) {
+    const f = it.data && S.folders.has(it.data.folder) ? it.data.folder : "";
+    if (!groups.has(f)) groups.set(f, []);
+    groups.get(f).push(it);
+  }
+  const order = [...groups.keys()].sort((a, b) => !a ? 1 : !b ? -1 : S.folders.get(a).name.localeCompare(S.folders.get(b).name, undefined, { sensitivity: "base" }));
+  const out = [];
+  for (const f of order) {
+    const closed = S.closed.has(f || "-");
+    out.push(el("li", { class: "vgroup" }, el("button", { type: "button", "aria-expanded": String(!closed), onclick: () => {
+      if (closed) S.closed.delete(f || "-"); else S.closed.add(f || "-");
+      render();
+    } }, icon(closed ? "chevr" : "chevd"), icon("folder"), el("span", { text: f ? S.folders.get(f).name : t("No folder") }), el("small", { text: String(groups.get(f).length) }))));
+    if (!closed) out.push(...groups.get(f).map(row));
+  }
+  return out;
 }
 
 // subtitle is the second line of an item in the list.
@@ -442,8 +494,9 @@ function subtitle(d) {
 
 function avatar(it, cls) {
   const d = it.data || {};
-  const ic = d.type && d.type !== "login" && TYPES[d.type] ? icon(TYPES[d.type].icon) : (itemName(it)[0] || "?").toUpperCase();
-  return el("span", { class: "vicon" + (cls ? " " + cls : ""), dataset: { type: d.type || "" } }, ic);
+  const k = kindOf(d);
+  const ic = KIND_ICONS[k] ? icon(KIND_ICONS[k]) : (itemName(it)[0] || "?").toUpperCase();
+  return el("span", { class: "vicon" + (cls ? " " + cls : ""), dataset: { type: d.type || "", kind: k } }, ic);
 }
 
 function hostOf(u) {
@@ -475,7 +528,7 @@ async function deleteFolder() {
     const res = await api("DELETE", "/api/folders/" + S.folder);
     S.revision = Math.max(S.revision, res.revision);
     S.folders.delete(S.folder);
-    S.view = "all"; S.folder = "";
+    S.view = "vault"; S.folder = "";
     render();
   } catch (e) { toast(e.message, true); }
 }
@@ -664,7 +717,7 @@ const KINDS = [
 // (kind: one of KINDS), except in the list of one type.
 function startEdit(it, kind) {
   if (!it && !kind) {
-    const k = KINDS.find((x) => x.type === S.view && x.type !== "login");
+    const k = KINDS.find((x) => x.key === S.kind);
     if (!k) { S.editing = { choose: true }; render(); return; }
     kind = k;
   }
@@ -964,7 +1017,7 @@ function openHealth() {
   const section = (title, hint, list) => el("section", { class: "health" },
     el("h3", null, title, " ", el("span", { class: "badge " + (list.length ? "warn" : "ok"), text: String(list.length) })),
     el("p", { class: "small muted", text: hint }),
-    list.length ? el("ul", { class: "vitems" }, ...list.map((i) => el("li", null, el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); d.close(); S.view = "all"; S.selected = i.id; render(); } },
+    list.length ? el("ul", { class: "vitems" }, ...list.map((i) => el("li", null, el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); d.close(); S.view = "vault"; S.vault = i.vault_id; S.kind = ""; S.selected = i.id; render(); } },
       avatar(i, ""), el("span", { class: "vname" }, el("b", { text: itemName(i) }), el("small", { text: subtitle(i.data) })))))) : null);
   const breachBox = el("div");
   const score = logins.length ? Math.round(100 * (logins.length - new Set([...weak, ...reused, ...old]).size) / logins.length) : 100;
