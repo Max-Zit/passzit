@@ -1115,6 +1115,28 @@ func TestExtensionDownload(t *testing.T) {
 	if code, _ := c.get("/extensions/passzit-extension-chromium-9.9.9.zip"); code != http.StatusNotFound {
 		t.Fatalf("other version: %d", code)
 	}
+	// the MaxZit Launcher: offered only when it is in the downloads folder
+	if strings.Contains(page, "/downloads/maxzit-launcher.exe") {
+		t.Fatal("launcher offered without a file")
+	}
+	e.srv.DownloadsDir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(e.srv.DownloadsDir, "maxzit-launcher.exe"), []byte("MZ launcher"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.srv.DownloadsDir, "other.exe"), []byte("MZ other"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, page := c.get("/extensions"); !strings.Contains(page, "/downloads/maxzit-launcher.exe") {
+		t.Fatal("launcher not offered")
+	}
+	if code, body := c.get("/downloads/maxzit-launcher.exe"); code != http.StatusOK || body != "MZ launcher" {
+		t.Fatalf("launcher download: %d %q", code, body)
+	}
+	for _, p := range []string{"/downloads/other.exe", "/downloads/..%2Fmaxzit-launcher.exe"} {
+		if code, _ := c.get(p); code != http.StatusNotFound {
+			t.Fatalf("%s: %d", p, code)
+		}
+	}
 	if code, _ := e.client().get("/extensions/passzit-extension-chromium-0.0.0.zip"); code == http.StatusOK {
 		t.Fatal("download without sign-in")
 	}

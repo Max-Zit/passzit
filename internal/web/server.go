@@ -50,6 +50,9 @@ type Server struct {
 	setupToken string
 	// DataDir is the server's data directory.
 	DataDir string
+	// DownloadsDir holds programs users download from the console (the
+	// MaxZit Launcher, built in the WatchZit repository).
+	DownloadsDir string
 	// HelperAvailable replaces the check for the root helper (tests).
 	HelperAvailable func() bool
 	upd             updateState
@@ -366,6 +369,7 @@ func (s *Server) Handler() http.Handler {
 	app("GET /generator", s.handleGenerator)
 	app("GET /extensions", s.handleExtensions)
 	app("GET /extensions/{file}", s.handleExtensionDownload)
+	app("GET /downloads/{file}", s.handleDownload)
 	app("GET /account", s.handleAccount)
 	app("POST /account/profile", s.handleAccountProfile)
 	app("POST /account/codes", s.handleAccountCodes)

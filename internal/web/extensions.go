@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -19,6 +21,37 @@ type extensionsData struct {
 	Version, Server string
 	Chromium        string // file names
 	Firefox         string
+	Launcher        bool // the MaxZit Launcher is in the downloads folder
+}
+
+// launcherFile is the MaxZit Launcher in the downloads folder: the Windows
+// program that opens RDP, SSH, WinSCP, WinBox, VNC and Telnet for the
+// extension (the same program WatchZit uses).
+const launcherFile = "maxzit-launcher.exe"
+
+// download returns the path of a file the console offers ("" when it is
+// not on this server).
+func (s *Server) download(name string) string {
+	if s.DownloadsDir == "" || name != launcherFile {
+		return ""
+	}
+	p := filepath.Join(s.DownloadsDir, name)
+	if st, err := os.Stat(p); err != nil || st.IsDir() { // #nosec G703 -- a fixed name in the downloads folder
+		return ""
+	}
+	return p
+}
+
+func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
+	p := s.download(r.PathValue("file"))
+	if p == "" {
+		s.notFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+launcherFile+`"`)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	http.ServeFile(w, r, p)
 }
 
 // extensionVersion is the version the packed extensions get (development
@@ -37,7 +70,7 @@ func extensionFile(target, version string) string {
 func (s *Server) handleExtensions(w http.ResponseWriter, r *http.Request) {
 	v := s.extensionVersion()
 	s.render(w, r, http.StatusOK, "extensions", &Page{Title: "Browser extensions", Nav: "extensions",
-		Data: extensionsData{Version: v, Server: s.publicBase(r), Chromium: extensionFile("chromium", v), Firefox: extensionFile("firefox", v)}})
+		Data: extensionsData{Version: v, Server: s.publicBase(r), Chromium: extensionFile("chromium", v), Firefox: extensionFile("firefox", v), Launcher: s.download(launcherFile) != ""}})
 }
 
 var extZips struct {

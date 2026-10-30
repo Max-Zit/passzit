@@ -52,11 +52,23 @@ func defaultDataDir() string {
 	return "/var/lib/passzit"
 }
 
+// defaultDownloadsDir is where the packages put programs for download.
+func defaultDownloadsDir() string {
+	if runtime.GOOS == "windows" {
+		if exe, err := os.Executable(); err == nil {
+			return filepath.Join(filepath.Dir(exe), "downloads")
+		}
+		return ""
+	}
+	return "/usr/share/passzit/downloads"
+}
+
 func run() error {
 	dataDir := flag.String("data-dir", env("PASSZIT_DATA", defaultDataDir()), "data directory (certificates, secret key, logs)")
 	dbURL := flag.String("db", os.Getenv("PASSZIT_DB"), "PostgreSQL URL, e.g. postgres://passzit:…@localhost/passzit")
 	devDB := flag.Bool("dev-embedded-db", false, "start a private PostgreSQL in the data directory (development, tests and demos only)")
 	listen := flag.String("listen", "", "console address; overrides the saved setting (e.g. 127.0.0.1:8443)")
+	downloads := flag.String("downloads-dir", env("PASSZIT_DOWNLOADS", defaultDownloadsDir()), "folder with programs users download (maxzit-launcher.exe)")
 	devHTTP := flag.String("dev-http", "", "also serve the console over plain HTTP on this loopback address (development only)")
 	devNo2FA := flag.Bool("dev-no-2fa", false, "sign in without the second factor (test and demo servers only, needs --dev-embedded-db; shown as a warning and audited)")
 	resetACL := flag.Bool("reset-allowlist", false, "allow the console again from the private networks (10/8, 172.16/12, 192.168/16, fc00::/7) and exit")
@@ -155,6 +167,7 @@ func run() error {
 	}
 	srv.Version = version
 	srv.DataDir = *dataDir
+	srv.DownloadsDir = *downloads
 	if *devNo2FA {
 		srv.DevNo2FA = true
 		log.Warn("TEST MODE: two-factor sign-in is switched off (--dev-no-2fa); never use this on a production server")
