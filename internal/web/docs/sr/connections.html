@@ -1,8 +1,8 @@
 <h1>Udaljene veze</h1>
-<p class="lead">Otvarajte RDP, SSH i WinBox veze direktno iz ekstenzije pregledača, sa prijavom sačuvanom u PassZit-u — bez kucanja i gledanja lozinke.</p>
+<p class="lead">Otvarajte RDP, SSH, WinSCP, WinBox, VNC i Telnet veze direktno iz ekstenzije pregledača, sa prijavom sačuvanom u PassZit-u — bez kucanja i gledanja lozinke.</p>
 
 <h2 id="item">Čuvanje veze</h2>
-<p>Pod <b>Nova stavka</b> izaberite <i>Udaljena radna površina (RDP)</i>, <i>SSH sa lozinkom</i>, <i>SSH ključ</i> ili <i>WinBox (MikroTik)</i> — ili izmenite postojeću prijavu — i popunite <b>Udaljena veza</b>: program (<i>RDP</i>, <i>SSH</i> ili <i>WinBox</i>), adresu uređaja (ime ili IP adresu) i port, ako nije uobičajeni. Za SSH ključ unesite i korisničko ime. Za vezu se koriste korisničko ime i lozinka prijave; SSH ključ se koristi sa svojom lozinkom ključa.</p>
+<p>Pod <b>Nova stavka</b> izaberite <i>Udaljena radna površina (RDP)</i>, <i>SSH sa lozinkom</i>, <i>SSH ključ</i>, <i>WinSCP (SFTP)</i>, <i>WinBox (MikroTik)</i>, <i>VNC</i> ili <i>Telnet</i> — ili izmenite postojeću prijavu — i popunite <b>Udaljena veza</b>: program, adresu uređaja (ime ili IP adresu) i port, ako nije uobičajeni. Za SSH ključ unesite i korisničko ime. Za vezu se koriste korisničko ime i lozinka prijave; SSH ključ se koristi sa svojom lozinkom ključa.</p>
 <p>U deljenim trezorima za vezu je potrebno pravo <i>Korišćenje</i> ili više. Veza se beleži u <i>Ko je koristio ovu stavku</i> kao „povezao se njime“.</p>
 
 <h2 id="helper">Instaliranje pomoćnika</h2>
@@ -21,6 +21,7 @@
   <li><b>SSH</b> sa lozinkom — PuTTY ako je instaliran (lozinka u privremenoj datoteci koju čita samo pomoćnik, odmah obrisanoj); inače sistemski <code>ssh</code>, a lozinka je u klipbordu za upit.</li>
   <li><b>SSH</b> sa ključem — sistemski <code>ssh</code> sa ključem u privremenoj datoteci koja se briše kada veza krene; lozinka ključa ide u klipbord.</li>
   <li><b>WinBox</b> (Windows) — WinBox prima lozinku samo u komandnoj liniji, gde je drugi programi vašeg Windows korisnika mogu pročitati dok WinBox radi. PassZit vas pre toga upozorava.</li>
+  <li><b>WinSCP</b> (Windows), <b>VNC</b> (TightVNC, TigerVNC, RealVNC ili UltraVNC viewer) i <b>Telnet</b> (PuTTY, inače sistemski telnet) — ovi programi sami traže lozinku; PassZit je stavlja u klipbord za njihov upit.</li>
 </ul>
 <p>Kopirane lozinke se brišu iz klipborda posle vremena podešenog u smernicama.</p>
 

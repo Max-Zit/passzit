@@ -116,6 +116,7 @@ const ICONS = {
   server: ["M4 4h16v6H4zM4 14h16v6H4z", "M8 7h.01M8 17h.01"],
   network: ["M9 2h6v6H9zM2 16h6v6H2zM16 16h6v6h-6z", "M12 8v4M5 16v-2h14v2"],
   flag: ["M5 21V4", "M5 4h11l-2 4 2 4H5"],
+  screen: ["M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z", "M8 20h8M12 16v4", "m9 10 2 2 4-4"],
   chevr: ["m9 18 6-6-6-6"],
   chevd: ["m6 9 6 6 6-6"],
   qr: ["M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z", "M14 14h2v2h-2zM18 14h2M14 18v2M18 18h2v2h-2"],

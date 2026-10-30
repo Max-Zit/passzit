@@ -24,6 +24,9 @@ func extraDirs() []string {
 		filepath.Join(pf, "PuTTY"), filepath.Join(pf86, "PuTTY"),
 		filepath.Join(pf, "WinBox"), filepath.Join(pf86, "WinBox"),
 		filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "WinBox"),
+		filepath.Join(pf, "WinSCP"), filepath.Join(pf86, "WinSCP"), filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "WinSCP"),
+		filepath.Join(pf, "TightVNC"), filepath.Join(pf86, "TightVNC"), filepath.Join(pf, "TigerVNC"), filepath.Join(pf86, "TigerVNC"),
+		filepath.Join(pf, "RealVNC", "VNC Viewer"), filepath.Join(pf, "uvnc bvba", "UltraVNC"),
 	}
 }
 

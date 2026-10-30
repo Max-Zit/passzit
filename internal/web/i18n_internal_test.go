@@ -68,7 +68,7 @@ func uiTexts(t *testing.T) map[string]bool {
 	// Composed elsewhere.
 	for _, s := range []string{"The address is already used.", "Not found.", "Weak", "Fair", "Good", "Strong", "Login", "Secure note", "Item", "Card", "Identity", "SSH key", "Cards", "Identities", "SSH keys", "Stable", "Testing (release candidates)", "1 hour", "1 day", "3 days", "7 days", "30 days",
 		// kinds of a new item (vault.js KINDS)
-		"Website login", "User name and password of a website", "Credentials", "User name and password without a website",
+		"Website login", "User name and password of a website", "Credentials", "User name and password without a website", "WinSCP (SFTP)", "Files on servers over SFTP", "VNC", "Screens of computers with a VNC server", "Telnet", "Older switches and devices",
 		// kinds of folders (vault.js FOLDER_KINDS)
 		"Folder", "Customer", "Site", "Branch office", "Department", "Data center", "Network", "Project", "Remote Desktop (RDP)", "Windows computers and servers", "SSH with a password", "Linux servers, switches and routers",
 		"A key pair for SSH sign-in", "WinBox (MikroTik)", "MikroTik routers and switches", "Encrypted text", "Payment card", "Name, address and contact details"} {

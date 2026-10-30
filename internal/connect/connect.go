@@ -1,6 +1,7 @@
 // Package connect is the core of passzit-helper, the small program the
 // browser extension starts (native messaging) to open a remote connection
-// with a credential from the vault: RDP, SSH or WinBox.
+// with a credential from the vault: RDP, SSH, WinSCP, WinBox, VNC or
+// Telnet.
 //
 // The helper trusts nothing in a message beyond the wish: the tool must be
 // known, host, port and user must pass strict character checks (no option
@@ -18,6 +19,8 @@
 //   - WinBox accepts the password only on its command line: the extension
 //     warns before (other programs of the same user can see it while WinBox
 //     runs).
+//   - WinSCP, VNC viewers and Telnet ask for the password themselves: the
+//     extension puts it on the clipboard.
 package connect
 
 import (
@@ -27,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -41,6 +45,9 @@ const (
 	ToolRDP    = "rdp"
 	ToolSSH    = "ssh"
 	ToolWinBox = "winbox"
+	ToolWinSCP = "winscp"
+	ToolVNC    = "vnc"
+	ToolTelnet = "telnet"
 )
 
 // Request is a message of the extension.
@@ -90,7 +97,7 @@ func (r *Request) Validate() error {
 		return errors.New("unknown message version")
 	}
 	switch r.Tool {
-	case ToolRDP, ToolSSH, ToolWinBox:
+	case ToolRDP, ToolSSH, ToolWinBox, ToolWinSCP, ToolVNC, ToolTelnet:
 	default:
 		return errors.New("unknown tool")
 	}
@@ -268,8 +275,63 @@ func Plan(r Request, env Env) (*Action, error) {
 			args = append(args, r.User, r.Password)
 		}
 		return &Action{Program: p, Args: args, Response: Response{OK: true}}, nil
+	case ToolWinSCP:
+		if env.GOOS != "windows" {
+			return nil, errors.New("WinSCP is started only on Windows")
+		}
+		p, err := env.LookPath("winscp.exe")
+		if err != nil {
+			return nil, errors.New("WinSCP is not installed")
+		}
+		port := r.Port
+		if port == 0 {
+			port = 22
+		}
+		u := "sftp://"
+		if r.User != "" {
+			u += url.PathEscape(r.User) + "@"
+		}
+		return clip(&Action{Program: p, Args: []string{u + addr(r.Host, port, 0) + "/"}, Response: Response{OK: true}}, r), nil
+	case ToolVNC:
+		names := []string{"vncviewer"}
+		if env.GOOS == "windows" {
+			names = []string{"tvnviewer.exe", "vncviewer.exe", "uvnc_viewer.exe"}
+		}
+		p, err := env.LookPath(names...)
+		if err != nil {
+			return nil, errors.New("no VNC viewer is installed (TightVNC, TigerVNC, RealVNC or UltraVNC)")
+		}
+		port := r.Port
+		if port == 0 {
+			port = 5900
+		}
+		return clip(&Action{Program: p, Args: []string{host + "::" + strconv.Itoa(port)}, Response: Response{OK: true}}, r), nil
+	case ToolTelnet:
+		port := r.Port
+		if port == 0 {
+			port = 23
+		}
+		if env.GOOS == "windows" {
+			if putty, err := env.LookPath("putty.exe"); err == nil {
+				return clip(&Action{Program: putty, Args: []string{"-telnet", "-P", strconv.Itoa(port), host}, Response: Response{OK: true}}, r), nil
+			}
+		}
+		t, err := env.LookPath("telnet.exe", "telnet")
+		if err != nil {
+			return nil, errors.New("neither PuTTY nor a Telnet client is installed")
+		}
+		return terminal(clip(&Action{Program: t, Console: true, Args: []string{host, strconv.Itoa(port)}, Response: Response{OK: true}}, r), env)
 	}
 	return nil, errors.New("unknown tool")
+}
+
+// clip asks the extension to put the password on the clipboard for tools
+// that ask for it themselves.
+func clip(a *Action, r Request) *Action {
+	if r.Password != "" {
+		a.Response.Copy = "password"
+	}
+	return a
 }
 
 // terminal puts a console program into a terminal window on Linux and

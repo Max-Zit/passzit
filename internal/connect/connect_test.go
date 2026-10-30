@@ -34,7 +34,7 @@ func TestValidate(t *testing.T) {
 	}
 	bad := []Request{
 		{V: 2, Tool: ToolRDP, Host: "a"},
-		{V: 1, Tool: "telnet", Host: "a"},
+		{V: 1, Tool: "ftp", Host: "a"},
 		{V: 1, Tool: ToolSSH, Host: "-oProxyCommand=calc"},
 		{V: 1, Tool: ToolSSH, Host: "a b"},
 		{V: 1, Tool: ToolSSH, Host: "a;b"},
@@ -100,6 +100,28 @@ func TestPlan(t *testing.T) {
 	}
 	if _, err := Plan(Request{V: 1, Tool: ToolRDP, Host: "srv"}, fakeEnv("windows")); err == nil {
 		t.Fatal("missing mstsc not reported")
+	}
+	// WinSCP, VNC and Telnet ask for the password themselves: clipboard
+	more := fakeEnv("windows", "winscp.exe", "tvnviewer.exe", "putty.exe")
+	a, _ = Plan(Request{V: 1, Tool: ToolWinSCP, Host: "files", User: `DOM\u`, Password: "Secret-4"}, more)
+	if strings.Join(a.Args, " ") != "sftp://DOM%5Cu@files:22/" || a.Response.Copy != "password" {
+		t.Fatalf("winscp %+v", a)
+	}
+	a, _ = Plan(Request{V: 1, Tool: ToolVNC, Host: "pc", Password: "Secret-5"}, more)
+	if strings.Join(a.Args, " ") != "pc::5900" || a.Response.Copy != "password" {
+		t.Fatalf("vnc %+v", a)
+	}
+	a, _ = Plan(Request{V: 1, Tool: ToolTelnet, Host: "sw", Port: 2323}, more)
+	if strings.Join(a.Args, " ") != "-telnet -P 2323 sw" || a.Response.Copy != "" {
+		t.Fatalf("telnet %+v", a)
+	}
+	for _, r := range []Request{{V: 1, Tool: ToolWinSCP, Host: "h", Password: "Secret-6"}, {V: 1, Tool: ToolVNC, Host: "h", Password: "Secret-6"}} {
+		if a, err := Plan(r, more); err != nil || slices.Contains(a.Args, "Secret-6") {
+			t.Fatalf("%s puts the password on the command line: %+v %v", r.Tool, a, err)
+		}
+	}
+	if _, err := Plan(Request{V: 1, Tool: ToolWinSCP, Host: "h"}, fakeEnv("linux")); err == nil {
+		t.Fatal("winscp on linux")
 	}
 }
 

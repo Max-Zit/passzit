@@ -1,8 +1,8 @@
 <h1>Remote connections</h1>
-<p class="lead">Open RDP, SSH and WinBox connections straight from the browser extension, with the login saved in PassZit — without typing or seeing the password.</p>
+<p class="lead">Open RDP, SSH, WinSCP, WinBox, VNC and Telnet connections straight from the browser extension, with the login saved in PassZit — without typing or seeing the password.</p>
 
 <h2 id="item">Saving a connection</h2>
-<p>Choose <i>Remote Desktop (RDP)</i>, <i>SSH with a password</i>, <i>SSH key</i> or <i>WinBox (MikroTik)</i> under <b>New item</b> — or edit an existing login — and fill in <b>Remote connection</b>: the program (<i>RDP</i>, <i>SSH</i> or <i>WinBox</i>), the address of the device (a name or an IP address) and, if it is not the usual one, the port. For an SSH key also enter the user name. The user name and password of a login are used for the connection; an SSH key is used with its passphrase.</p>
+<p>Choose <i>Remote Desktop (RDP)</i>, <i>SSH with a password</i>, <i>SSH key</i>, <i>WinSCP (SFTP)</i>, <i>WinBox (MikroTik)</i>, <i>VNC</i> or <i>Telnet</i> under <b>New item</b> — or edit an existing login — and fill in <b>Remote connection</b>: the program, the address of the device (a name or an IP address) and, if it is not the usual one, the port. For an SSH key also enter the user name. The user name and password of a login are used for the connection; an SSH key is used with its passphrase.</p>
 <p>In shared vaults the connection needs the right <i>Use</i> or more. It is reported in <i>Who used this item</i> as "connected with it".</p>
 
 <h2 id="helper">Installing the helper</h2>
@@ -21,6 +21,7 @@
   <li><b>SSH</b> with a password — PuTTY when it is installed (password in a temporary file only the helper can read, deleted right after); otherwise the system's <code>ssh</code>, and the password is on the clipboard for the prompt.</li>
   <li><b>SSH</b> with a key — the system's <code>ssh</code> with the key in a temporary file that is deleted after the connection starts; a passphrase is put on the clipboard.</li>
   <li><b>WinBox</b> (Windows) — WinBox accepts the password only on its command line, where other programs of your Windows user can read it while WinBox runs. PassZit warns you before.</li>
+  <li><b>WinSCP</b> (Windows), <b>VNC</b> (TightVNC, TigerVNC, RealVNC or UltraVNC viewer) and <b>Telnet</b> (PuTTY, else the system's telnet) — these programs ask for the password themselves; PassZit puts it on the clipboard for their prompt.</li>
 </ul>
 <p>Copied passwords are cleared from the clipboard after the time set in the policy.</p>
 

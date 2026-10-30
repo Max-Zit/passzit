@@ -562,7 +562,7 @@ function renderList() {
 }
 
 // KIND_ICONS are the list icons of the kinds of items.
-const KIND_ICONS = { web: "globe", cred: "idcard", rdp: "monitor", ssh: "terminal", winbox: "router", sshkey: "key", note: "note", card: "card", identity: "user" };
+const KIND_ICONS = { web: "globe", cred: "idcard", rdp: "monitor", ssh: "terminal", winscp: "folderopen", winbox: "router", vnc: "screen", telnet: "terminal", sshkey: "key", note: "note", card: "card", identity: "user" };
 
 // kindOf is the KINDS key of an item: devices by the program that opens
 // them, logins by whether they belong to a website.
@@ -588,7 +588,7 @@ function kindBar() {
     const k = kindOf(it.data);
     counts.set(k, (counts.get(k) || 0) + 1);
   }
-  const PLURAL = { web: t("Websites"), cred: t("Credentials"), rdp: "RDP", ssh: "SSH", winbox: "WinBox", sshkey: t("SSH keys"), note: t("Secure notes"), card: t("Cards"), identity: t("Identities") };
+  const PLURAL = { web: t("Websites"), cred: t("Credentials"), rdp: "RDP", ssh: "SSH", winscp: "WinSCP", winbox: "WinBox", vnc: "VNC", telnet: "Telnet", sshkey: t("SSH keys"), note: t("Secure notes"), card: t("Cards"), identity: t("Identities") };
   const chip = (key, label, ic, n) => el("button", { type: "button", class: "kchip" + (S.kind === key ? " on" : ""), "aria-pressed": String(S.kind === key),
     onclick: () => { S.kind = S.kind === key && key ? "" : key; S.selected = ""; S.editing = null; render(); } },
     ic ? icon(ic) : null, el("span", { text: label }), el("small", { text: String(n) }));
@@ -871,6 +871,9 @@ const KINDS = [
   { key: "ssh", label: "SSH with a password", hint: "Linux servers, switches and routers", icon: "terminal", type: "login", tool: "ssh" },
   { key: "sshkey", label: "SSH key", hint: "A key pair for SSH sign-in", icon: "key", type: "sshkey", tool: "ssh" },
   { key: "winbox", label: "WinBox (MikroTik)", hint: "MikroTik routers and switches", icon: "router", type: "login", tool: "winbox" },
+  { key: "winscp", label: "WinSCP (SFTP)", hint: "Files on servers over SFTP", icon: "folderopen", type: "login", tool: "winscp" },
+  { key: "vnc", label: "VNC", hint: "Screens of computers with a VNC server", icon: "screen", type: "login", tool: "vnc" },
+  { key: "telnet", label: "Telnet", hint: "Older switches and devices", icon: "terminal", type: "login", tool: "telnet" },
   { key: "note", label: "Secure note", hint: "Encrypted text", icon: "note", type: "note" },
   { key: "card", label: "Card", hint: "Payment card", icon: "card", type: "card" },
   { key: "identity", label: "Identity", hint: "Name, address and contact details", icon: "user", type: "identity" },
@@ -977,7 +980,7 @@ function renderEditor() {
   // a remote connection the extension opens with passzit-helper
   const cn = d.connect || {};
   const cTool = el("select", { name: "connect_tool", "aria-label": t("Remote connection") },
-    el("option", { value: "" }, t("None")), ...[["rdp", "RDP (Remote Desktop)"], ["ssh", "SSH"], ["winbox", "WinBox (MikroTik)"]].map(([v, l]) => el("option", { value: v, selected: cn.tool === v }, l)));
+    el("option", { value: "" }, t("None")), ...[["rdp", "RDP (Remote Desktop)"], ["ssh", "SSH"], ["winscp", "WinSCP (SFTP)"], ["winbox", "WinBox (MikroTik)"], ["vnc", "VNC"], ["telnet", "Telnet"]].map(([v, l]) => el("option", { value: v, selected: cn.tool === v }, l)));
   const cHost = el("input", { name: "connect_host", value: cn.host || "", placeholder: "10.0.0.5", autocomplete: "off", spellcheck: "false", class: "mono" });
   const cPort = el("input", { name: "connect_port", type: "number", min: 1, max: 65535, value: cn.port || "", placeholder: t("default"), class: "narrow" });
   const cUser = el("input", { name: "connect_user", value: cn.user || "", autocomplete: "off", spellcheck: "false" });

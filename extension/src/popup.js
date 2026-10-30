@@ -186,7 +186,7 @@ async function showMain() {
     el("button", { type: "button", class: "iconbtn", title: t("Reload"), "aria-label": t("Reload"), onclick: async () => { await bg("sync"); showMain(); } }, icon("refresh"))));
 }
 
-const TOOLS = { rdp: "RDP", ssh: "SSH", winbox: "WinBox" };
+const TOOLS = { rdp: "RDP", ssh: "SSH", winscp: "WinSCP", winbox: "WinBox", vnc: "VNC", telnet: "Telnet" };
 
 function itemList(items, canFill, emptyText, helper) {
   if (!items.length) return el("p", { class: "empty", text: emptyText });
