@@ -433,9 +433,37 @@ function visibleItems() {
 
 function render() {
   if (!S.keys) return;
-  const grid = el("div", { class: "vgrid", dataset: { pane: S.editing || S.selected ? "detail" : "list" } },
+  const grid = el("div", { class: "vgrid", dataset: { pane: S.selected ? "detail" : "list" } },
     renderFilters(), renderList(), el("section", { class: "vdetail panel", id: "vdetail" }, renderDetail()));
   root.replaceChildren(grid);
+  syncEditor();
+}
+
+// The editor (and the choice of a new item's kind) opens in a dialog over
+// the vault; it is built again only when a new edit starts, so a render
+// meanwhile keeps what was typed. Closing it ends the edit.
+let editDlg = null;
+function syncEditor() {
+  if (!S.editing) {
+    if (editDlg) { const d = editDlg; editDlg = null; d.close(); }
+    return;
+  }
+  if (!editDlg) {
+    const d = el("dialog", { class: "dlg wide veditdlg" });
+    d.addEventListener("close", () => {
+      d.remove();
+      if (editDlg !== d) return;
+      editDlg = null;
+      if (S.editing) { S.editing = null; render(); }
+    });
+    document.body.append(d);
+    d.showModal();
+    editDlg = d;
+  }
+  if (editDlg.pzFor !== S.editing) {
+    editDlg.pzFor = S.editing;
+    editDlg.replaceChildren(S.editing.choose ? renderChooser() : renderEditor());
+  }
 }
 
 function count(view, vaultID) {
@@ -673,7 +701,6 @@ function safeHref(u) {
 let noShow = false; // "use" rights: secrets may be copied or filled, not shown
 
 function renderDetail() {
-  if (S.editing) return S.editing.choose ? renderChooser() : renderEditor();
   const it = S.items.get(S.selected);
   noShow = !!it && useOnly(it);
   curItem = it || null;
@@ -863,8 +890,8 @@ function startEdit(it, kind) {
   if (!base.login.urls || !base.login.urls.length) base.login.urls = [""];
   S.editing = { item: it, data: base };
   render();
-  const first = document.querySelector(base.connect && base.connect.tool && !it ? "#vdetail input[name=connect_host]" : "#vdetail input[name=name]");
-  if (first) first.focus();
+  const first = document.querySelector(base.connect && base.connect.tool && !it ? ".veditdlg input[name=connect_host]" : ".veditdlg input[name=name]");
+  if (first) setTimeout(() => first.focus(), 0);
 }
 
 function renderChooser() {

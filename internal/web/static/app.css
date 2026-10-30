@@ -326,6 +326,7 @@ button.secondary.loading::after, button.ghost.loading::after { border-color: var
 @keyframes toastin { from { opacity: 0; transform: translateY(8px); } }
 dialog.dlg { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); padding: 20px 22px; width: min(440px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
 dialog.dlg.wide { width: min(620px, calc(100vw - 32px)); }
+dialog.dlg.veditdlg { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; }
 dialog.dlg::backdrop { background: rgba(15, 23, 42, .5); }
 dialog.dlg h2 { margin: 0 0 10px; font-size: 17px; }
 .danger-zone { border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
