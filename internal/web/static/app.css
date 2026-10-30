@@ -348,7 +348,14 @@ input.sep { width: 4em; display: inline-block; }
 .vault .unlock form { text-align: left; }
 .unlock-icon { width: 56px; height: 56px; margin: 4px auto 6px; border-radius: 16px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
 .unlock-icon .ic { width: 28px; height: 28px; }
-.vgrid { display: grid; grid-template-columns: 210px minmax(260px, 360px) 1fr; gap: 16px; align-items: start; }
+.vgrid { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 16px; align-items: start; }
+/* buttons of a list row: shown on the selected row, on hover and on touch screens */
+.vacts { display: flex; gap: 2px; margin-left: auto; opacity: 0; flex: none; }
+.vitems a:hover .vacts, .vitems a.on .vacts, .vitems a:focus-within .vacts { opacity: 1; }
+@media (hover: none) { .vacts { opacity: 1; } }
+.vitems a .vfav + .vacts, .vitems a .vname + .vacts { margin-left: auto; }
+.vdetaildlg .vback { display: none !important; }
+.vdetaildlg > .row.end { margin: -6px -8px 0 0; }
 .vfilters { display: grid; gap: 2px; position: sticky; top: 76px; }
 .vfilters a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; color: var(--text); font-weight: 500; }
 .vfilters a span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -443,7 +450,7 @@ input.sep { width: 4em; display: inline-block; }
 .rowline.field3 label.check { margin: 0; white-space: nowrap; font-weight: 500; }
 .vback { display: none; justify-self: start; }
 @media (max-width: 1100px) {
-  .vgrid { grid-template-columns: minmax(240px, 320px) 1fr; }
+  .vgrid { grid-template-columns: minmax(0, 1fr); }
   .vfilters { grid-column: 1 / -1; position: static; display: flex; flex-wrap: wrap; gap: 4px; }
   .vfilters .navlabel { display: none; }
   .vfilters .navlabel:has(button) { display: inline-flex; gap: 4px; margin: 0; padding: 0 4px 0 10px; border: 1px dashed var(--line-2); border-radius: 8px; white-space: nowrap; flex: none; }
@@ -453,9 +460,6 @@ input.sep { width: 4em; display: inline-block; }
 }
 @media (max-width: 760px) {
   .vgrid { grid-template-columns: 1fr; }
-  .vgrid[data-pane="list"] .vdetail { display: none; }
-  .vgrid[data-pane="detail"] .vlist, .vgrid[data-pane="detail"] .vfilters { display: none; }
-  .vback { display: inline-flex; }
   .vfilters { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
   .vfilters a { flex: none; }
   .vfilters .navlabel.brk { display: none; }

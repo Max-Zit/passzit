@@ -365,29 +365,43 @@ async function clearClipboard() {
 
 // ---- save offers (only with the optional permission for all sites)
 
-// ---- pairing with the MaxZit Launcher from the server's Launcher page
+// ---- the server's own pages: pairing with the MaxZit Launcher (Launcher
+// page) and opening connections by double click (vault page)
 
-const PAIR = "pz-pair";
+const PAIR = "pz-bridge";
 
 // launcherPairURL opens the launcher's pairing for this extension; the
 // launcher asks the user before it registers the extension.
+// ownPage checks that a request comes from the top frame of a page of the
+// server this extension is signed in to.
+async function ownPage(sender, path) {
+  const s = await settings();
+  let page = null;
+  try { page = new URL(sender.url); } catch (e) { page = null; }
+  if (!page || !s.server || page.origin !== new URL(s.server).origin || !page.pathname.startsWith(path) || sender.frameId !== 0) {
+    throw new Error("not allowed");
+  }
+}
+
 function launcherPairURL() {
   const firefox = api.runtime.getURL("").startsWith("moz-extension:");
   return "maxzit-launcher://pair?app=passzit&browser=" + (firefox ? "firefox" : "chromium") + "&id=" + encodeURIComponent(firefox ? "passzit@maxzit.com" : api.runtime.id);
 }
 
-// syncPairScript puts pair.js on the Launcher page of the server this
-// extension is signed in to (match patterns have no port: the sender's
-// origin is checked when a request comes).
+// syncPairScript puts bridge.js on the vault and Launcher pages of the
+// server this extension is signed in to (match patterns have no port: the
+// sender's origin and path are checked when a request comes).
 async function syncPairScript() {
   const s = await settings();
   const regs = await api.scripting.getRegisteredContentScripts({ ids: [PAIR] }).catch(() => []);
-  let want = "";
-  try { if (s.server && s.token) { const u = new URL(s.server); want = u.protocol + "//" + u.hostname + "/launcher*"; } } catch (e) { want = ""; }
-  const has = want && await api.permissions.contains({ origins: [new URL(s.server).origin + "/*"] }).catch(() => false);
-  if (regs.length && (!has || regs[0].matches[0] !== want)) await api.scripting.unregisterContentScripts({ ids: [PAIR] });
-  if (has && (!regs.length || regs[0].matches[0] !== want)) {
-    await api.scripting.registerContentScripts([{ id: PAIR, js: ["pair.js"], matches: [want], runAt: "document_idle", allFrames: false }]);
+  let base = "";
+  try { if (s.server && s.token) { const u = new URL(s.server); base = u.protocol + "//" + u.hostname; } } catch (e) { base = ""; }
+  const want = base ? [base + "/launcher*", base + "/vault*"] : [];
+  const has = base && await api.permissions.contains({ origins: [new URL(s.server).origin + "/*"] }).catch(() => false);
+  const same = regs.length && JSON.stringify(regs[0].matches) === JSON.stringify(want);
+  if (regs.length && (!has || !same)) await api.scripting.unregisterContentScripts({ ids: [PAIR] });
+  if (has && !same) {
+    await api.scripting.registerContentScripts([{ id: PAIR, js: ["bridge.js"], matches: want, runAt: "document_idle", allFrames: false }]);
   }
 }
 
@@ -569,14 +583,16 @@ const handlers = {
   async settingsChanged() { await syncCapture(); await syncPairScript().catch(() => {}); await badge(); return { ok: true }; },
   // the Launcher page of the own server asks to pair this browser
   async launcherPair(msg, sender) {
-    const s = await settings();
-    let page = null;
-    try { page = new URL(sender.url); } catch (e) { page = null; }
-    if (!page || !s.server || page.origin !== new URL(s.server).origin || !page.pathname.startsWith("/launcher") || sender.frameId !== 0) {
-      throw new Error("not allowed");
-    }
+    await ownPage(sender, "/launcher");
     await api.tabs.create({ url: launcherPairURL(), openerTabId: sender.tab.id });
     return { ok: true };
+  },
+  // the vault page of the own server opens the connection of an item
+  async pageConnect(msg, sender) {
+    await ownPage(sender, "/vault");
+    if (!S.keys) throw new Error(t("Unlock the PassZit extension first."));
+    await maybeSync();
+    return await connectItem(String(msg.id || ""));
   },
   async sync() { await sync(true); return { ok: true, count: S.items.size }; },
 };
@@ -585,7 +601,7 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg || msg.type === "offscreen-clear") return false;
   // Content scripts may only report captured logins.
   const fromPage = !!sender.tab && sender.id === api.runtime.id && sender.url && !sender.url.startsWith(api.runtime.getURL(""));
-  if (sender.id !== api.runtime.id || (fromPage && msg.type !== "capture" && msg.type !== "launcherPair")) return false;
+  if (sender.id !== api.runtime.id || (fromPage && msg.type !== "capture" && msg.type !== "launcherPair" && msg.type !== "pageConnect")) return false;
   const h = handlers[msg.type];
   if (!h) return false;
   restore().then(() => h(msg, sender)).then((r) => reply({ ok: true, data: r }), (e) => reply({ ok: false, error: e.message || String(e), status: e.status || 0 }));

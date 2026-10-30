@@ -27,6 +27,7 @@ const S = {
   kind: "",           // a kind of item shown in the list (KINDS key or "fav")
   closed: new Set(),  // folder groups closed in the list
   cwd: "",            // the folder of the vault last opened in the list (new items go there)
+  showing: false,     // the details dialog of the selected item is open
   qAll: false,        // search all vaults
   vault: "",          // the vault shown with view "vault"
   q: "",
@@ -433,10 +434,87 @@ function visibleItems() {
 
 function render() {
   if (!S.keys) return;
-  const grid = el("div", { class: "vgrid", dataset: { pane: S.selected ? "detail" : "list" } },
-    renderFilters(), renderList(), el("section", { class: "vdetail panel", id: "vdetail" }, renderDetail()));
+  const grid = el("div", { class: "vgrid" }, renderFilters(), renderList());
   root.replaceChildren(grid);
+  syncDetails();
   syncEditor();
+}
+
+// The details of an item (fields, files, history, actions) open in a
+// dialog over the list; they are built again on every render.
+let detailDlg = null;
+function syncDetails() {
+  const it = S.showing ? S.items.get(S.selected) : null;
+  if (!it) {
+    S.showing = false;
+    if (detailDlg) { const d = detailDlg; detailDlg = null; d.close(); }
+    return;
+  }
+  if (!detailDlg) {
+    const d = el("dialog", { class: "dlg wide vdetaildlg" });
+    d.addEventListener("close", () => {
+      d.remove();
+      if (detailDlg !== d) return;
+      detailDlg = null;
+      if (S.showing) { S.showing = false; render(); }
+    });
+    document.body.append(d);
+    d.showModal();
+    detailDlg = d;
+  }
+  detailDlg.replaceChildren(el("div", { class: "row end" },
+    el("button", { type: "button", class: "iconbtn", "aria-label": t("Close"), title: t("Close"), onclick: () => { S.showing = false; render(); } }, icon("x"))),
+  el("div", { id: "vdetail" }, renderDetail()));
+}
+
+function showDetails(it) { S.selected = it.id; S.showing = true; render(); }
+
+// ---- opening an item (double click): a website in a new tab, a device
+// through the PassZit extension and the launcher, anything else shows
+// its details
+
+let extHere = false;
+const extWaits = new Map();
+window.addEventListener("message", (e) => {
+  if (e.source !== window || e.origin !== location.origin || !e.data) return;
+  if (e.data.type === "pz-ext-here") extHere = true;
+  if (e.data.type === "pz-connect-result" && extWaits.has(e.data.id)) {
+    const done = extWaits.get(e.data.id);
+    extWaits.delete(e.data.id);
+    done(e.data);
+  }
+});
+window.postMessage({ type: "pz-ext-ping" }, location.origin);
+
+async function connectItem(it) {
+  if (!extHere) {
+    toast(t("To open connections from here, install the PassZit extension and the launcher (Launcher in the menu)."), true);
+    return;
+  }
+  const r = await new Promise((resolve) => {
+    extWaits.set(it.id, resolve);
+    window.postMessage({ type: "pz-connect", id: it.id }, location.origin);
+    setTimeout(() => { if (extWaits.delete(it.id)) resolve({ ok: false, error: t("The PassZit extension does not answer. Is it unlocked?") }); }, 20000);
+  });
+  if (!r.ok) { toast(r.error || t("The connection could not be opened."), true); return; }
+  if (r.copy) {
+    copy(r.value, true);
+    toast(r.copy === "password" ? t("The password is on the clipboard for the login prompt (cleared in %d seconds).", Math.max(r.clip || 30, 30)) : t("The key's passphrase is on the clipboard (cleared in %d seconds).", Math.max(r.clip || 30, 30)));
+  } else {
+    toast(t("Opening %s…", (it.data.connect || {}).host || itemName(it)));
+  }
+}
+
+function openItem(it) {
+  const d = it.data;
+  if (!d || it.deleted_at) { showDetails(it); return; }
+  const k = kindOf(d);
+  if (k === "web") {
+    const href = safeHref((d.login.urls || []).find(Boolean));
+    if (href) { window.open(href, "_blank", "noopener,noreferrer"); return; }
+  }
+  if (d.connect && d.connect.tool) { connectItem(it); return; }
+  showDetails(it);
 }
 
 // The editor (and the choice of a new item's kind) opens in a dialog over
@@ -598,13 +676,37 @@ function kindBar() {
   return bar;
 }
 
+// TOOL_NAMES name the programs of connections on buttons.
+const TOOL_NAMES = { rdp: "RDP", ssh: "SSH", winscp: "WinSCP", winbox: "WinBox", vnc: "VNC", telnet: "Telnet" };
+
 function itemRow(it, depth, extra) {
   const d = it.data || {};
   const sub = [subtitle(d), extra].filter(Boolean).join(" · ");
-  const a = el("a", { href: "#", class: it.id === S.selected ? "on" : "", onclick: (ev) => { ev.preventDefault(); S.selected = it.id; S.cwd = d.folder || ""; S.editing = null; render(); } },
+  const rowBtn = (ic, label, fn) => el("button", { type: "button", class: "iconbtn sm", title: label, "aria-label": label,
+    onclick: (ev) => { ev.preventDefault(); ev.stopPropagation(); fn(); }, ondblclick: (ev) => ev.stopPropagation() }, icon(ic));
+  const acts = el("span", { class: "vacts" });
+  if (it.data && !it.deleted_at) {
+    const l = d.login || {};
+    if (d.connect && d.connect.tool) acts.append(rowBtn("terminal", t("Connect with %s", TOOL_NAMES[d.connect.tool] || d.connect.tool), () => connectItem(it)));
+    else if (kindOf(d) === "web") acts.append(rowBtn("external", t("Open"), () => openItem(it)));
+    if (l.username) acts.append(rowBtn("user", t("Copy the user name"), () => copy(l.username, false)));
+    if (l.password) acts.append(rowBtn("key", t("Copy the password"), () => { reportUse(it, "copy"); copy(l.password, true); }));
+    if (canEditItem(it)) acts.append(rowBtn("edit", t("Edit"), () => { S.selected = it.id; startEdit(it); }));
+  }
+  acts.append(rowBtn("more", t("Details"), () => showDetails(it)));
+  const a = el("a", { href: "#", class: it.id === S.selected ? "on" : "", title: t("Double-click to open"),
+    onclick: (ev) => {
+      ev.preventDefault();
+      // select without rebuilding the list, so a double click stays on this row
+      S.selected = it.id; S.cwd = d.folder || "";
+      for (const x of document.querySelectorAll("#vlist-items a.on")) x.classList.remove("on");
+      ev.currentTarget.classList.add("on");
+    },
+    ondblclick: (ev) => { ev.preventDefault(); openItem(it); },
+    onkeydown: (ev) => { if (ev.key === "Enter") { ev.preventDefault(); openItem(it); } } },
     avatar(it, ""),
     el("span", { class: "vname" }, el("b", { text: itemName(it) }), el("small", { text: sub })),
-    d.favorite ? el("span", { class: "vfav", title: t("Favorite") }, icon("star")) : null);
+    d.favorite ? el("span", { class: "vfav", title: t("Favorite") }, icon("star")) : null, acts);
   if (depth) a.style.setProperty("--depth", String(depth));
   return el("li", null, a);
 }
