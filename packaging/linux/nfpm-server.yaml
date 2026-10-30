@@ -31,6 +31,8 @@ contents:
     dst: /usr/share/doc/passzit-server/THIRD_PARTY_LICENSES.md
   - src: ./bin/pkg/passzit-server
     dst: /usr/bin/passzit-server
+  - src: ./bin/pkg/downloads/*
+    dst: /usr/share/passzit/downloads/
     file_info:
       mode: 0755
   - src: ./packaging/linux/passzit-server.service

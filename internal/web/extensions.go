@@ -23,15 +23,19 @@ type extensionsData struct {
 	Firefox         string
 }
 
-// launcherFile is the MaxZit Launcher in the downloads folder: the Windows
-// program that opens RDP, SSH, WinSCP, WinBox, VNC and Telnet for the
-// extension (the same program WatchZit uses).
-const launcherFile = "maxzit-launcher.exe"
+// Programs in the downloads folder: the MaxZit Launcher (the Windows
+// program WatchZit uses too, built in the WatchZit repository) and the
+// PassZit helper for Windows; both open RDP, SSH, WinSCP, WinBox, VNC and
+// Telnet for the extension.
+const (
+	launcherFile = "maxzit-launcher.exe"
+	helperFile   = "passzit-helper.exe"
+)
 
 // download returns the path of a file the console offers ("" when it is
 // not on this server).
 func (s *Server) download(name string) string {
-	if s.DownloadsDir == "" || name != launcherFile {
+	if s.DownloadsDir == "" || (name != launcherFile && name != helperFile) {
 		return ""
 	}
 	p := filepath.Join(s.DownloadsDir, name)
@@ -48,7 +52,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+launcherFile+`"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(p)+`"`)
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	http.ServeFile(w, r, p)
 }
@@ -130,5 +134,5 @@ func (s *Server) handleExtensionDownload(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleLauncher(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "launcher", &Page{Title: "MaxZit Launcher", Nav: "launcher", Data: struct{ Download bool }{s.download(launcherFile) != ""}})
+	s.render(w, r, http.StatusOK, "launcher", &Page{Title: "MaxZit Launcher", Nav: "launcher", Data: struct{ Launcher, Helper bool }{s.download(launcherFile) != "", s.download(helperFile) != ""}})
 }

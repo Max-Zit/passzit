@@ -365,6 +365,32 @@ async function clearClipboard() {
 
 // ---- save offers (only with the optional permission for all sites)
 
+// ---- pairing with the MaxZit Launcher from the server's Launcher page
+
+const PAIR = "pz-pair";
+
+// launcherPairURL opens the launcher's pairing for this extension; the
+// launcher asks the user before it registers the extension.
+function launcherPairURL() {
+  const firefox = api.runtime.getURL("").startsWith("moz-extension:");
+  return "maxzit-launcher://pair?app=passzit&browser=" + (firefox ? "firefox" : "chromium") + "&id=" + encodeURIComponent(firefox ? "passzit@maxzit.com" : api.runtime.id);
+}
+
+// syncPairScript puts pair.js on the Launcher page of the server this
+// extension is signed in to (match patterns have no port: the sender's
+// origin is checked when a request comes).
+async function syncPairScript() {
+  const s = await settings();
+  const regs = await api.scripting.getRegisteredContentScripts({ ids: [PAIR] }).catch(() => []);
+  let want = "";
+  try { if (s.server && s.token) { const u = new URL(s.server); want = u.protocol + "//" + u.hostname + "/launcher*"; } } catch (e) { want = ""; }
+  const has = want && await api.permissions.contains({ origins: [new URL(s.server).origin + "/*"] }).catch(() => false);
+  if (regs.length && (!has || regs[0].matches[0] !== want)) await api.scripting.unregisterContentScripts({ ids: [PAIR] });
+  if (has && (!regs.length || regs[0].matches[0] !== want)) {
+    await api.scripting.registerContentScripts([{ id: PAIR, js: ["pair.js"], matches: [want], runAt: "document_idle", allFrames: false }]);
+  }
+}
+
 const CAPTURE = "pz-capture";
 
 async function syncCapture() {
@@ -457,6 +483,7 @@ const handlers = {
     return { server: s.server, email: s.email, signedIn: !!s.token, unlocked: !!S.keys, pending: S.pending.length, offerSave: s.offerSave };
   },
   async unlocked(msg) {
+    syncPairScript().catch(() => {});
     S.keys = { accountKey: pz.unb64u(msg.keys.a), privateKey: pz.unb64u(msg.keys.p), publicKey: pz.unb64u(msg.keys.u) };
     S.lockMinutes = msg.lock || 15;
     S.clipSeconds = msg.clip || 30;
@@ -539,7 +566,18 @@ const handlers = {
   },
   async pending(msg) { await savePending(msg.index, msg.action); return { ok: true }; },
   async capture(msg, sender) { await capture(msg, sender); return { ok: true }; },
-  async settingsChanged() { await syncCapture(); await badge(); return { ok: true }; },
+  async settingsChanged() { await syncCapture(); await syncPairScript().catch(() => {}); await badge(); return { ok: true }; },
+  // the Launcher page of the own server asks to pair this browser
+  async launcherPair(msg, sender) {
+    const s = await settings();
+    let page = null;
+    try { page = new URL(sender.url); } catch (e) { page = null; }
+    if (!page || !s.server || page.origin !== new URL(s.server).origin || !page.pathname.startsWith("/launcher") || sender.frameId !== 0) {
+      throw new Error("not allowed");
+    }
+    await api.tabs.create({ url: launcherPairURL(), openerTabId: sender.tab.id });
+    return { ok: true };
+  },
   async sync() { await sync(true); return { ok: true, count: S.items.size }; },
 };
 
@@ -547,7 +585,7 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg || msg.type === "offscreen-clear") return false;
   // Content scripts may only report captured logins.
   const fromPage = !!sender.tab && sender.id === api.runtime.id && sender.url && !sender.url.startsWith(api.runtime.getURL(""));
-  if (sender.id !== api.runtime.id || (fromPage && msg.type !== "capture")) return false;
+  if (sender.id !== api.runtime.id || (fromPage && msg.type !== "capture" && msg.type !== "launcherPair")) return false;
   const h = handlers[msg.type];
   if (!h) return false;
   restore().then(() => h(msg, sender)).then((r) => reply({ ok: true, data: r }), (e) => reply({ ok: false, error: e.message || String(e), status: e.status || 0 }));
@@ -576,6 +614,6 @@ api.tabs.onUpdated.addListener((id, info, tab) => {
   if (info.url || info.status === "complete") restore().then(() => tabBadge(tab)).catch(() => {});
 });
 
-api.runtime.onInstalled.addListener(() => { syncCapture().catch(() => {}); });
-api.runtime.onStartup.addListener(() => { syncCapture().catch(() => {}); });
+api.runtime.onInstalled.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); });
+api.runtime.onStartup.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); });
 api.permissions.onRemoved.addListener(() => { syncCapture().catch(() => {}); });

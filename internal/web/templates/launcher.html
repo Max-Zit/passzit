@@ -1,4 +1,5 @@
 {{template "app" .}}
+{{define "scripts"}}<script type="module" src="/static/pz/launcher.js?v={{.Asset}}"></script>{{end}}
 {{define "content"}}
 <h1>{{.T "MaxZit Launcher"}}</h1>
 <p class="muted">{{.T "A browser cannot start programs on your computer. The MaxZit Launcher is a small Windows program that opens the remote connections of your logins — RDP, SSH, WinSCP, WinBox, VNC, Telnet — signed in with the password from your vault. WatchZit uses the same program, so one installation serves both. It installs for your Windows user, without administrator rights."}}</p>
@@ -6,13 +7,17 @@
   <ol class="steps">
     <li>
       <h3>{{.T "Install it on your computer"}}</h3>
-      {{if .Data.Download}}<p><a class="btn primary" href="/downloads/maxzit-launcher.exe" download>{{template "icon" "download"}}{{.T "Download the MaxZit Launcher"}}</a></p>
-      <p class="small muted">{{.T "Run the downloaded file once: it installs itself for your Windows user. Windows may warn that the publisher is unknown; choose More info → Run anyway."}}</p>
-      {{else}}<p class="small muted">{{.T "The launcher is not on this server yet. Until then, use the PassZit helper (see the user guide)."}}</p>{{end}}
+      {{if .Data.Launcher}}<p><a class="btn primary" href="/downloads/maxzit-launcher.exe" download>{{template "icon" "download"}}{{.T "Download the MaxZit Launcher"}}</a></p>
+      <p class="small muted">{{.T "Run the downloaded file once: it installs itself for your Windows user. Windows may warn that the publisher is unknown; choose More info → Run anyway."}}</p>{{end}}
+      {{if .Data.Helper}}<p><a class="btn {{if .Data.Launcher}}secondary{{else}}primary{{end}}" href="/downloads/passzit-helper.exe" download>{{template "icon" "download"}}{{.T "Download the PassZit helper"}}</a></p>
+      <p class="small muted">{{.T "The PassZit helper opens the same connections for PassZit alone. Put it in a folder that stays; the extension menu shows the one command that registers it."}}</p>{{end}}
+      {{if not (or .Data.Launcher .Data.Helper)}}<p class="small muted">{{.T "The launcher is not on this server yet. Until then, use the PassZit helper (see the user guide)."}}</p>{{end}}
     </li>
     <li>
       <h3>{{.T "Pair it with the PassZit extension"}}</h3>
-      <p class="small muted">{{.T "Click the PassZit icon in the browser, open the menu (≡) and click Pair with the MaxZit Launcher. The launcher asks whether this extension may open connections with your passwords: allow it. Do this once in each browser you use."}}</p>
+      <p><button type="button" class="btn secondary" id="pz-pair">{{template "icon" "link"}}{{.T "Pair this browser"}}</button></p>
+      <p class="small muted" id="pz-pair-state" role="status"></p>
+      <p class="small muted">{{.T "The launcher asks whether the PassZit extension of this browser may open connections with your passwords: allow it. Do this once in each browser you use. In WatchZit you pair the launcher with the WatchZit server separately — pair it with the products you use, one is enough."}}</p>
       <p><a href="/extensions">{{.T "The browser extension is not installed yet?"}}</a></p>
     </li>
     <li>

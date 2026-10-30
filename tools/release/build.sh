@@ -34,6 +34,12 @@ export VERSION=$V
 for arch in amd64 arm64; do
   rm -rf bin/pkg && mkdir -p bin/pkg
   cp "dist/passzit-server-$V-linux-$arch" bin/pkg/passzit-server
+  # programs users download from the console (Launcher page): the PassZit
+  # helper for Windows and, when given, the MaxZit Launcher from the
+  # WatchZit release (MAXZIT_LAUNCHER=path/to/maxzit-launcher-…-windows-amd64.exe)
+  mkdir -p bin/pkg/downloads
+  cp "dist/passzit-helper-$V-windows-amd64.exe" bin/pkg/downloads/passzit-helper.exe
+  if [ -n "${MAXZIT_LAUNCHER:-}" ]; then cp "$MAXZIT_LAUNCHER" bin/pkg/downloads/maxzit-launcher.exe; fi
   export ARCH=$arch
   rm -f "dist/passzit-server_${V}_$arch.deb" dist/passzit-server-"${V}"-1.*.rpm.$arch
   $NFPM package --config packaging/linux/nfpm-server.yaml --packager deb --target dist/ >/dev/null
