@@ -370,11 +370,20 @@ async function showMenu(st) {
   const helperState = el("p", { class: "small muted" });
   const firefox = typeof browser !== "undefined" && api.runtime.getURL("").startsWith("moz-extension:");
   const installCmd = firefox ? "passzit-helper install --firefox" : "passzit-helper install --chrome-id " + api.runtime.id;
+  // The MaxZit Launcher (shared with WatchZit) registers this extension
+  // after the user allows it in the launcher's own window.
+  const pairURL = "maxzit-launcher://pair?app=passzit&browser=" + (firefox ? "firefox" : "chromium") + "&id=" + encodeURIComponent(firefox ? "passzit@maxzit.com" : api.runtime.id);
+  const pairBtn = el("button", { type: "button", class: "secondary", onclick: async () => {
+    await api.tabs.create({ url: pairURL });
+    window.close();
+  } }, t("Pair with the MaxZit Launcher"));
   const checkHelper = async () => {
     if (!helper.checked) { helperState.textContent = ""; return; }
     const r = await bg("helperPing").catch(() => ({ ok: false }));
     helperState.replaceChildren(r && r.ok ? t("The PassZit helper %s answers.", r.version || "") : t("The PassZit helper is not installed yet. Install it, then run once:"),
-      r && r.ok ? "" : el("code", { class: "cmd", text: installCmd }));
+      r && r.ok ? "" : el("code", { class: "cmd", text: installCmd }),
+      r && r.ok ? "" : el("span", { class: "small", text: " " + t("Or, on Windows, install the MaxZit Launcher and pair it:") }),
+      r && r.ok ? "" : pairBtn);
   };
   helper.addEventListener("change", async () => {
     showErr(err, "");

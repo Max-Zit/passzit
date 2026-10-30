@@ -21,7 +21,6 @@ type extensionsData struct {
 	Version, Server string
 	Chromium        string // file names
 	Firefox         string
-	Launcher        bool // the MaxZit Launcher is in the downloads folder
 }
 
 // launcherFile is the MaxZit Launcher in the downloads folder: the Windows
@@ -70,7 +69,7 @@ func extensionFile(target, version string) string {
 func (s *Server) handleExtensions(w http.ResponseWriter, r *http.Request) {
 	v := s.extensionVersion()
 	s.render(w, r, http.StatusOK, "extensions", &Page{Title: "Browser extensions", Nav: "extensions",
-		Data: extensionsData{Version: v, Server: s.publicBase(r), Chromium: extensionFile("chromium", v), Firefox: extensionFile("firefox", v), Launcher: s.download(launcherFile) != ""}})
+		Data: extensionsData{Version: v, Server: s.publicBase(r), Chromium: extensionFile("chromium", v), Firefox: extensionFile("firefox", v)}})
 }
 
 var extZips struct {
@@ -128,4 +127,8 @@ func (s *Server) handleExtensionDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.notFound(w, r)
+}
+
+func (s *Server) handleLauncher(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, http.StatusOK, "launcher", &Page{Title: "MaxZit Launcher", Nav: "launcher", Data: struct{ Download bool }{s.download(launcherFile) != ""}})
 }

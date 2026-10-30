@@ -23,6 +23,7 @@
     <a href="/generator" class="{{if eq .Nav "generator"}}on{{end}}">{{template "icon" "dice"}}{{.T "Password generator"}}</a>
     <a href="/account" class="{{if eq .Nav "account"}}on{{end}}">{{template "icon" "key"}}{{.T "My account"}}</a>
     <a href="/extensions" class="{{if eq .Nav "extensions"}}on{{end}}">{{template "icon" "puzzle"}}{{.T "Browser extensions"}}</a>
+    <a href="/launcher" class="{{if eq .Nav "launcher"}}on{{end}}">{{template "icon" "terminal"}}{{.T "Launcher"}}</a>
     <a href="/docs" class="{{if eq .Nav "docs"}}on{{end}}">{{template "icon" "book"}}{{.T "User guide"}}</a>
     {{if .User.IsAdmin}}
     <span class="navlabel">{{.T "Administration"}}</span>

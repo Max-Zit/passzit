@@ -605,7 +605,7 @@ func TestPagesRender(t *testing.T) {
 		t.Fatalf("setup page: %d", code)
 	}
 	admin := e.setupAdmin()
-	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/settings/version", "/settings/backup", "/settings/directory", "/groups", "/approvals", "/docs", "/extensions"}
+	pages := []string{"/vault", "/generator", "/account", "/users", "/users/1", "/audit", "/settings/policy", "/settings/security", "/settings/network", "/settings/version", "/settings/backup", "/settings/directory", "/groups", "/approvals", "/docs", "/extensions", "/launcher"}
 	for _, p := range DocPages {
 		pages = append(pages, "/docs/"+p.Slug)
 	}
@@ -1116,7 +1116,7 @@ func TestExtensionDownload(t *testing.T) {
 		t.Fatalf("other version: %d", code)
 	}
 	// the MaxZit Launcher: offered only when it is in the downloads folder
-	if strings.Contains(page, "/downloads/maxzit-launcher.exe") {
+	if _, lp := c.get("/launcher"); strings.Contains(lp, "/downloads/maxzit-launcher.exe") {
 		t.Fatal("launcher offered without a file")
 	}
 	e.srv.DownloadsDir = t.TempDir()
@@ -1126,7 +1126,7 @@ func TestExtensionDownload(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(e.srv.DownloadsDir, "other.exe"), []byte("MZ other"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, page := c.get("/extensions"); !strings.Contains(page, "/downloads/maxzit-launcher.exe") {
+	if _, page := c.get("/launcher"); !strings.Contains(page, "/downloads/maxzit-launcher.exe") {
 		t.Fatal("launcher not offered")
 	}
 	if code, body := c.get("/downloads/maxzit-launcher.exe"); code != http.StatusOK || body != "MZ launcher" {

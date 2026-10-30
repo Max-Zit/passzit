@@ -27,9 +27,7 @@
 <section class="panel">
   <h2>{{template "icon" "terminal"}}{{$.T "MaxZit Launcher (Windows)"}}</h2>
   <p>{{$.T "Opens RDP, SSH, WinSCP, WinBox, VNC and Telnet connections of your logins from the extension. It is the same program WatchZit uses; one installation serves both."}}</p>
-  {{if .Launcher}}<p><a class="btn primary" href="/downloads/maxzit-launcher.exe" download>{{template "icon" "download"}}{{$.T "Download the MaxZit Launcher"}}</a></p>
-  <p class="small muted">{{$.T "Run it once: it installs itself for your Windows user, no administrator rights needed."}}</p>
-  {{else}}<p class="small muted">{{$.T "The launcher is not on this server yet. Until then, use the PassZit helper (see the user guide)."}}</p>{{end}}
+  <p><a class="btn secondary" href="/launcher">{{template "icon" "terminal"}}{{$.T "Download and pair the launcher"}}</a></p>
 </section>
 <section class="panel">
   <h2>{{$.T "Sign in"}}</h2>

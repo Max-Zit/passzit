@@ -1,0 +1,35 @@
+{{template "app" .}}
+{{define "content"}}
+<h1>{{.T "MaxZit Launcher"}}</h1>
+<p class="muted">{{.T "A browser cannot start programs on your computer. The MaxZit Launcher is a small Windows program that opens the remote connections of your logins — RDP, SSH, WinSCP, WinBox, VNC, Telnet — signed in with the password from your vault. WatchZit uses the same program, so one installation serves both. It installs for your Windows user, without administrator rights."}}</p>
+<section class="panel">
+  <ol class="steps">
+    <li>
+      <h3>{{.T "Install it on your computer"}}</h3>
+      {{if .Data.Download}}<p><a class="btn primary" href="/downloads/maxzit-launcher.exe" download>{{template "icon" "download"}}{{.T "Download the MaxZit Launcher"}}</a></p>
+      <p class="small muted">{{.T "Run the downloaded file once: it installs itself for your Windows user. Windows may warn that the publisher is unknown; choose More info → Run anyway."}}</p>
+      {{else}}<p class="small muted">{{.T "The launcher is not on this server yet. Until then, use the PassZit helper (see the user guide)."}}</p>{{end}}
+    </li>
+    <li>
+      <h3>{{.T "Pair it with the PassZit extension"}}</h3>
+      <p class="small muted">{{.T "Click the PassZit icon in the browser, open the menu (≡) and click Pair with the MaxZit Launcher. The launcher asks whether this extension may open connections with your passwords: allow it. Do this once in each browser you use."}}</p>
+      <p><a href="/extensions">{{.T "The browser extension is not installed yet?"}}</a></p>
+    </li>
+    <li>
+      <h3>{{.T "Open connections"}}</h3>
+      <p class="small muted">{{.T "Logins with a remote connection get a terminal button in the extension. Click it and confirm: the launcher opens the program, signed in."}}</p>
+    </li>
+  </ol>
+</section>
+<section class="panel">
+  <h2>{{.T "Programs it starts"}}</h2>
+  <ul class="small">
+    <li><b>RDP</b> — {{.T "the Windows Remote Desktop client, signed in."}}</li>
+    <li><b>SSH</b> — {{.T "PuTTY when it is installed (signed in), otherwise the SSH client built into Windows."}}</li>
+    <li><b>WinSCP</b>, <b>VNC</b>, <b>Telnet</b> — {{.T "they ask for the password themselves: it is on the clipboard for them."}}</li>
+    <li><b>WinBox</b> — {{.T "winbox64.exe from Program Files, Downloads or the Desktop."}}</li>
+  </ul>
+  <p class="small muted">{{.T "The launcher finds the usual programs by itself. Programs in other places are set once on the computer, in the launcher's settings — for WatchZit and PassZit together."}}</p>
+  <p><a href="/docs/connections">{{.T "More in the user guide"}}</a></p>
+</section>
+{{end}}

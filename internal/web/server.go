@@ -370,6 +370,7 @@ func (s *Server) Handler() http.Handler {
 	app("GET /extensions", s.handleExtensions)
 	app("GET /extensions/{file}", s.handleExtensionDownload)
 	app("GET /downloads/{file}", s.handleDownload)
+	app("GET /launcher", s.handleLauncher)
 	app("GET /account", s.handleAccount)
 	app("POST /account/profile", s.handleAccountProfile)
 	app("POST /account/codes", s.handleAccountCodes)
