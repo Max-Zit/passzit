@@ -4,7 +4,7 @@ Status: **approved by Stefan on 2026-10-29** (accounts only by invitation; 2FA m
 
 PassZit is a self-hosted password manager: a Go server with PostgreSQL, a web
 vault and admin console in the browser, and browser extensions. It follows the
-layout of WatchZit/ControlZit (Go server, html/template console, JSON i18n
+layout of WatchZit/RMMZit (Go server, html/template console, JSON i18n
 catalogs, numbered SQL migrations, embedded PostgreSQL for development) and
 BackupZit's release machinery (signed self-update, update channels, appliance
 images, Linux packages). All code is written in this repository; nothing is
@@ -82,7 +82,7 @@ item         = JSON (name, URLs, user, password, notes, TOTP secret, custom fiel
   records every request body the server receives and fails if a known plaintext
   (password, name, URL, note) appears in it.
 
-## 3. Server security (from BackupZit/ControlZit/WatchZit)
+## 3. Server security (from BackupZit/RMMZit/WatchZit)
 
 HTTPS only; argon2id; TOTP 2FA with recovery codes (later WebAuthn/passkeys);
 login rate limits and lockouts, `--unblock-ip`; IP allow-list; roles (admin,
@@ -150,7 +150,7 @@ Every change bumps a revision so clients sync only what changed.
 
 ## 7. What is reused from the other products
 
-Taken from WatchZit/ControlZit (Stefan's own code, same license) and adapted:
+Taken from WatchZit/RMMZit (Stefan's own code, same license) and adapted:
 auth (argon2id, TOTP), store/migrations, web layout/render/i18n tooling,
 netacl, tlsutil, logfile, testdb, update + relsign + helper, packaging
 (nfpm, systemd, install.sh), appliance image builder, CI/security workflows,

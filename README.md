@@ -33,7 +33,7 @@ go build -o passzit-server ./cmd/passzit-server
 
 Open `https://127.0.0.1:8443`, enter the setup token from `./data/setup-token.txt` and create the first administrator. Tests: `go test ./...` (the browser-crypto test runs when Chrome or Edge is installed).
 
-PassZit is made by [MaxZit](https://maxzit.com), like [BackupZit](https://github.com/Max-Zit/backupzit), [ControlZit](https://github.com/Max-Zit/controlzit) and [WatchZit](https://github.com/Max-Zit/watchzit).
+PassZit is made by [MaxZit](https://maxzit.com), like [BackupZit](https://github.com/Max-Zit/backupzit), [RMMZit](https://github.com/Max-Zit/rmmzit) and [WatchZit](https://github.com/Max-Zit/watchzit).
 
 ## License
 
