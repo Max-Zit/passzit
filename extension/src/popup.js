@@ -380,7 +380,7 @@ async function showMenu(st) {
   const checkHelper = async () => {
     if (!helper.checked) { helperState.textContent = ""; return; }
     const r = await bg("helperPing").catch(() => ({ ok: false }));
-    helperState.replaceChildren(r && r.ok ? t("The PassZit helper %s answers.", r.version || "") : t("The PassZit helper is not installed yet. Install it, then run once:"),
+    helperState.replaceChildren(r && r.ok ? t("The program for connections answers (%s).", r.version || "?") : t("The PassZit helper is not installed yet. Install it, then run once:"),
       r && r.ok ? "" : el("code", { class: "cmd", text: installCmd }),
       r && r.ok ? "" : el("span", { class: "small", text: " " + t("Or, on Windows, install the MaxZit Launcher and pair it:") }),
       r && r.ok ? "" : pairBtn);
@@ -402,7 +402,7 @@ async function showMenu(st) {
     el("label", { class: "check" }, save, t("Offer to save new and changed logins")),
     el("p", { class: "small muted", text: t("For this the extension needs to see the sign-in forms of the sites you visit. Passwords never leave your browser unencrypted.") }),
     el("label", { class: "check" }, count, t("Show on the PassZit icon how many logins a website has")),
-    el("label", { class: "check" }, helper, t("Open connections (RDP, SSH, WinBox) with the PassZit helper")),
+    el("label", { class: "check" }, helper, t("Open connections (RDP, SSH, WinSCP, WinBox, VNC, Telnet) with the MaxZit Launcher or the PassZit helper")),
     helperState,
     el("button", { type: "button", class: "secondary", onclick: openVault }, t("Open the web vault")),
     el("button", { type: "button", class: "ghost", onclick: async () => { await bg("logout"); start(); } }, t("Sign out of this browser")),

@@ -28,6 +28,20 @@ go run ./tools/extpack -version "$V" >/dev/null
 go run ./tools/licenses -out THIRD_PARTY_LICENSES.md "dist/passzit-server-$V-linux-amd64" "dist/passzit-server-$V-linux-arm64" "dist/passzit-server-$V-windows-amd64.exe" "dist/passzit-helper-$V-windows-amd64.exe" ./tools/argon2wasm ./tools/qrwasm
 cp THIRD_PARTY_LICENSES.md "dist/THIRD_PARTY_LICENSES-$V.md"
 
+# The MaxZit Launcher comes from the newest WatchZit release (built there);
+# MAXZIT_LAUNCHER=path overrides it. Without it the packages offer only the
+# PassZit helper.
+LAUNCHER=${MAXZIT_LAUNCHER:-}
+if [ -z "$LAUNCHER" ]; then
+  rm -f dist/maxzit-launcher-*-windows-amd64.exe
+  if gh release download --repo Max-Zit/watchzit --pattern "maxzit-launcher-*-windows-amd64.exe" --dir dist >/dev/null 2>&1; then
+    LAUNCHER=$(ls dist/maxzit-launcher-*-windows-amd64.exe | head -1)
+    echo "MaxZit Launcher: $LAUNCHER"
+  else
+    echo "note: the MaxZit Launcher could not be downloaded from the WatchZit release; packages offer only the PassZit helper"
+  fi
+fi
+
 # Linux packages of the server.
 NFPM="go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.0"
 export VERSION=$V
@@ -39,7 +53,7 @@ for arch in amd64 arm64; do
   # WatchZit release (MAXZIT_LAUNCHER=path/to/maxzit-launcher-…-windows-amd64.exe)
   mkdir -p bin/pkg/downloads
   cp "dist/passzit-helper-$V-windows-amd64.exe" bin/pkg/downloads/passzit-helper.exe
-  if [ -n "${MAXZIT_LAUNCHER:-}" ]; then cp "$MAXZIT_LAUNCHER" bin/pkg/downloads/maxzit-launcher.exe; fi
+  if [ -n "$LAUNCHER" ]; then cp "$LAUNCHER" bin/pkg/downloads/maxzit-launcher.exe; fi
   export ARCH=$arch
   rm -f "dist/passzit-server_${V}_$arch.deb" dist/passzit-server-"${V}"-1.*.rpm.$arch
   $NFPM package --config packaging/linux/nfpm-server.yaml --packager deb --target dist/ >/dev/null
