@@ -68,6 +68,18 @@ try {
   step("icon shows the login count", badgeText === "1", badgeText);
   await saveSettings({ siteBadge: false });
   await bg("settingsChanged");
+  // the bridge script answers on the server's own Launcher page
+  const regs = await api.scripting.getRegisteredContentScripts().catch((e) => [{ id: "error " + e.message }]);
+  step("bridge registered", regs.some((r) => r.id === "pz-bridge"), JSON.stringify(regs.map((r) => [r.id, r.matches])));
+  const probe = await openTab(server + "/launcher-probe");
+  let title = "";
+  for (let i = 0; i < 30 && title !== "here"; i++) { await sleep(100); title = (await api.tabs.get(probe.id)).title; }
+  step("bridge answers on the Launcher page", title === "here", title);
+  // the same server under its other loopback name (localhost ↔ 127.0.0.1)
+  const twin = await openTab(server.replace("127.0.0.1", "localhost") + "/launcher-probe");
+  let title2 = "";
+  for (let i = 0; i < 30 && title2 !== "here"; i++) { await sleep(100); title2 = (await api.tabs.get(twin.id)).title; }
+  step("bridge answers under localhost too", title2 === "here", title2);
   // another site: refused
   const tab2 = await openTab(other);
   await attempt("fill refused on another site", async () => {

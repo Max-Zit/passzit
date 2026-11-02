@@ -55,6 +55,19 @@ export function normServer(input) {
   return u.origin;
 }
 
+// sameServer lists the origins of one server: on this computer localhost
+// and 127.0.0.1 (same scheme and port) are the same server, and people
+// open the console under either name.
+export function sameServer(origin) {
+  let u;
+  try { u = new URL(origin); } catch (e) { return []; }
+  const twin = { localhost: "127.0.0.1", "127.0.0.1": "localhost" }[u.hostname];
+  if (!twin) return [u.origin];
+  const v = new URL(u.origin);
+  v.hostname = twin;
+  return [u.origin, v.origin];
+}
+
 export async function call(server, token, method, path, body) {
   const opt = { method, headers: {}, cache: "no-store", credentials: "omit" };
   if (token) opt.headers.Authorization = "Bearer " + token;

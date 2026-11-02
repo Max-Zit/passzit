@@ -2,7 +2,7 @@
 // search, generator, save offers and settings. The master password is used
 // only here, to derive keys; it is never stored or sent.
 import { generate, entropy, loadOptions, saveOptions } from "./pz/generator.js";
-import { api, settings, saveSettings, loadTexts, t, normServer, deviceName } from "./ext.js";
+import { api, settings, saveSettings, loadTexts, t, normServer, deviceName, sameServer } from "./ext.js";
 import { bg, signIn, secondFactor, unlock } from "./client.js";
 import { readQR, authenticatorKeys } from "./pz/qr.js";
 import { parse as totpParse } from "./pz/totp.js";
@@ -95,7 +95,7 @@ function showSignIn(st) {
     if (!origin) { showErr(err, t("Enter the address of your PassZit server, e.g. https://vault.example.com.")); return; }
     // The permission request must be the first thing in the click.
     let granted = false;
-    try { granted = await api.permissions.request({ origins: [origin + "/*"] }); } catch (e) { granted = false; }
+    try { granted = await api.permissions.request({ origins: sameServer(origin).map((o) => o + "/*") }); } catch (e) { granted = false; }
     if (!granted) { showErr(err, t("Without this permission the extension cannot reach your server.")); return; }
     go.disabled = true;
     go.textContent = t("Deriving the keys from the master password…");

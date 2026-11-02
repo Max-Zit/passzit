@@ -3,7 +3,7 @@
 // it closes), syncs the encrypted vault, finds logins for the open site and
 // fills them into the page when the user asks.
 import * as pz from "./pz/crypto.js";
-import { api, settings, saveSettings, call, loadTexts, t } from "./ext.js";
+import { api, settings, saveSettings, call, loadTexts, t, sameServer } from "./ext.js";
 import { match, parse } from "./domain.js";
 import { parse as totpParse, code as totpCode } from "./pz/totp.js";
 
@@ -378,7 +378,7 @@ async function ownPage(sender, path) {
   const s = await settings();
   let page = null;
   try { page = new URL(sender.url); } catch (e) { page = null; }
-  if (!page || !s.server || page.origin !== new URL(s.server).origin || !page.pathname.startsWith(path) || sender.frameId !== 0) {
+  if (!page || !s.server || !sameServer(s.server).includes(page.origin) || !page.pathname.startsWith(path) || sender.frameId !== 0) {
     throw new Error("not allowed");
   }
 }
@@ -394,10 +394,10 @@ function launcherPairURL() {
 async function syncPairScript() {
   const s = await settings();
   const regs = await api.scripting.getRegisteredContentScripts({ ids: [PAIR] }).catch(() => []);
-  let base = "";
-  try { if (s.server && s.token) { const u = new URL(s.server); base = u.protocol + "//" + u.hostname; } } catch (e) { base = ""; }
-  const want = base ? [base + "/launcher*", base + "/vault*"] : [];
-  const has = base && await api.permissions.contains({ origins: [new URL(s.server).origin + "/*"] }).catch(() => false);
+  const origins = s.server && s.token ? sameServer(s.server) : [];
+  const want = [];
+  for (const o of origins) { const u = new URL(o); want.push(u.protocol + "//" + u.hostname + "/launcher*", u.protocol + "//" + u.hostname + "/vault*"); }
+  const has = origins.length && await api.permissions.contains({ origins: [origins[0] + "/*"] }).catch(() => false);
   const same = regs.length && JSON.stringify(regs[0].matches) === JSON.stringify(want);
   if (regs.length && (!has || !same)) await api.scripting.unregisterContentScripts({ ids: [PAIR] });
   if (has && !same) {

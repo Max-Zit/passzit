@@ -70,6 +70,10 @@ func newExtFixture(t *testing.T) *extFixture {
 		to, _ := json.Marshal(r.FormValue("to"))
 		_, _ = io.WriteString(w, "<!doctype html><script>location.href = "+string(to)+";</script>")
 	})
+	// a page under /launcher of the PassZit server: the extension's bridge script must answer there
+	mux.HandleFunc("/launcher-probe", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `<!doctype html><title>probe</title><script>addEventListener("message", (e) => { if (e.data && e.data.type === "pz-ext-here") document.title = "here"; }); setTimeout(() => postMessage({ type: "pz-ext-ping" }, location.origin), 300);</script>`)
+	})
 	mux.HandleFunc("/testsite/done", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "ok") })
 	mux.HandleFunc("/harness-result", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
