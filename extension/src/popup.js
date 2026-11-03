@@ -76,6 +76,7 @@ async function start() {
   menuBtn.hidden = !st.signedIn;
   if (!st.signedIn) return showSignIn(st);
   if (!st.unlocked) return showUnlock(st);
+  if (passkeyRequest) return showPasskey(passkeyRequest);
   // the window that opened for "Open with" of a MaxZit console closes after
   // the unlock; the connection opens by itself
   if (openRequest) { window.close(); return; }
@@ -83,6 +84,31 @@ async function start() {
 }
 
 const openRequest = new URLSearchParams(location.search).get("unlock") === "open";
+const passkeyRequest = new URLSearchParams(location.search).get("passkey") || "";
+
+// showPasskey: a website asks for a passkey; the user decides here (the
+// page cannot see or press these buttons).
+async function showPasskey(id) {
+  const err = errBox();
+  let info;
+  try { info = await bg("passkeyPending", { id }); } catch (e) { app.replaceChildren(el("div", { class: "err", text: e.message })); return; }
+  if (info.locked) return start();
+  const decide = async (choice, itemId) => {
+    try { await bg("passkeyDecide", { id, choice, itemId }); window.close(); } catch (e) { showErr(err, e); }
+  };
+  const other = el("button", { type: "button", class: "ghost", onclick: () => decide("other") }, t("Use another device or the browser"));
+  const head = [el("h1", { text: info.op === "create" ? t("Save a passkey") : t("Sign in with a passkey") }),
+    el("p", { class: "small" }, el("b", { text: info.rpName }), " ", el("span", { class: "muted", text: info.origin }))];
+  if (info.op === "create") {
+    app.replaceChildren(el("div", { class: "menu" }, ...head, err,
+      el("p", { class: "small", text: t("PassZit keeps the passkey for %s in your vault, encrypted, and signs in with it in all your browsers.", info.userName || info.rpId) }),
+      el("button", { type: "button", class: "primary", onclick: () => decide("save") }, icon("key"), t("Save in PassZit")), other));
+    return;
+  }
+  app.replaceChildren(el("div", { class: "menu" }, ...head, err,
+    ...info.list.map((p) => el("button", { type: "button", class: "primary", onclick: () => decide("use", p.id) }, icon("key"), t("Sign in as %s", p.user || p.name))),
+    other));
+}
 
 function showSignIn(st) {
   const err = errBox();
@@ -443,6 +469,19 @@ async function showMenu(st) {
     } }, t("Download the MaxZit Launcher"));
     helperState.replaceChildren(t("Install the MaxZit Launcher on this computer and pair it with this browser."), page, pairBtn);
   };
+  // passkeys of websites in the vault (needs all sites, like offering to save)
+  const pkBox = el("input", { type: "checkbox" });
+  pkBox.checked = !!s.passkeys;
+  pkBox.addEventListener("change", async () => {
+    showErr(err, "");
+    if (pkBox.checked) {
+      let ok = false;
+      try { ok = await api.permissions.request({ origins: ["https://*/*", "http://*/*"] }); } catch (e) { ok = false; }
+      if (!ok) { pkBox.checked = false; showErr(err, t("For passkeys the extension must answer on the websites you sign in to. The browser did not allow it.")); return; }
+    }
+    await saveSettings({ passkeys: pkBox.checked });
+    await bg("settingsChanged");
+  });
   // MaxZit consoles (WatchZit) whose "Open with" uses the logins of the vault
   const consoles = el("div", { class: "consoles" });
   const showConsoles = async () => {
@@ -475,6 +514,8 @@ async function showMenu(st) {
     el("label", { class: "check" }, save, t("Offer to save new and changed logins")),
     el("p", { class: "small muted", text: t("For this the extension needs to see the sign-in forms of the sites you visit. Passwords never leave your browser unencrypted.") }),
     el("label", { class: "check" }, count, t("Show on the PassZit icon how many logins a website has")),
+    el("label", { class: "check" }, pkBox, t("Use PassZit for passkeys")),
+    el("p", { class: "small muted", text: t("Websites that offer a passkey can save it in PassZit and sign in with it; you confirm each time in a PassZit window. Without PassZit the browser's own passkeys answer.") }),
     el("p", { class: "small" }, el("b", { text: t("Connections (RDP, SSH, WinSCP, WinBox, VNC, Telnet)") })),
     helperState,
     el("p", { class: "small" }, el("b", { text: t("MaxZit consoles (WatchZit)") })),

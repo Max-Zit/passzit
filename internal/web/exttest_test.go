@@ -77,6 +77,10 @@ func newExtFixture(t *testing.T) *extFixture {
 		_, _ = io.WriteString(w, `<!doctype html><title>probe</title><script>addEventListener("message", (e) => { if (e.data && e.data.type === "pz-ext-here") document.title = "here"; }); setTimeout(() => postMessage({ type: "pz-ext-ping" }, location.origin), 300);</script>`)
 	})
 	// a page of a MaxZit console (WatchZit) the user added in the extension
+	// a website that makes and uses a passkey
+	mux.HandleFunc("/passkey-probe", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `<!doctype html><title>passkey probe</title>`)
+	})
 	mux.HandleFunc("/console-probe", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `<!doctype html><title>console probe</title>`)
 	})
@@ -173,8 +177,8 @@ func (f *extFixture) check(t *testing.T) {
 	}
 	// the saved login reached the server, encrypted
 	extra, _ := strconv.Atoi(f.query.Get("extra"))
-	if s := f.c.sync(0); len(s.Items) != 4+extra {
-		t.Errorf("server has %d items, want %d", len(s.Items), 4+extra)
+	if s := f.c.sync(0); len(s.Items) != 5+extra {
+		t.Errorf("server has %d items, want %d", len(s.Items), 5+extra)
 	}
 }
 

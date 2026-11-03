@@ -13,6 +13,7 @@ PassZit has no central service. The extension talks only to **the PassZit server
 - **Unlocked keys** stay in the browser's session memory until you lock the vault or close the browser.
 - **The current page's address** is compared with your logins in the browser, to offer the right login. It is not sent anywhere.
 - **Page content:** when you fill or save a login, the extension reads and writes only the login fields of the page you are on. Saving a new login sends it, encrypted, to your server.
+- **Passkeys** (only with *Use PassZit for passkeys* switched on): a small script on websites passes their passkey requests to the extension, which asks you in its own window. A passkey you save is a vault item, encrypted like any other; its private key is used only inside the extension, and the website receives only the signature it asked for.
 - **Screenshot of the visible tab:** only when you choose *Scan QR code* to add a one-time code. The image is read in the browser and not stored or sent.
 - **Remote connections:** when you open an RDP, SSH or similar item, the extension passes the connection to the MaxZit Launcher or PassZit helper on your computer through native messaging, after you paired them.
 

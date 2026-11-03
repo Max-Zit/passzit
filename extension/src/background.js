@@ -5,6 +5,7 @@
 import * as pz from "./pz/crypto.js";
 import { api, settings, saveSettings, call, loadTexts, t, sameServer, deviceName, consoleSecure } from "./ext.js";
 import { match, parse } from "./domain.js";
+import { newPasskey, sign as passkeySign, rpCheck } from "./passkeys.js";
 import { parse as totpParse, code as totpCode } from "./pz/totp.js";
 
 const S = {
@@ -480,6 +481,68 @@ api.permissions.onAdded.addListener(async (p) => {
   if (cur && cur.origin === o) await api.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, files: ["console.js"] }).catch(() => {});
 });
 
+// ---- passkeys: PassZit answers navigator.credentials for websites (with
+// "Use PassZit for passkeys" on); the user decides in PassZit's own window
+
+const PK_PAGE = "pz-pk-page", PK_BRIDGE = "pz-pk";
+const PK_MATCHES = ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"];
+
+async function syncPasskeyScripts() {
+  const s = await settings();
+  const has = await api.permissions.contains({ origins: ["https://*/*"] }).catch(() => false);
+  const regs = await api.scripting.getRegisteredContentScripts({ ids: [PK_PAGE, PK_BRIDGE] }).catch(() => []);
+  if (s.passkeys && has && regs.length < 2) {
+    if (regs.length) await api.scripting.unregisterContentScripts({ ids: regs.map((r) => r.id) });
+    await api.scripting.registerContentScripts([
+      { id: PK_PAGE, js: ["passkey-page.js"], matches: PK_MATCHES, runAt: "document_start", world: "MAIN", allFrames: false },
+      { id: PK_BRIDGE, js: ["passkey.js"], matches: PK_MATCHES, runAt: "document_start", allFrames: false },
+    ]);
+  } else if ((!s.passkeys || !has) && regs.length) {
+    await api.scripting.unregisterContentScripts({ ids: regs.map((r) => r.id) });
+  }
+}
+
+// unplain turns the page's {$b: base64url} values back into strings.
+function unplain(v) {
+  if (v && typeof v === "object" && typeof v.$b === "string" && Object.keys(v).length === 1) return v.$b;
+  if (Array.isArray(v)) return v.map(unplain);
+  if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v)) o[k] = unplain(v[k]); return o; }
+  return v;
+}
+
+const pkPending = new Map(); // id → { op, rpId, origin, opts, tab, resolve, window }
+
+function passkeysFor(rpId, allow) {
+  const ids = (allow || []).map((c) => c && c.id).filter(Boolean);
+  const out = [];
+  for (const it of S.items.values()) {
+    const pk = it.data && !it.deleted_at && it.data.passkey;
+    if (!pk || pk.rpId !== rpId) continue;
+    if (ids.length && !ids.includes(pk.credentialId)) continue;
+    out.push(it);
+  }
+  return out;
+}
+
+async function askPasskey(req) {
+  const id = pz.b64u(pz.random(12));
+  const p = new Promise((resolve) => {
+    req.resolve = resolve;
+    pkPending.set(id, req);
+    setTimeout(() => { if (pkPending.has(id)) { pkPending.delete(id); resolve({ ok: false }); } }, 2 * 60 * 1000);
+  });
+  const w = await api.windows.create({ url: api.runtime.getURL("popup.html?passkey=" + id), type: "popup", width: 400, height: 560 }).catch(() => null);
+  if (!w) { pkPending.delete(id); return { ok: false }; }
+  req.window = w.id;
+  return p;
+}
+
+api.windows.onRemoved.addListener((wid) => {
+  for (const [id, req] of pkPending) {
+    if (req.window === wid) { pkPending.delete(id); req.resolve({ ok: false }); }
+  }
+});
+
 const OPEN_TOOLS = ["rdp", "ssh", "winscp", "winbox", "vnc", "telnet", "custom"];
 
 // consoleLogin picks the login saved for a device of a console: same
@@ -706,7 +769,7 @@ const handlers = {
   },
   async pending(msg) { await savePending(msg.index, msg.action); return { ok: true }; },
   async capture(msg, sender) { await capture(msg, sender); return { ok: true }; },
-  async settingsChanged() { await syncCapture(); await syncPairScript().catch(() => {}); await syncConsoleScript().catch(() => {}); await badge(); return { ok: true }; },
+  async settingsChanged() { await syncCapture(); await syncPairScript().catch(() => {}); await syncConsoleScript().catch(() => {}); await syncPasskeyScripts().catch(() => {}); await badge(); return { ok: true }; },
   // the Launcher page of the own server asks to pair this browser
   async launcherPair(msg, sender) {
     await ownPage(sender, "/launcher");
@@ -776,6 +839,69 @@ const handlers = {
     if (!page || !consoleSecure(page) || sender.frameId !== 0 || !s.consoles.includes(page.origin)) throw new Error("not allowed");
     return { unlocked: !!S.keys };
   },
+  // a website asks for a passkey (passkey.js): PassZit asks the user in its
+  // own window; { ok: false } lets the browser answer as without PassZit
+  async passkeyRequest(msg, sender) {
+    const s = await settings();
+    if (!s.passkeys || !sender.tab || sender.frameId !== 0) return { ok: false };
+    const opts = unplain(msg.options || {});
+    const op = msg.op === "create" ? "create" : "get";
+    const rpId = rpCheck(sender.url, op === "create" ? opts.rp && opts.rp.id : opts.rpId);
+    if (!rpId || typeof opts.challenge !== "string" || opts.challenge.length > 1024) return { ok: false };
+    // one open question per tab (a page cannot pile up windows)
+    for (const p of pkPending.values()) if (p.tab === sender.tab.id) return { ok: false };
+    const origin = new URL(sender.url).origin;
+    if (op === "create") {
+      const algs = (opts.pubKeyCredParams || []).map((p) => p && p.alg);
+      if (algs.length && !algs.includes(-7)) return { ok: false };
+      if (!opts.user || typeof opts.user.id !== "string") return { ok: false };
+      if (S.keys && (opts.excludeCredentials || []).length && passkeysFor(rpId, opts.excludeCredentials).length) return { ok: true, data: { error: "This passkey is saved in PassZit already." } };
+    } else if (S.keys && !passkeysFor(rpId, opts.allowCredentials).length) {
+      return { ok: false };
+    }
+    const r = await askPasskey({ op, rpId, origin, opts, tab: sender.tab.id });
+    return r.ok ? { ok: true, data: Object.assign({ ok: true }, r.answer) } : { ok: false };
+  },
+  // the PassZit window: what the request is and which passkeys fit
+  async passkeyPending(msg) {
+    const req = pkPending.get(String(msg.id || ""));
+    if (!req) throw new Error(t("This request is no longer open."));
+    if (!S.keys) return { locked: true };
+    const list = req.op === "get" ? passkeysFor(req.rpId, req.opts.allowCredentials).map((it) => ({ id: it.id, name: it.data.name, user: it.data.passkey.userName })) : [];
+    return { op: req.op, rpId: req.rpId, origin: req.origin, rpName: (req.opts.rp && req.opts.rp.name) || req.rpId, userName: req.opts.user ? req.opts.user.name : "", list };
+  },
+  async passkeyDecide(msg) {
+    const id = String(msg.id || "");
+    const req = pkPending.get(id);
+    if (!req || !S.keys) throw new Error(t("This request is no longer open."));
+    pkPending.delete(id);
+    if (msg.choice === "other") { req.resolve({ ok: false }); return { ok: true }; }
+    try {
+      if (req.op === "create") {
+        const made = await newPasskey({ rpId: req.rpId, origin: req.origin, challenge: req.opts.challenge, user: req.opts.user });
+        // a login of the same site and user takes the passkey; else a new item
+        let item = null;
+        for (const it of S.items.values()) {
+          const d = it.data;
+          if (!d || it.deleted_at || d.type !== "login" || !d.login || d.passkey) continue;
+          if (made.stored.userName && d.login.username === made.stored.userName && (d.login.urls || []).some((u) => match(u, req.origin) === "host")) { item = it; break; }
+        }
+        const data = item ? Object.assign({}, item.data, { passkey: made.stored })
+          : { type: "login", name: (req.opts.rp && req.opts.rp.name) || req.rpId, login: { username: made.stored.userName, password: "", urls: [req.origin] }, passkey: made.stored };
+        await saveItem(item || {}, data);
+        req.resolve({ ok: true, answer: made.answer });
+      } else {
+        const it = S.items.get(String(msg.itemId || ""));
+        const pk = it && it.data && it.data.passkey;
+        if (!pk || pk.rpId !== req.rpId) throw new Error(t("Not found."));
+        req.resolve({ ok: true, answer: await passkeySign(pk, { origin: req.origin, challenge: req.opts.challenge }) });
+      }
+    } catch (e) {
+      req.resolve({ ok: false });
+      throw e;
+    }
+    return { ok: true };
+  },
   async consoleOpen(msg, sender) {
     const s = await settings();
     let page = null;
@@ -802,7 +928,7 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg || msg.type === "offscreen-clear") return false;
   // Content scripts may only report captured logins.
   const fromPage = !!sender.tab && sender.id === api.runtime.id && sender.url && !sender.url.startsWith(api.runtime.getURL(""));
-  if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock", "consoleOpen", "consoleState", "pageLinkInfo", "pageLink"].includes(msg.type))) return false;
+  if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock", "consoleOpen", "consoleState", "pageLinkInfo", "pageLink", "passkeyRequest"].includes(msg.type))) return false;
   const h = handlers[msg.type];
   if (!h) return false;
   restore().then(() => h(msg, sender)).then((r) => reply({ ok: true, data: r }), (e) => reply({ ok: false, error: e.message || String(e), status: e.status || 0 }));
@@ -831,6 +957,6 @@ api.tabs.onUpdated.addListener((id, info, tab) => {
   if (info.url || info.status === "complete") restore().then(() => tabBadge(tab)).catch(() => {});
 });
 
-api.runtime.onInstalled.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); syncConsoleScript().catch(() => {}); });
-api.runtime.onStartup.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); syncConsoleScript().catch(() => {}); });
+api.runtime.onInstalled.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); syncConsoleScript().catch(() => {}); syncPasskeyScripts().catch(() => {}); });
+api.runtime.onStartup.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); syncConsoleScript().catch(() => {}); syncPasskeyScripts().catch(() => {}); });
 api.permissions.onRemoved.addListener(() => { syncCapture().catch(() => {}); });

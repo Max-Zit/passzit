@@ -976,6 +976,8 @@ function renderDetail() {
     if (k.passphrase) rows.push(field(t("Passphrase of the key"), k.passphrase, { copy: true, secret: true }));
   }
   for (const f of d.fields || []) rows.push(field(f.name || t("Field"), f.value, { copy: true, secret: f.hidden }));
+  // a passkey the browser extension saved (its private key stays hidden)
+  if (d.passkey) rows.push(field(t("Passkey"), [d.passkey.userName, d.passkey.rpId].filter(Boolean).join(" · ") + (d.passkey.created ? " · " + t("Created %s", fmtDate(d.passkey.created)) : ""), { copy: false }));
   if (d.connect && d.connect.tool) {
     const c = d.connect;
     const tool = { rdp: "RDP", ssh: "SSH", winbox: "WinBox" }[c.tool] || c.tool;
@@ -1171,13 +1173,16 @@ function renderEditor() {
     const f = [...(ev.clipboardData && ev.clipboardData.files || [])].find((x) => x.type.startsWith("image/"));
     if (f) { ev.preventDefault(); takeQR(f); }
   });
+  // a saved passkey can only be removed here (the extension makes them)
+  const pkBox = d.passkey ? el("input", { type: "checkbox", name: "drop_passkey" }) : null;
   const loginPart = el("div", { class: "stack", hidden: d.type !== "login" },
     el("label", null, t("User name"), user),
     el("label", null, t("Password"), el("span", { class: "pwfield" }, pass, showBtn, genBtn)),
     el("label", null, t("Authenticator key (TOTP)"), el("span", { class: "pwfield" }, totp, qrBtn, qrFile),
       el("small", { text: t("The secret key or otpauth:// address a website shows when you set up two-factor sign-in, or its QR code: choose a picture or a screenshot, or paste it here. PassZit then shows the codes.") })),
     el("div", null, el("label", { text: t("Websites") }), urls,
-      button(t("Add a website"), { class: "ghost sm", icon: "plus", onclick: () => addURL("") })));
+      button(t("Add a website"), { class: "ghost sm", icon: "plus", onclick: () => addURL("") })),
+    pkBox ? el("label", { class: "check" }, pkBox, t("Remove the passkey for %s", d.passkey.rpId)) : null);
   // other item types
   const inp = (name, value, attrs) => el("input", Object.assign({ name, value: value || "", autocomplete: "off", spellcheck: "false" }, attrs || {}));
   const c = d.card || {};
@@ -1310,6 +1315,7 @@ function renderEditor() {
       out.connect = { tool: cTool.value, host, port: +cPort.value || 0 };
       if (out.type === "sshkey" && cUser.value.trim()) out.connect.user = cUser.value.trim();
     }
+    if (pkBox && pkBox.checked) delete out.passkey;
     delete out.rotation;
     if (out.type === "login" && out.connect && rMethod.value) {
       const days = Math.max(1, Math.min(3650, +rDays.value || 90));

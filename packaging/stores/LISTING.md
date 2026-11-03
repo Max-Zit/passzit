@@ -53,7 +53,7 @@ Fill, save and manage the logins of the user's own PassZit password manager serv
 - **clipboardWrite:** copies a password, user name or one-time code when the user clicks Copy, and clears it again after the set time.
 - **offscreen:** clears the clipboard after the set time (service workers cannot reach the clipboard).
 - **nativeMessaging:** opens RDP, SSH and similar connections through the MaxZit Launcher or PassZit helper that the user installed and paired.
-- **Optional host permissions (https://\*/\*, http://\*/\*):** requested at sign-in for the user's own server only, for a MaxZit console (WatchZit) only when the user adds it in the settings, and for all sites only if the user switches on "offer to save new logins" or the site badge.
+- **Optional host permissions (https://\*/\*, http://\*/\*):** requested at sign-in for the user's own server only, for a MaxZit console (WatchZit) only when the user adds it in the settings, and for all sites only if the user switches on "offer to save new logins", the site badge or "Use PassZit for passkeys". With passkeys on, a content script (page world) answers navigator.credentials on websites; the user confirms every passkey in the extension's own window and the vault is never injected into a page.
 
 ## Remote code (Chrome)
 

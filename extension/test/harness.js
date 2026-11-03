@@ -227,6 +227,74 @@ try {
   let open2 = false;
   for (let i = 0; i < 30 && !open2; i++) { await sleep(100); open2 = (await bg("status")).unlocked; }
   step("link: one unlock opens it", open2);
+  // passkeys: a website saves one in PassZit and signs in with it; the
+  // answer must verify with the public key the website got
+  await saveSettings({ passkeys: true });
+  await bg("settingsChanged");
+  const pkTab = await openTab(server + "/passkey-probe");
+  const inPk = async (func, args) => {
+    for (let i = 0; ; i++) {
+      try { return (await api.scripting.executeScript({ target: { tabId: pkTab.id }, world: "MAIN", func, args: args || [] }))[0].result; } catch (e) { if (i >= 30) throw e; await sleep(200); }
+    }
+  };
+  const decide = async (choice) => {
+    for (let i = 0; i < 50; i++) {
+      const wins = await api.windows.getAll({ populate: true });
+      for (const w of wins) for (const tb of w.tabs || []) {
+        const m = /[?&]passkey=([^&]+)/.exec(tb.url || "");
+        if (!m) continue;
+        const info = await bg("passkeyPending", { id: m[1] });
+        await bg("passkeyDecide", { id: m[1], choice, itemId: info.list && info.list[0] ? info.list[0].id : "" });
+        await api.windows.remove(w.id).catch(() => {});
+        return info;
+      }
+      await sleep(100);
+    }
+    return null;
+  };
+  await sleep(300);
+  step("passkeys: page script present", await inPk(() => !!window.__pzPasskeys), "");
+  await inPk(() => {
+    const rnd = (n) => crypto.getRandomValues(new Uint8Array(n));
+    window.__pkChallenge = rnd(32);
+    window.__pkCreate = navigator.credentials.create({ publicKey: { challenge: window.__pkChallenge, rp: { name: "Passkey Probe" },
+      user: { id: rnd(16), name: "alice@probe", displayName: "Alice" }, pubKeyCredParams: [{ type: "public-key", alg: -7 }] } })
+      .then((c) => ({ id: c.id, json: c.toJSON(), pub: c.toJSON().response.publicKey }), (e) => ({ error: String(e) }));
+    return true;
+  });
+  const cInfo = await decide("save");
+  step("passkeys: PassZit asks before saving", cInfo && cInfo.op === "create", JSON.stringify(cInfo));
+  const created = await inPk(() => Promise.race([window.__pkCreate, new Promise((r) => setTimeout(() => r({ error: "no answer" }), 15000))]));
+  step("passkeys: the website gets a new passkey", created && created.id && created.json && created.json.response.attestationObject, JSON.stringify(created).slice(0, 200));
+  await inPk(() => {
+    const der2raw = (d) => {
+      let o = 2;
+      const take = () => { const n = d[o + 1]; let v = d.slice(o + 2, o + 2 + n); o += 2 + n; while (v.length > 32) v = v.slice(1); const r = new Uint8Array(32); r.set(v, 32 - v.length); return r; };
+      const r = take(), s = take();
+      const out = new Uint8Array(64); out.set(r); out.set(s, 32); return out;
+    };
+    const unb = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (ch) => ch.charCodeAt(0));
+    window.__pkGet = (async () => {
+      const ch = crypto.getRandomValues(new Uint8Array(32));
+      const a = await navigator.credentials.get({ publicKey: { challenge: ch } });
+      const created = await window.__pkCreate;
+      const key = await crypto.subtle.importKey("spki", unb(created.pub), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+      const cd = new Uint8Array(a.response.clientDataJSON);
+      const signed = new Uint8Array([...new Uint8Array(a.response.authenticatorData), ...new Uint8Array(await crypto.subtle.digest("SHA-256", cd))]);
+      const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, der2raw(new Uint8Array(a.response.signature)), signed);
+      const client = JSON.parse(new TextDecoder().decode(cd));
+      return { ok, same: a.id === created.id, origin: client.origin === location.origin, type: client.type };
+    })().catch((e) => ({ error: String(e) }));
+    return true;
+  });
+  const gInfo = await decide("use");
+  step("passkeys: PassZit offers the saved passkey", gInfo && gInfo.op === "get" && gInfo.list.length === 1, JSON.stringify(gInfo));
+  const got = await inPk(() => Promise.race([window.__pkGet, new Promise((r) => setTimeout(() => r({ error: "no answer" }), 15000))]));
+  step("passkeys: the sign-in verifies with the website's public key", got && got.ok && got.same && got.origin && got.type === "webauthn.get", JSON.stringify(got));
+  step("passkeys: kept in the vault", (await bg("search", { q: "Passkey Probe" })).items.length === 1);
+  await api.tabs.remove(pkTab.id).catch(() => {});
+  await saveSettings({ passkeys: false });
+  await bg("settingsChanged");
   if (q.get("stay")) {
     step("left signed in for screenshots", true);
   } else {
