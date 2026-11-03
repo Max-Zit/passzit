@@ -23,3 +23,11 @@ passzit generate --length 24</pre>
 <h2 id="status">Stanje i odjava</h2>
 <pre>passzit status
 passzit logout</pre>
+
+<h2 id="rotate">Automatska promena lozinki na uređajima</h2>
+<p>Za prijavu sa udaljenom vezom izaberite pod <i>Menjaj lozinku na uređaju</i> kako uređaj prima novu lozinku — <b>Linux / Unix</b> (SSH, <code>passwd</code>), <b>MikroTik RouterOS</b> (SSH, <code>/password</code>) ili <b>Windows</b> (OpenSSH, lokalni nalog) — i koliko često (dana). Zatim:</p>
+<pre>passzit rotate --due --dry-run      # šta je dospelo
+passzit rotate --due                # promeni sve dospelo
+passzit rotate "Ruter filijala"     # promeni jednu odmah</pre>
+<p>Za svaku stavku komanda pravi novu nasumičnu lozinku, prijavljuje se na uređaj preko SSH-a trenutnom lozinkom i tamo je menja, proverava novu ponovnom prijavom, i tek tada je čuva u trezoru; stara lozinka ide u istoriju lozinki stavke. Ako čuvanje ne uspe, ispisuje novu lozinku da se nikad ne izgubi. Prvi SSH ključ svakog uređaja se pamti (<code>known_hosts.json</code> pored <code>cli.json</code>); drugačiji ključ kasnije zaustavlja promenu.</p>
+<p>Pokrećite je svakog dana na računaru administratora ili serveru za upravljanje, na primer iz cron-a (<code>0 3 * * * PASSZIT_SESSION=… passzit rotate --due</code>) ili Windows Task Scheduler-a. PassZit server nikada ne vidi lozinke: sve se dešava tamo gde se komanda pokreće. Raspored koji sadrži <code>PASSZIT_SESSION</code> može da otvori trezor, zato koristite poseban nalog samo sa trezorima tih uređaja, na zaštićenom računaru.</p>

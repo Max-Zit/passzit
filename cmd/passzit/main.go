@@ -59,6 +59,7 @@ const usage = `PassZit command line client %s
   passzit list [TEXT]                              list items, optionally only matching TEXT
   passzit get password|username|totp|notes|url|item NAME-OR-ID
   passzit generate [--length N] [--words N]        a new password or passphrase
+  passzit rotate NAME-OR-ID | --due [--dry-run]  change device passwords over SSH and save them
   passzit status                                   server, account, locked or not
   passzit logout                                   sign this computer out
 
@@ -85,6 +86,8 @@ func main() {
 		err = cmdGet(args)
 	case "generate":
 		err = cmdGenerate(args)
+	case "rotate":
+		err = cmdRotate(args)
 	case "status":
 		err = cmdStatus()
 	case "logout":
@@ -657,8 +660,17 @@ func cmdGet(args []string) error {
 	case "url":
 		fmt.Println(it.where())
 	case "item":
-		b, _ := json.MarshalIndent(it.Data, "", "  ")
-		fmt.Println(string(b))
+		// the whole item, with everything the vault keeps (history, settings)
+		raw, err := loadRaw(c, k)
+		if err != nil {
+			return err
+		}
+		for _, r := range raw {
+			if r.ID == it.ID {
+				b, _ := json.MarshalIndent(r.Data, "", "  ")
+				fmt.Println(string(b))
+			}
+		}
 	default:
 		return fmt.Errorf("unknown field %q", what)
 	}

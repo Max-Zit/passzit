@@ -1216,10 +1216,20 @@ function renderEditor() {
   const cPort = el("input", { name: "connect_port", type: "number", min: 1, max: 65535, value: cn.port || "", placeholder: t("default"), class: "narrow" });
   const cUser = el("input", { name: "connect_user", value: cn.user || "", autocomplete: "off", spellcheck: "false" });
   const cUserRow = el("label", null, t("User name"), cUser);
+  // automatic password change (passzit rotate: the command line changes it
+  // on the device over SSH and saves it here; the server never sees it)
+  const rt = d.rotation || {};
+  const rMethod = el("select", { name: "rotation_method", "aria-label": t("Change the password on the device") },
+    el("option", { value: "" }, t("No")), ...[["linux", "Linux / Unix (SSH, passwd)"], ["mikrotik", "MikroTik RouterOS (SSH)"], ["windows", "Windows (OpenSSH, local account)"]].map(([v, l]) => el("option", { value: v, selected: rt.method === v }, l)));
+  const rDays = el("input", { name: "rotation_days", type: "number", min: 1, max: 3650, value: rt.days || 90, class: "narrow" });
+  const rLast = el("small", { class: "muted", text: rt.last ? t("Last changed by PassZit: %s", fmtDate(rt.last)) : "" });
+  const rotationRow = el("div", { class: "grid2" }, el("label", null, t("Change the password on the device"), rMethod), el("label", null, t("Every (days)"), rDays));
   const connectPart = el("fieldset", { class: "box" }, el("legend", { text: t("Remote connection") }),
     el("div", { class: "grid2" }, el("label", null, t("Open with"), cTool), el("label", null, t("Port"), cPort)),
     el("label", null, t("Address"), cHost), cUserRow,
-    el("small", { class: "muted", text: t("The browser extension opens it with the PassZit helper on this computer. A monitoring page that names the device (WatchZit) shows its logins too.") }));
+    el("small", { class: "muted", text: t("The browser extension opens it with the MaxZit Launcher on this computer. A monitoring page that names the device (WatchZit) shows its logins too.") }),
+    rotationRow, rLast,
+    el("small", { class: "muted", text: t("The command line client changes due passwords over SSH: passzit rotate --due (for example daily from cron or the Task Scheduler). The server never sees the passwords.") }));
   // A device login may take its address as the name.
   if (cn.tool) { name.required = false; name.placeholder = t("Empty: the address"); }
   const parts = { login: loginPart, card: cardPart, identity: identityPart, sshkey: sshPart };
@@ -1299,6 +1309,12 @@ function renderEditor() {
       if (!/^[A-Za-z0-9][A-Za-z0-9.\-:]{0,252}$/.test(host)) { err.textContent = t("Enter the address of the connection (a name or an IP address)."); err.hidden = false; return; }
       out.connect = { tool: cTool.value, host, port: +cPort.value || 0 };
       if (out.type === "sshkey" && cUser.value.trim()) out.connect.user = cUser.value.trim();
+    }
+    delete out.rotation;
+    if (out.type === "login" && out.connect && rMethod.value) {
+      const days = Math.max(1, Math.min(3650, +rDays.value || 90));
+      out.rotation = { method: rMethod.value, days };
+      if (rt.last) out.rotation.last = rt.last;
     }
     if (!out.name && out.connect) out.name = out.connect.host;
     if (!out.name) { err.textContent = t("Enter a name."); err.hidden = false; return; }

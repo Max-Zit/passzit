@@ -23,3 +23,11 @@ passzit generate --length 24</pre>
 <h2 id="status">Status and signing out</h2>
 <pre>passzit status
 passzit logout</pre>
+
+<h2 id="rotate">Changing device passwords automatically</h2>
+<p>For a login with a remote connection, choose under <i>Change the password on the device</i> how the device takes a new password — <b>Linux / Unix</b> (SSH, <code>passwd</code>), <b>MikroTik RouterOS</b> (SSH, <code>/password</code>) or <b>Windows</b> (OpenSSH, a local account) — and how often (days). Then:</p>
+<pre>passzit rotate --due --dry-run      # what is due
+passzit rotate --due                # change all that are due
+passzit rotate "Branch router"      # change one now</pre>
+<p>For each item the command makes a new random password, signs in to the device over SSH with the current one and changes it there, checks the new one with a fresh sign-in, and only then saves it in the vault; the old password goes into the item's password history. If saving fails, it prints the new password so it is never lost. The first SSH key of each device is remembered (<code>known_hosts.json</code> next to <code>cli.json</code>); a different key later stops the change.</p>
+<p>Run it daily on an administrator's computer or a management server, for example with cron (<code>0 3 * * * PASSZIT_SESSION=… passzit rotate --due</code>) or the Windows Task Scheduler. The PassZit server never sees the passwords: everything happens where the command runs. A schedule that holds <code>PASSZIT_SESSION</code> can open the vault, so use a dedicated account with only the vaults of these devices, on a protected machine.</p>
