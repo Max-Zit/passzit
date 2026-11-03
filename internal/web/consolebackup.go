@@ -146,8 +146,10 @@ func (s *Server) runBackup(ctx context.Context, by string) {
 	switch {
 	case err != nil:
 		s.log.Error("console backup failed", "err", err)
+		s.notifyAdmins(ctx, mailText{Subject: "The console backup failed", Lines: [][]any{{"The backup of the PassZit console failed: %s", b.LastError}}}, "/settings/backup")
 		_ = s.store.Audit(ctx, by, "", "backup.failed", "settings", "console backup failed: "+b.LastError)
 	case b.LastCopy != "" && b.LastCopy != "ok":
+		s.notifyAdmins(ctx, mailText{Subject: "The copy of the console backup failed", Lines: [][]any{{"The backup %s was written, but its copy failed: %s", name, b.LastCopy}}}, "/settings/backup")
 		_ = s.store.Audit(ctx, by, "", "backup.create", "settings", "console backup "+name+" ("+formatBytes(uint64(size))+"); copy failed: "+b.LastCopy) // #nosec G115 -- a file size
 	default:
 		_ = s.store.Audit(ctx, by, "", "backup.create", "settings", "console backup "+name+" ("+formatBytes(uint64(size))+")") // #nosec G115 -- a file size

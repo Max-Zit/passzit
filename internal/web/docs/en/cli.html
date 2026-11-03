@@ -1,0 +1,25 @@
+<h1>Command line</h1>
+<p>The <code>passzit</code> command reads logins in scripts and on servers. Like the browser it decrypts everything on its own computer: the server sees only the device token and encrypted data. Every release has it for Linux (amd64, arm64) and Windows.</p>
+
+<h2 id="login">Signing in</h2>
+<pre>passzit login --server https://vault.example.com --email me@example.com</pre>
+<p>It asks for the master password and the code of your authenticator app, then appears under <i>My account → Active sessions</i> as "PassZit CLI on <i>computer</i>", where you can sign it out. The device token is kept in your configuration folder (<code>~/.config/passzit/cli.json</code>, on Windows <code>%APPDATA%\passzit\cli.json</code>), readable only by you. Only HTTPS servers are accepted.</p>
+
+<h2 id="unlock">Unlocking for a session</h2>
+<pre>export PASSZIT_SESSION="$(passzit unlock --raw)"     # Linux, macOS
+$env:PASSZIT_SESSION = (passzit unlock --raw)        # Windows PowerShell</pre>
+<p>The session key in <code>PASSZIT_SESSION</code> opens a copy of your account key that <code>unlock</code> stored sealed; without the variable the copy is useless. <code>passzit lock</code> removes the copy. Without <code>PASSZIT_SESSION</code> every command asks for the master password.</p>
+
+<h2 id="use">Reading logins</h2>
+<pre>passzit list github                 # items whose name, user name or address contain "github"
+passzit get password "GitHub"       # only the password, for scripts
+passzit get username GitHub
+passzit get totp GitHub             # the current one-time code
+passzit get notes "Router office"
+passzit get item 3f2a9c1e           # the whole item as JSON (id or its first 8 characters)
+passzit generate --length 24</pre>
+<p>A name that fits several items is refused with the list of their ids; use the id then. The command line reads your personal vault and the shared vaults you are a member of; it does not change items.</p>
+
+<h2 id="status">Status and signing out</h2>
+<pre>passzit status
+passzit logout</pre>

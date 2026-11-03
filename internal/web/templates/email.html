@@ -1,0 +1,36 @@
+{{template "app" .}}
+{{define "content"}}
+<h1>{{.T "Settings"}}</h1>
+<div class="settings">
+{{template "settingstabs" .}}
+<div class="settings-body">
+{{with .Data}}
+<form method="post" action="/settings/email" class="stack wide">
+  <section class="panel">
+    <h2>{{template "icon" "mail"}}{{$.T "E-mail notifications"}}</h2>
+    <p class="muted">{{$.T "Administrators get notices about the server: a certificate that is not renewed or expires soon, a failed console backup, a request that waits for a second administrator. Users get mail about what concerns them: an invitation, emergency access. Messages never contain passwords or other secrets."}}</p>
+    <label class="check"><input type="checkbox" name="enabled" {{if .E.Enabled}}checked{{end}}>{{$.T "Send e-mail"}}</label>
+    <label>{{$.T "SMTP server"}}<input name="host" value="{{.E.Host}}" spellcheck="false" class="mono" placeholder="smtp.example.com"></label>
+    <div class="row">
+      <label>{{$.T "Port"}}<input name="port" type="number" min="1" max="65535" value="{{.E.Port}}" class="narrow"></label>
+      <label>{{$.T "Connection"}}<select name="security">
+        <option value="starttls" {{if eq .E.Security "starttls"}}selected{{end}}>STARTTLS (587)</option>
+        <option value="tls" {{if eq .E.Security "tls"}}selected{{end}}>TLS (465)</option>
+        <option value="none" {{if eq .E.Security "none"}}selected{{end}}>{{$.T "Unencrypted (only inside your network, without sign-in)"}}</option>
+      </select></label>
+    </div>
+    <label>{{$.T "User name"}} <small>{{$.T "optional"}}</small><input name="username" value="{{.E.Username}}" autocomplete="off" spellcheck="false"></label>
+    <label>{{$.T "Password"}}<input name="password" type="password" autocomplete="new-password" placeholder="{{if .HasPass}}{{$.T "saved — leave empty to keep it"}}{{end}}"><small>{{$.T "It is stored encrypted."}}</small></label>
+    <label>{{$.T "Sender address"}}<input name="from" type="email" value="{{.E.From}}" placeholder="passzit@example.com"></label>
+    <label>{{$.T "Administrators' addresses"}}<textarea name="to" rows="3" spellcheck="false" placeholder="it@example.com">{{.ToText}}</textarea><small>{{$.T "One per line; they get the notices about the server."}}</small></label>
+    <label>{{$.T "Language of the administrators' mail"}}<select name="language">
+      {{range $.Languages}}<option value="{{.Code}}" {{if eq .Code $.Data.E.Language}}selected{{end}}>{{.Name}}</option>{{end}}
+    </select><small>{{$.T "Users get mail in their own language."}}</small></label>
+  </section>
+  <div class="row"><button class="primary">{{$.T "Save"}}</button></div>
+</form>
+<form method="post" action="/settings/email/test" class="mt"><button class="secondary">{{template "icon" "mail"}}{{$.T "Send a test message to me"}}</button></form>
+{{end}}
+</div>
+</div>
+{{end}}

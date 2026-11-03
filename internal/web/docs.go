@@ -34,6 +34,7 @@ var DocPages = []DocPage{
 	{"extension", "Browser extension"},
 	{"connections", "Remote connections"},
 	{"transfer", "Import and export"},
+	{"cli", "Command line"},
 	{"account", "Master password, recovery key and two-factor sign-in"},
 	{"admin", "Users, invitations and settings"},
 	{"install", "Installing the server"},

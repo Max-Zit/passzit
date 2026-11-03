@@ -71,6 +71,20 @@ func uiTexts(t *testing.T) map[string]bool {
 		"Website login", "User name and password of a website", "Credentials", "User name and password without a website", "WinSCP (SFTP)", "Files on servers over SFTP", "VNC", "Screens of computers with a VNC server", "Telnet", "Older switches and devices",
 		// kinds of folders (vault.js FOLDER_KINDS)
 		"Folder", "Customer", "Site", "Branch office", "Department", "Data center", "Network", "Project", "Remote Desktop (RDP)", "Windows computers and servers", "SSH with a password", "Linux servers, switches and routers",
+		// e-mail (notify.go: subjects and lines of mailText, settings checks)
+		"Test message", "This is a test message from PassZit. E-mail notifications work.",
+		"A change waits for a second administrator", "%s asks: %s.", "It runs only after a second administrator approves it under Approvals.",
+		"The console backup failed", "The backup of the PassZit console failed: %s", "The copy of the console backup failed", "The backup %s was written, but its copy failed: %s",
+		"The certificate was not renewed", "PassZit could not renew the Let's Encrypt certificate of the console: %s", "The current certificate stays in use until it expires.",
+		"The console certificate expires in %d days", "The certificate of %s (issued by %s) expires on %s.", "Upload a new one under Settings → Certificate.",
+		"Emergency access to your vault was requested", "%s asks for emergency access to your vault.",
+		"The access opens after %d days unless you reject it. Approve or reject it in the web vault under My account → Emergency access.",
+		"Emergency access was approved", "%s approved your emergency access. You can open the vault now in the web vault under Emergency access.",
+		"Emergency access was rejected", "%s rejected your request for emergency access.",
+		"You are invited to PassZit", "%s invites you to the PassZit password manager of your team.",
+		"Open the link below within %d days, choose your master password and set up two-factor sign-in. Only you know the master password; nobody can reset it for you.",
+		"Enter the SMTP server and the sender address.", "Invalid SMTP port.", "Choose how the connection to the SMTP server is protected.", "Invalid e-mail address.",
+		"Sign-in needs STARTTLS or TLS: the password must not travel unencrypted.",
 		"A key pair for SSH sign-in", "WinBox (MikroTik)", "MikroTik routers and switches", "Encrypted text", "Payment card", "Name, address and contact details"} {
 		out[s] = true
 	}

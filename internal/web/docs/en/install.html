@@ -58,6 +58,7 @@ export PASSZIT_DB=postgres://passzit:SECRET@localhost/passzit
   <tr><td><code>--restore FILE</code></td><td>restore a console backup and exit (service stopped); passphrase in <code>PASSZIT_BACKUP_PASSPHRASE</code> or <code>--restore-passphrase-file</code></td></tr>
   <tr><td><code>--reset-allowlist</code></td><td>allow the private networks again and exit</td></tr>
   <tr><td><code>--unblock-ip</code></td><td>release a blocked address (or <code>all</code>) and exit</td></tr>
+  <tr><td><code>--certificate</code></td><td><code>info</code> shows the console certificate, <code>self</code> goes back to the self-signed one; then exits</td></tr>
   <tr><td><code>--version</code></td><td>print the version and exit</td></tr>
   <tr><td><code>--dev-embedded-db</code></td><td>a private PostgreSQL in the data directory — for tests and demos only</td></tr>
   <tr><td><code>--dev-no-2fa</code></td><td>sign in without the second factor — test and demo servers only (on a package install: <code>PASSZIT_TEST_NO_2FA=yes</code> in <code>/etc/passzit/server.env</code>); every page shows a warning</td></tr>

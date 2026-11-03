@@ -72,6 +72,7 @@ func run() error {
 	devHTTP := flag.String("dev-http", "", "also serve the console over plain HTTP on this loopback address (development only)")
 	devNo2FA := flag.Bool("dev-no-2fa", env("PASSZIT_TEST_NO_2FA", "") == "yes", "sign in without the second factor (test and demo servers only; PASSZIT_TEST_NO_2FA=yes in server.env does the same; shown as a warning on every page and audited)")
 	resetACL := flag.Bool("reset-allowlist", false, "allow the console again from the private networks (10/8, 172.16/12, 192.168/16, fc00::/7) and exit")
+	certCmd := flag.String("certificate", "", "info: show the console certificate; self: use the self-signed one again (e.g. after a broken upload); then exit")
 	unblock := flag.String("unblock-ip", "", "lift the sign-in block of an address (or \"all\") and exit")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	runHelper := flag.Bool("helper", false, "root helper: handle a request of the console (updates, time zone, network) and exit; started by passzit-helper.service")
@@ -147,6 +148,13 @@ func run() error {
 		}
 		_ = st.Audit(ctx, "-", "local", "settings.network.reset", "settings", "console allow-list reset to the private networks from the command line")
 		fmt.Println("The console allows the private networks again. Restart the service if it is running.")
+		return nil
+	case *certCmd != "":
+		out, err := web.CertificateCommand(ctx, st, *dataDir, *certCmd)
+		if err != nil {
+			return err
+		}
+		fmt.Println(out)
 		return nil
 	case *unblock != "":
 		n, err := st.Unblock(ctx, *unblock)

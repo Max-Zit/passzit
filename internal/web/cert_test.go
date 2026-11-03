@@ -283,3 +283,34 @@ func TestCertificatePage(t *testing.T) {
 		t.Fatal("still the uploaded certificate")
 	}
 }
+
+func TestCertificateCommand(t *testing.T) {
+	e := newEnv(t)
+	dir := t.TempDir()
+	out, err := CertificateCommand(t.Context(), e.st, dir, "info")
+	if err != nil || !strings.Contains(out, "self-signed") {
+		t.Fatalf("info without a trusted certificate: %q %v", out, err)
+	}
+	ca := newTestCA(t)
+	cp, kp := ca.leaf(t, []string{"vault.example.com"}, time.Now().Add(-time.Hour), time.Now().Add(40*24*time.Hour))
+	if err := (&Certs{dir: dir + "/tls"}).saveCert(cp, kp); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.st.SetSetting(t.Context(), settingCert, CertSettings{Mode: "upload", Hostname: "vault.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := CertificateCommand(t.Context(), e.st, dir, "info"); !strings.Contains(out, "vault.example.com: uploaded") || !strings.Contains(out, "Test CA") {
+		t.Fatalf("info: %q", out)
+	}
+	if _, err := CertificateCommand(t.Context(), e.st, dir, "self"); err != nil {
+		t.Fatal(err)
+	}
+	var c CertSettings
+	_ = e.st.GetSetting(t.Context(), settingCert, &c)
+	if c.Mode != "self" {
+		t.Fatalf("mode after self: %q", c.Mode)
+	}
+	if _, err := CertificateCommand(t.Context(), e.st, dir, "bogus"); err == nil {
+		t.Fatal("unknown command accepted")
+	}
+}

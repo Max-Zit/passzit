@@ -1,0 +1,25 @@
+<h1>Komandna linija</h1>
+<p>Komanda <code>passzit</code> čita prijave u skriptama i na serverima. Kao i pregledač, sve dešifruje na svom računaru: server vidi samo token uređaja i šifrovane podatke. Svako izdanje je sadrži za Linux (amd64, arm64) i Windows.</p>
+
+<h2 id="login">Prijava</h2>
+<pre>passzit login --server https://vault.example.com --email ja@example.com</pre>
+<p>Traži glavnu lozinku i kod iz aplikacije za autentifikaciju, a zatim se pojavljuje u <i>Moj nalog → Aktivne sesije</i> kao „PassZit CLI on <i>računar</i>“, gde je možete odjaviti. Token uređaja se čuva u vašem folderu podešavanja (<code>~/.config/passzit/cli.json</code>, na Windows-u <code>%APPDATA%\passzit\cli.json</code>), čitljiv samo vama. Prihvataju se samo HTTPS serveri.</p>
+
+<h2 id="unlock">Otključavanje za sesiju</h2>
+<pre>export PASSZIT_SESSION="$(passzit unlock --raw)"     # Linux, macOS
+$env:PASSZIT_SESSION = (passzit unlock --raw)        # Windows PowerShell</pre>
+<p>Ključ sesije u <code>PASSZIT_SESSION</code> otvara kopiju ključa naloga koju je <code>unlock</code> sačuvao zapečaćenu; bez promenljive ta kopija ne vredi ništa. <code>passzit lock</code> briše kopiju. Bez <code>PASSZIT_SESSION</code> svaka komanda traži glavnu lozinku.</p>
+
+<h2 id="use">Čitanje prijava</h2>
+<pre>passzit list github                 # stavke čiji naziv, korisničko ime ili adresa sadrže „github“
+passzit get password "GitHub"       # samo lozinka, za skripte
+passzit get username GitHub
+passzit get totp GitHub             # trenutni jednokratni kod
+passzit get notes "Ruter kancelarija"
+passzit get item 3f2a9c1e           # cela stavka kao JSON (id ili njegovih prvih 8 znakova)
+passzit generate --length 24</pre>
+<p>Naziv koji odgovara više stavki se odbija uz spisak njihovih id-jeva; tada koristite id. Komandna linija čita vaš lični trezor i deljene trezore čiji ste član; ne menja stavke.</p>
+
+<h2 id="status">Stanje i odjava</h2>
+<pre>passzit status
+passzit logout</pre>

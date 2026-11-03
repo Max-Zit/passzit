@@ -43,6 +43,15 @@
   <li><b>Let's Encrypt</b> — besplatan, obnavlja se sam 30 dana pre isteka. Potrebno je javno DNS ime za server. Let's Encrypt proverava ime preko <b>porta 80</b> ovog servera (dostupnog sa interneta) ili preko <b>DNS zapisa na Cloudflare-u</b> — to radi i za servere samo u vašoj mreži: napravite Cloudflare API token sa <i>Zone → DNS → Edit</i> za zonu; PassZit ga čuva šifrovanog.</li>
 </ul>
 <p>Sertifikat se koristi odmah na portu konzole, bez restarta. <i>Koristi port 80</i> šalje pregledače koji ukucaju ime bez HTTPS-a na konzolu. DNS vaše mreže mora da usmeri ime na ovaj server. Povratak na samopotpisani sertifikat: izaberite <i>Sopstveni sertifikat konzole</i>.</p>
+<p>Ako vam sertifikat zaključa pristup konzoli (pogrešno ime, istekao), vratite samopotpisani na serveru: u meniju podešavanja appliance-a <i>Certificate</i>, ili <code>sudo runuser -u passzit -- sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit --certificate self'</code> i restartujte servis. <code>--certificate info</code> prikazuje trenutni.</p>
+
+<h2 id="email">E-mail</h2>
+<p>U <i>Podešavanja → Imejl</i> unesite SMTP server (STARTTLS na portu 587 ili TLS na 465; lozinka se čuva šifrovana i šalje se samo preko šifrovane veze), adresu pošiljaoca i adrese administratora. <i>Pošalji mi probnu poruku</i> to proverava.</p>
+<ul>
+  <li><b>Administratori</b> dobijaju obaveštenja o serveru: Let's Encrypt sertifikat koji nije obnovljen, otpremljeni sertifikat koji ističe za manje od 21 dan (jednom dnevno), neuspela rezervna kopija konzole ili njena kopija, i izmena koja čeka drugog administratora (princip četiri oka).</li>
+  <li><b>Korisnici</b> dobijaju poruke o onome što se njih tiče, na svom jeziku: pozivnicu (kada označite <i>Pošalji pozivnicu i imejlom</i>) i hitni pristup koji je zatražen, odobren ili odbijen.</li>
+</ul>
+<p>Poruke kažu samo šta se desilo i vode na konzolu; nikada ne sadrže lozinke ni druge tajne. Poruka koja ne može da se pošalje beleži se u dnevniku revizije.</p>
 
 <h2 id="audit">Dnevnik revizije</h2>
 <p>Prijave, neuspeli pokušaji, blokiranja, pozivnice, izmene korisnika, podešavanja, promene glavne lozinke i oporavci beleže se sa vremenom, korisnikom i adresom. Svaki unos sadrži heš prethodnog; stranica pokazuje da li je lanac netaknut. Dnevnik nikada ne sadrži lozinke ni sadržaj stavki.</p>

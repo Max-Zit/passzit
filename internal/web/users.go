@@ -22,6 +22,8 @@ type usersData struct {
 	NewLink  string
 	NewEmail string
 	Now      time.Time
+	MailOn   bool // e-mail is set up: the invitation can go out by mail
+	Mailed   bool // the invitation just went out by mail
 	Days     int
 }
 
@@ -35,6 +37,7 @@ func (s *Server) showUsers(w http.ResponseWriter, r *http.Request, status int, d
 		s.serverError(w, r, err)
 		return
 	}
+	d.MailOn = s.emailSettings(r.Context()).Enabled
 	d.Users, d.Disabled = nil, nil
 	for _, u := range all {
 		if u.Disabled {
@@ -82,7 +85,15 @@ func (s *Server) handleInviteCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "invite.create", "user:"+inv.Email, "invitation as %s, valid %d days", inv.Role, days)
-	s.showUsers(w, r, http.StatusOK, &usersData{Role: store.RoleUser, NewLink: s.publicBase(r) + "/invite/" + tok, NewEmail: inv.Email}, "")
+	link := s.publicBase(r) + "/invite/" + tok
+	mailed := false
+	if r.FormValue("send_mail") == "on" && s.emailSettings(r.Context()).Enabled {
+		s.notifyUser(r.Context(), inv.Email, s.lang(r, userFrom(r)), mailText{Subject: "You are invited to PassZit",
+			Lines: [][]any{{"%s invites you to the PassZit password manager of your team.", userFrom(r).Email},
+				{"Open the link below within %d days, choose your master password and set up two-factor sign-in. Only you know the master password; nobody can reset it for you.", days}}}, link)
+		mailed = true
+	}
+	s.showUsers(w, r, http.StatusOK, &usersData{Role: store.RoleUser, NewLink: link, NewEmail: inv.Email, Mailed: mailed}, "")
 }
 
 func (s *Server) handleInviteDelete(w http.ResponseWriter, r *http.Request) {

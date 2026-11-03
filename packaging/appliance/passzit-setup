@@ -79,6 +79,23 @@ $tok"
 
 
 
+# certificate shows which certificate browsers get; it can go back to the
+# self-signed one when a trusted certificate locks the console out (wrong
+# name, expired). The trusted one is set in the web console.
+certificate() {
+    info=$(su passzit -s /bin/sh -c "set -a; . /etc/passzit/server.env; /usr/bin/passzit-server --data-dir $DATA --certificate info" 2>&1)
+    whiptail --title "$T" --yesno "$info
+
+A trusted certificate (your own or Let's Encrypt) is set in the web console under Settings → Certificate.
+
+Go back to the self-signed certificate now?" 18 74 --defaultno || return
+    if su passzit -s /bin/sh -c "set -a; . /etc/passzit/server.env; /usr/bin/passzit-server --data-dir $DATA --certificate self" >/dev/null 2>&1; then
+        systemctl restart passzit-server && msg "The console uses its self-signed certificate again."
+    else
+        msg "That did not work; see journalctl -u passzit-server."
+    fi
+}
+
 restore_backup() {
     newest=$(ls -1t "$DATA"/backups/passzit-backup-*.pzb 2>/dev/null | head -1)
     f=$(whiptail --title "$T" --inputbox "Backup file to restore (copy it to the appliance first, e.g. with scp to /tmp)" 10 74 "$newest" 3>&1 1>&2 2>&3) || return
@@ -96,7 +113,7 @@ restore_backup() {
 }
 
 while true; do
-    c=$(whiptail --title "$T" --menu "Address: $(current_ip)   Console: https://$(current_ip | cut -d/ -f1):8443" 21 74 10 \
+    c=$(whiptail --title "$T" --menu "Address: $(current_ip)   Console: https://$(current_ip | cut -d/ -f1):8443" 22 74 11 \
         1 "Network (DHCP or fixed address)" \
         2 "Server name" \
         3 "Time zone" \
@@ -106,7 +123,8 @@ while true; do
         7 "Restore a backup" \
         8 "Command line" \
         9 "Restart the appliance" \
-        10 "Shut down the appliance" 3>&1 1>&2 2>&3) || exit 0
+        10 "Shut down the appliance" \
+        11 "Certificate (show it, or back to self-signed)" 3>&1 1>&2 2>&3) || exit 0
     case "$c" in
     1) network ;;
     2) server_name ;;
@@ -119,5 +137,6 @@ while true; do
     8) exit 0 ;;
     9) whiptail --title "$T" --yesno "Restart the appliance now?" 8 60 && systemctl reboot ;;
     10) whiptail --title "$T" --yesno "Shut down the appliance now?" 8 60 && systemctl poweroff ;;
+    11) certificate ;;
     esac
 done

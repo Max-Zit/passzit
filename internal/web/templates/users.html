@@ -5,6 +5,7 @@
 <section class="panel accent">
   <h2>{{template "icon" "mail"}}{{$.T "Invitation for %s" $.Data.NewEmail}}</h2>
   <p>{{$.T "Send this link to the user (it is shown only now and works once, for %d days). The user chooses the master password; you never see it." $.Data.Days}}</p>
+  {{if $.Data.Mailed}}<p class="small">{{template "icon" "check"}} {{$.T "The invitation is also sent to %s by e-mail." $.Data.NewEmail}}</p>{{end}}
   <pre class="token" id="invlink">{{.}}</pre>
   <p><button type="button" class="secondary" data-copy="#invlink">{{template "icon" "copy"}}{{$.T "Copy"}}</button></p>
 </section>
@@ -22,6 +23,7 @@
   <form method="post" action="/users/invite" class="stack">
     <label>{{.T "E-mail address"}}<input type="email" name="email" value="{{.Data.Email}}" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
     {{template "rolefield" (rowOf $ .Data.Role)}}
+    {{if .Data.MailOn}}<label class="check"><input type="checkbox" name="send_mail" checked>{{.T "Also send the invitation by e-mail"}}</label>{{end}}
     <div><button class="primary">{{template "icon" "mail"}}{{.T "Create invitation link"}}</button></div>
   </form>
   {{if .Data.Invites}}

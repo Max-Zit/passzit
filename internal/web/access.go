@@ -207,6 +207,7 @@ func (s *Server) apiEmergencyAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "emergency."+r.PathValue("action"), fmt.Sprintf("emergency:%d", id), "%s", what)
+	s.notifyEmergency(r, u, id, r.PathValue("action"))
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -308,6 +309,8 @@ func (s *Server) holdForApproval(w http.ResponseWriter, r *http.Request, action,
 		return true
 	}
 	s.audit(r, "approval.request", fmt.Sprintf("approval:%d", id), "%s — waits for a second administrator", summary)
+	s.notifyAdmins(r.Context(), mailText{Subject: "A change waits for a second administrator",
+		Lines: [][]any{{"%s asks: %s.", userFrom(r).Email, summary}, {"It runs only after a second administrator approves it under Approvals."}}}, "/approvals")
 	s.redirect(w, r, back, "A second administrator must approve this under Approvals (within 24 hours).")
 	return true
 }

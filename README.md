@@ -29,6 +29,7 @@ The script checks the release signature, installs PostgreSQL, starts the service
 - **Browser extensions** for Chrome, Edge, Opera, Brave, Vivaldi and Firefox, downloadable from the console: fill logins and one-time codes only on the matching site (Public Suffix List), offer to save new and changed logins, scan a 2FA QR code, generator, search.
 - **Remote connections:** double-click an RDP, SSH, WinSCP, WinBox, VNC or Telnet item and the paired **MaxZit Launcher** (shared with [WatchZit](https://github.com/Max-Zit/watchzit), downloadable from the console) opens it with the stored credentials.
 - **Teams:** shared vaults with per-user rights (view, use, edit, manage), groups, time-limited access, LDAP and SSO (OIDC, SAML) sign-in, secret links, emergency access, per-item access log, four-eyes approval.
+- **Command line:** the `passzit` command (Linux, Windows, macOS) reads logins and one-time codes in scripts, decrypting on its own computer.
 - **Import and export:** Chrome, Edge, Firefox, Safari, Bitwarden, KeePass/KeePassXC, 1Password, LastPass and generic CSV; encrypted PassZit export.
 - **Accounts:** only by invitation; mandatory two-factor sign-in (TOTP, security keys and passkeys, recovery codes); recovery key for a forgotten master password; master-password change without re-encrypting the items.
 - **Administration:** roles, vault policy (lock time, clipboard, key derivation, minimum length, trash, file limits, breach check), sessions and sign-in blocks, IP allow-list, hash-chained audit log, built-in user guide; 14 languages.

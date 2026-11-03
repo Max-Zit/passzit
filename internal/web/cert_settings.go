@@ -2,11 +2,15 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/max-zit/passzit/internal/store"
 )
 
 // StartCerts uses the saved certificate settings and renews Let's Encrypt
@@ -26,8 +30,11 @@ func (s *Server) StartCerts(ctx context.Context) {
 	}
 	go func() {
 		for {
+			s.warnCertExpiry(ctx)
 			if err := s.renewCert(ctx); err != nil {
 				s.log.Error("renew the Let's Encrypt certificate", "err", err)
+				s.notifyAdmins(ctx, mailText{Subject: "The certificate was not renewed",
+					Lines: [][]any{{"PassZit could not renew the Let's Encrypt certificate of the console: %s", err.Error()}, {"The current certificate stays in use until it expires."}}}, "/settings/certificate")
 				_ = s.store.Audit(ctx, "-", "local", "settings.certificate", "server", "Let's Encrypt renewal failed: "+err.Error())
 			}
 			select {
@@ -223,4 +230,38 @@ func (s *Server) handleCertificateRenew(w http.ResponseWriter, r *http.Request) 
 	_ = s.Certs.apply(c)
 	s.audit(r, "settings.certificate", "settings", "renewed the Let's Encrypt certificate for %s", c.Hostname)
 	s.redirect(w, r, back, "The certificate is renewed.")
+}
+
+// CertificateCommand serves `passzit-server --certificate info|self` (the
+// appliance's setup menu): it shows which certificate browsers get, or goes
+// back to the self-signed one. The trusted files stay on disk.
+func CertificateCommand(ctx context.Context, st *store.Store, dataDir, cmd string) (string, error) {
+	var c CertSettings
+	if err := st.GetSetting(ctx, settingCert, &c); err != nil {
+		return "", err
+	}
+	switch cmd {
+	case "info":
+		if c.Mode != "upload" && c.Mode != "acme" {
+			return "The console uses its own self-signed certificate. Set a trusted one in the web console under Settings → Certificate.", nil
+		}
+		certs := &Certs{dir: filepath.Join(dataDir, "tls")}
+		k := certs.loadCert()
+		if k == nil || k.Leaf == nil {
+			return "Certificate setting: " + c.Mode + " for " + c.Hostname + ", but its files are missing; browsers get the self-signed certificate.", nil
+		}
+		how := "uploaded"
+		if c.Mode == "acme" {
+			how = "Let's Encrypt (" + c.Challenge + " check), renewed by itself"
+		}
+		return fmt.Sprintf("Certificate for %s: %s, issued by %s, valid until %s (%d days).", c.Hostname, how, k.Leaf.Issuer.CommonName,
+			k.Leaf.NotAfter.Format("2006-01-02"), int(time.Until(k.Leaf.NotAfter).Hours()/24)), nil
+	case "self":
+		if err := st.SetSetting(ctx, settingCert, CertSettings{Mode: "self", Challenge: "http", RedirectHTTP: true}); err != nil {
+			return "", err
+		}
+		_ = st.Audit(ctx, "-", "local", "settings.certificate", "settings", "back to the self-signed certificate from the command line")
+		return "The console uses its self-signed certificate again. Restart the service if it is running.", nil
+	}
+	return "", fmt.Errorf("--certificate takes info or self")
 }

@@ -58,6 +58,7 @@ export PASSZIT_DB=postgres://passzit:TAJNA@localhost/passzit
   <tr><td><code>--restore FAJL</code></td><td>vraća rezervnu kopiju konzole i izlazi (servis zaustavljen); lozinka u <code>PASSZIT_BACKUP_PASSPHRASE</code> ili <code>--restore-passphrase-file</code></td></tr>
   <tr><td><code>--reset-allowlist</code></td><td>ponovo dozvoljava privatne mreže i izlazi</td></tr>
   <tr><td><code>--unblock-ip</code></td><td>oslobađa blokiranu adresu (ili <code>all</code>) i izlazi</td></tr>
+  <tr><td><code>--certificate</code></td><td><code>info</code> prikazuje sertifikat konzole, <code>self</code> vraća samopotpisani; zatim izlazi</td></tr>
   <tr><td><code>--version</code></td><td>ispisuje verziju i izlazi</td></tr>
   <tr><td><code>--dev-embedded-db</code></td><td>privatni PostgreSQL u direktorijumu podataka — samo za testove i demo</td></tr>
   <tr><td><code>--dev-no-2fa</code></td><td>prijava bez drugog faktora — samo test i demo serveri (kod instalacije iz paketa: <code>PASSZIT_TEST_NO_2FA=yes</code> u <code>/etc/passzit/server.env</code>); svaka stranica prikazuje upozorenje</td></tr>

@@ -43,6 +43,15 @@
   <li><b>Let's Encrypt</b> — free, renewed by itself 30 days before it expires. It needs a public DNS name for the server. Let's Encrypt checks the name either over <b>port 80</b> of this server (reachable from the internet) or through a <b>DNS record at Cloudflare</b> — that also works for servers only in your network: create a Cloudflare API token with <i>Zone → DNS → Edit</i> for the zone; PassZit stores it encrypted.</li>
 </ul>
 <p>The certificate is used at once on the console port, without a restart. <i>Serve port 80</i> sends browsers that type the name without HTTPS to the console. The DNS of your network must point the name to this server. Back to the self-signed certificate: choose <i>The console's own certificate</i>.</p>
+<p>If a certificate locks you out of the console (wrong name, expired), go back to the self-signed one on the server: in the appliance's setup menu <i>Certificate</i>, or <code>sudo runuser -u passzit -- sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit --certificate self'</code> and restart the service. <code>--certificate info</code> shows the current one.</p>
+
+<h2 id="email">E-mail</h2>
+<p>Under <i>Settings → E-mail</i> enter an SMTP server (STARTTLS on port 587 or TLS on 465; the password is stored encrypted and is sent only over an encrypted connection), the sender address and the administrators' addresses. <i>Send a test message to me</i> checks it.</p>
+<ul>
+  <li><b>Administrators</b> get notices about the server: a Let's Encrypt certificate that was not renewed, an uploaded certificate that expires within 21 days (once a day), a failed console backup or backup copy, and a change that waits for a second administrator (four-eyes principle).</li>
+  <li><b>Users</b> get mail about what concerns them, in their own language: an invitation (when you tick <i>Also send the invitation by e-mail</i>), and emergency access that was requested, approved or rejected.</li>
+</ul>
+<p>Messages say only what happened and link to the console; they never contain passwords or other secrets. A message that cannot be sent is noted in the audit log.</p>
 
 <h2 id="audit">Audit log</h2>
 <p>Sign-ins, failed attempts, blocks, invitations, user changes, settings, master-password changes and recovery are recorded with time, user and address. Every entry contains a hash of the previous one; the page shows whether the chain is intact. The log never contains passwords or item contents.</p>

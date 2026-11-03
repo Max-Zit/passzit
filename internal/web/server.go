@@ -38,6 +38,9 @@ type Server struct {
 
 	// Certs serves the console certificate (self-signed or trusted).
 	Certs *Certs
+	// MailSender replaces the SMTP delivery (tests).
+	MailSender func(to []string, subject, body string) error
+	certWarned string // the day the certificate expiry was last mailed
 	// MgmtACL guards the console listener.
 	MgmtACL *netacl.List
 	// RunningMgmt is the listen address the server actually uses.
@@ -467,6 +470,9 @@ func (s *Server) Handler() http.Handler {
 	admin("GET /settings/certificate", s.handleCertificate)
 	admin("POST /settings/certificate", s.handleCertificateSave)
 	admin("POST /settings/certificate/renew", s.handleCertificateRenew)
+	admin("GET /settings/email", s.handleEmail)
+	admin("POST /settings/email", s.handleEmailSave)
+	admin("POST /settings/email/test", s.handleEmailTest)
 	admin("GET /settings/version", s.handleVersion)
 	admin("POST /settings/version/check", s.handleVersionCheck)
 	admin("POST /settings/version/install", s.handleVersionInstall)
