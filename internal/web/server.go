@@ -410,6 +410,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/account/keys/start", s.apiKeyRegisterStart)
 	api("POST /api/account/keys", s.apiKeyRegister)
 	api("GET /api/unlock-keys", s.apiUnlockKeys)
+	api("POST /api/ext/link", s.apiExtLink)
 	api("POST /api/unlock-keys", s.apiAddUnlockKey)
 	api("POST /api/unlock-keys/{id}/used", s.apiUsedUnlockKey)
 	api("GET /api/directory", s.apiDirectory)

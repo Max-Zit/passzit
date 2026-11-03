@@ -3,7 +3,7 @@
 // it closes), syncs the encrypted vault, finds logins for the open site and
 // fills them into the page when the user asks.
 import * as pz from "./pz/crypto.js";
-import { api, settings, saveSettings, call, loadTexts, t, sameServer } from "./ext.js";
+import { api, settings, saveSettings, call, loadTexts, t, sameServer, deviceName } from "./ext.js";
 import { match, parse } from "./domain.js";
 import { parse as totpParse, code as totpCode } from "./pz/totp.js";
 
@@ -397,7 +397,8 @@ function launcherPairURL() {
 async function syncPairScript() {
   const s = await settings();
   const regs = await api.scripting.getRegisteredContentScripts({ ids: [PAIR] }).catch(() => []);
-  const origins = s.server && s.token ? sameServer(s.server) : [];
+  // also before sign-in: "Connect with the web vault" needs it on the vault page
+  const origins = s.server ? sameServer(s.server) : [];
   const want = [];
   for (const o of origins) { const u = new URL(o); want.push(u.protocol + "//" + u.hostname + "/launcher*", u.protocol + "//" + u.hostname + "/vault*"); }
   const has = origins.length && await api.permissions.contains({ origins: [origins[0] + "/*"] }).catch(() => false);
@@ -644,6 +645,26 @@ const handlers = {
     armLock();
     return { keys: { a: pz.b64u(S.keys.accountKey), p: pz.b64u(S.keys.privateKey), u: pz.b64u(S.keys.publicKey) } };
   },
+  // "Connect with the web vault": the vault page asks what to call this
+  // browser, then hands over the device token the server made for it
+  async pageLinkInfo(msg, sender) {
+    await ownPage(sender, "/vault");
+    const s = await settings();
+    return { device: deviceName(), signedIn: !!s.token, email: s.email };
+  },
+  async pageLink(msg, sender) {
+    await ownPage(sender, "/vault");
+    const s = await settings();
+    const token = String(msg.token || "");
+    if (!/^pzd_[A-Za-z0-9_-]{20,200}$/.test(token)) throw new Error("invalid token");
+    const acct = await call(s.server, token, "GET", "/api/account");
+    if (String(acct.email || "").toLowerCase() !== String(msg.email || "").toLowerCase()) throw new Error("not this account");
+    if (s.token && s.token !== token) await call(s.server, s.token, "POST", "/api/ext/logout").catch(() => {});
+    await lock();
+    await saveSettings({ token, email: acct.email, device: deviceName() });
+    await syncPairScript().catch(() => {});
+    return { email: acct.email };
+  },
   async pageUnlocked(msg, sender) {
     await ownPage(sender, "/vault");
     const s = await settings();
@@ -691,7 +712,7 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg || msg.type === "offscreen-clear") return false;
   // Content scripts may only report captured logins.
   const fromPage = !!sender.tab && sender.id === api.runtime.id && sender.url && !sender.url.startsWith(api.runtime.getURL(""));
-  if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock", "consoleOpen"].includes(msg.type))) return false;
+  if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock", "consoleOpen", "pageLinkInfo", "pageLink"].includes(msg.type))) return false;
   const h = handlers[msg.type];
   if (!h) return false;
   restore().then(() => h(msg, sender)).then((r) => reply({ ok: true, data: r }), (e) => reply({ ok: false, error: e.message || String(e), status: e.status || 0 }));

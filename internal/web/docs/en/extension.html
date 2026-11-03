@@ -11,10 +11,11 @@
 
 <h2 id="signin">Signing in</h2>
 <ol>
-  <li>Click the PassZit icon and enter the address of your server (for example <code>https://vault.example.com</code>), your e-mail address and the master password.</li>
-  <li>The browser asks once whether PassZit may talk to that server — allow it.</li>
-  <li>Enter the code of your authenticator app. Two-factor sign-in must already be set up in the web vault.</li>
+  <li>Click the PassZit icon, enter only the address of your server (for example <code>https://vault.example.com</code>) and click <i>Connect with the web vault</i>. The browser asks once whether PassZit may talk to that server — allow it.</li>
+  <li>The web vault of the server opens. Sign in there as usual if you are not signed in yet (and unlock it).</li>
+  <li>The vault asks <i>Connect the PassZit extension in this browser …?</i> — click <i>Connect</i>. The extension is signed in and unlocked; no password or code is typed in the extension.</li>
 </ol>
+<p>Instead you can open <i>Sign in with e-mail and master password instead</i> in the extension and sign in there with the master password and the code of your authenticator app.</p>
 <p>The extension appears under <i>My account → Active sessions</i> with the name of the browser; you can sign it out there. It stays signed in for 30 days (set by the administrator) and is signed out earlier when it is not used for 14 days.</p>
 <div class="callout warn"><p>The server needs a certificate the browser trusts. With the self-signed certificate of a fresh server the extension cannot connect — use your own certificate or a name with Let's Encrypt.</p></div>
 
@@ -42,4 +43,4 @@
 <p><i>Generator</i> makes passwords and passphrases like the one in the web vault; <i>Search</i> finds any item of your vault to copy its user name or password.</p>
 
 <h2 id="connections">Remote connections</h2>
-<p>With the PassZit helper the extension also opens RDP, SSH and WinBox connections of your logins — see <a href="/docs/connections">Remote connections</a>.</p>
+<p>With the MaxZit Launcher the extension also opens RDP, SSH, WinBox and other connections of your logins — see <a href="/docs/connections">Remote connections</a>.</p>

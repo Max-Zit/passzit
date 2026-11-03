@@ -145,6 +145,41 @@ func (s *Server) apiExtLogin2FA(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, extLoginResp{Next: "done", Token: tok})
 }
 
+// apiExtLink connects the extension of the same browser from the web vault:
+// the signed-in, unlocked vault page asks the user, then hands the device
+// token to the extension through its bridge on this server's page. The web
+// session already passed the second factor, so the extension needs no
+// password or code of its own.
+func (s *Server) apiExtLink(w http.ResponseWriter, r *http.Request) {
+	u, x := userFrom(r), sessionFrom(r)
+	if x.Kind != store.KindWeb {
+		apiError(w, http.StatusForbidden, "forbidden", s.msg(r, "Connect the extension in the web vault."))
+		return
+	}
+	var q struct {
+		Device string `json:"device"`
+	}
+	if !readJSON(w, r, 1<<10, &q) {
+		return
+	}
+	device := strings.TrimSpace(q.Device)
+	if device == "" || len(device) > 80 {
+		device = "Browser extension"
+	}
+	if msg := s.directoryCheck(r, u, false); msg != "" {
+		apiError(w, http.StatusForbidden, "directory", msg)
+		return
+	}
+	n := store.NewSession{UserID: u.ID, Kind: store.KindExt, Device: device, IP: clientIP(r), UserAgent: r.UserAgent(), Stage: store.StageFull, Life: s.extLife(r)}
+	tok, _, err := s.store.StartSession(r.Context(), n)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.audit(r, "login", "user:"+u.Email, "extension %q connected from the web vault", device)
+	writeJSON(w, http.StatusOK, extLoginResp{Next: "done", Token: tok})
+}
+
 // apiExtLogout ends the extension's session.
 func (s *Server) apiExtLogout(w http.ResponseWriter, r *http.Request) {
 	if x := sessionFrom(r); x != nil && x.Kind == store.KindExt {

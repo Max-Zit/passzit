@@ -11,10 +11,11 @@
 
 <h2 id="signin">Prijava</h2>
 <ol>
-  <li>Kliknite na PassZit ikonu i unesite adresu svog servera (na primer <code>https://vault.example.com</code>), svoju e-mail adresu i glavnu lozinku.</li>
-  <li>Pregledač jednom pita da li PassZit sme da komunicira sa tim serverom — dozvolite.</li>
-  <li>Unesite kod iz aplikacije za autentifikaciju. Prijava u dva koraka mora već biti podešena u web trezoru.</li>
+  <li>Kliknite na PassZit ikonu, unesite samo adresu svog servera (na primer <code>https://vault.example.com</code>) i kliknite <i>Poveži preko web trezora</i>. Pregledač jednom pita da li PassZit sme da komunicira sa tim serverom — dozvolite.</li>
+  <li>Otvara se web trezor servera. Prijavite se tamo kao i obično ako još niste (i otključajte ga).</li>
+  <li>Trezor pita <i>Povezati PassZit ekstenziju u ovom pregledaču …?</i> — kliknite <i>Poveži</i>. Ekstenzija je prijavljena i otključana; u ekstenziji se ne kuca ni lozinka ni kod.</li>
 </ol>
+<p>Umesto toga možete u ekstenziji otvoriti <i>Umesto toga prijava e-mailom i glavnom lozinkom</i> i prijaviti se tamo glavnom lozinkom i kodom iz aplikacije za autentifikaciju.</p>
 <p>Ekstenzija se pojavljuje u <i>Moj nalog → Aktivne sesije</i> sa imenom pregledača; tamo je možete odjaviti. Ostaje prijavljena 30 dana (određuje administrator), a odjavljuje se ranije ako se ne koristi 14 dana.</p>
 <div class="callout warn"><p>Serveru je potreban sertifikat kome pregledač veruje. Sa samopotpisanim sertifikatom novog servera ekstenzija ne može da se poveže — koristite sopstveni sertifikat ili ime sa Let's Encrypt sertifikatom.</p></div>
 
@@ -42,4 +43,4 @@
 <p><i>Generator</i> pravi lozinke i fraze kao onaj u web trezoru; <i>Pretraga</i> pronalazi bilo koju stavku trezora da biste kopirali njeno korisničko ime ili lozinku.</p>
 
 <h2 id="connections">Udaljene veze</h2>
-<p>Uz PassZit pomoćnika ekstenzija otvara i RDP, SSH i WinBox veze vaših prijava — pogledajte <a href="/docs/connections">Udaljene veze</a>.</p>
+<p>Uz MaxZit Launcher ekstenzija otvara i RDP, SSH, WinBox i druge veze vaših prijava — pogledajte <a href="/docs/connections">Udaljene veze</a>.</p>

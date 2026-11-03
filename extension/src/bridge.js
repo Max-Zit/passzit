@@ -22,6 +22,16 @@
       api.runtime.sendMessage({ type: "pageUnlocked", email: String(m.email || ""), keys: m.keys }).catch(() => {});
     }
     if (m.type === "pz-lock") api.runtime.sendMessage({ type: "pageLock" }).catch(() => {});
+    // "Connect with the web vault": the page asks the browser's name, then
+    // passes the device token the server made for this extension
+    if (m.type === "pz-link-ask") {
+      api.runtime.sendMessage({ type: "pageLinkInfo" }).then((r) => say(Object.assign({ type: "pz-link-info" }, r && r.ok ? r.data : {})), () => say({ type: "pz-link-info" }));
+    }
+    if (m.type === "pz-ext-link" && typeof m.token === "string" && m.token.length <= 256) {
+      api.runtime.sendMessage({ type: "pageLink", token: m.token, email: String(m.email || "") }).then(
+        (r) => say({ type: "pz-ext-linked", ok: !!(r && r.ok), error: r && r.error }),
+        (err) => say({ type: "pz-ext-linked", ok: false, error: String(err && err.message || err) }));
+    }
     if (m.type === "pz-connect" && typeof m.id === "string" && m.id.length <= 64) {
       api.runtime.sendMessage({ type: "pageConnect", id: m.id }).then(
         (r) => say(Object.assign({ type: "pz-connect-result", id: m.id, ok: !!(r && r.ok), error: r && r.error }, r && r.ok ? r.data : {})),

@@ -84,15 +84,36 @@ function showSignIn(st) {
   const server = el("input", { type: "url", value: st.server || "", placeholder: "https://vault.example.com", required: true, autocomplete: "off" });
   const email = el("input", { type: "email", value: st.email || "", required: true, autocomplete: "username" });
   const pw = el("input", { type: "password", required: true, autocomplete: "current-password" });
-  const go = el("button", { class: "primary", type: "submit" }, t("Sign in and unlock"));
-  const form = el("form", {}, el("h1", { text: t("Sign in to PassZit") }), err,
-    el("label", {}, t("Server address"), server), el("label", {}, t("E-mail address"), email), el("label", {}, t("Master password"), pw), go,
-    el("p", { class: "small muted", style: "margin-top:10px" }, t("The browser asks once to allow PassZit to talk to your server.")));
-  form.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
+  const go = el("button", { class: "secondary", type: "submit" }, t("Sign in and unlock"));
+  // connect through the web vault: it is signed in already (or signs in
+  // once there) and hands this extension its own device token
+  const connect = el("button", { class: "primary", type: "button", onclick: async () => {
     showErr(err, "");
     const origin = normServer(server.value);
     if (!origin) { showErr(err, t("Enter the address of your PassZit server, e.g. https://vault.example.com.")); return; }
+    let granted = false;
+    try { granted = await api.permissions.request({ origins: sameServer(origin).map((o) => o + "/*") }); } catch (e) { granted = false; }
+    if (!granted) { showErr(err, t("Without this permission the extension cannot reach your server.")); return; }
+    await saveSettings({ server: origin, token: "" });
+    await bg("settingsChanged");
+    await api.tabs.create({ url: origin + "/vault?connect=extension" });
+    window.close();
+  } }, t("Connect with the web vault"));
+  const byPassword = el("details", { class: "bypw" }, el("summary", { text: t("Sign in with e-mail and master password instead") }),
+    el("label", {}, t("E-mail address"), email), el("label", {}, t("Master password"), pw), go);
+  const form = el("form", {}, el("h1", { text: t("Sign in to PassZit") }), err,
+    el("label", {}, t("Server address"), server), connect,
+    el("p", { class: "small muted", text: t("Opens the web vault of your server: if you are signed in there, one click connects this extension, without the password again.") }),
+    byPassword,
+    el("p", { class: "small muted", style: "margin-top:10px" }, t("The browser asks once to allow PassZit to talk to your server.")));
+  email.required = false; pw.required = false;
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    showErr(err, "");
+    if (!byPassword.open) { connect.click(); return; }
+    const origin = normServer(server.value);
+    if (!origin) { showErr(err, t("Enter the address of your PassZit server, e.g. https://vault.example.com.")); return; }
+    if (!email.value.trim() || !pw.value) { showErr(err, t("Enter your e-mail address and master password.")); return; }
     // The permission request must be the first thing in the click.
     let granted = false;
     try { granted = await api.permissions.request({ origins: sameServer(origin).map((o) => o + "/*") }); } catch (e) { granted = false; }
@@ -112,7 +133,7 @@ function showSignIn(st) {
     }
   });
   app.replaceChildren(form);
-  (st.server ? pw : server).focus();
+  server.focus();
 }
 
 function showCode(origin, pending, wrap) {
@@ -370,7 +391,6 @@ async function showMenu(st) {
   // the launcher accepts this extension only after pairing
   const helperState = el("p", { class: "small muted" });
   const firefox = typeof browser !== "undefined" && api.runtime.getURL("").startsWith("moz-extension:");
-  const installCmd = firefox ? "passzit-helper install --firefox" : "passzit-helper install --chrome-id " + api.runtime.id;
   // The MaxZit Launcher (shared with WatchZit) registers this extension
   // after the user allows it in the launcher's own window.
   const pairURL = "maxzit-launcher://pair?app=passzit&browser=" + (firefox ? "firefox" : "chromium") + "&id=" + encodeURIComponent(firefox ? "passzit@maxzit.com" : api.runtime.id);
@@ -380,10 +400,15 @@ async function showMenu(st) {
   } }, t("Pair with the MaxZit Launcher"));
   const checkHelper = async () => {
     const r = await bg("helperPing").catch(() => ({ ok: false }));
-    helperState.replaceChildren(r && r.ok ? t("The program for connections answers (%s).", r.version || "?") : t("The PassZit helper is not installed yet. Install it, then run once:"),
-      r && r.ok ? "" : el("code", { class: "cmd", text: installCmd }),
-      r && r.ok ? "" : el("span", { class: "small", text: " " + t("Or, on Windows, install the MaxZit Launcher and pair it:") }),
-      r && r.ok ? "" : pairBtn);
+    if (r && r.ok) { helperState.replaceChildren(t("The MaxZit Launcher answers (%s).", r.version || "?")); return; }
+    // not installed or not paired: download it from the Launcher page of the
+    // server (the same program WatchZit offers), then pair this browser
+    const page = el("button", { type: "button", class: "secondary", onclick: async () => {
+      const cur = await settings();
+      if (cur.server) await api.tabs.create({ url: cur.server + "/launcher" });
+      window.close();
+    } }, t("Download the MaxZit Launcher"));
+    helperState.replaceChildren(t("Install the MaxZit Launcher on this computer and pair it with this browser."), page, pairBtn);
   };
   // MaxZit consoles (WatchZit) whose "Open with" uses the logins of the vault
   const consoles = el("div", { class: "consoles" });

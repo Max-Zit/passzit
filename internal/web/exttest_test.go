@@ -107,6 +107,10 @@ func newExtFixture(t *testing.T) *extFixture {
 	c.must("PUT", "/api/items/"+id3, putItemReq{VaultID: vid, Data: c.sealItem(vid, id3, map[string]any{"type": "login", "name": "Probe server",
 		"login": map[string]any{"username": "root", "password": "Device-Pass-1"}, "connect": map[string]any{"tool": "ssh", "host": "10.20.30.40", "port": 22}})}, nil)
 	f.query = url.Values{"server": {f.ts.URL}, "email": {"alice@example.com"}, "pw": {"Alice-Master-Password-9"}, "site": {site}, "other": {other}}
+	// a device token for "Connect with the web vault", made by the web session
+	var link extLoginResp
+	c.must("POST", "/api/ext/link", map[string]string{"device": "Linked test"}, &link)
+	f.query.Set("linktoken", link.Token)
 	if os.Getenv("PZ_EXT_SHOTS") != "" {
 		// sample logins for the screenshots of the store listings
 		demo := []map[string]any{

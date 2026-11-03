@@ -11,9 +11,7 @@
       <p class="small muted">{{.T "The installer sets the launcher up for your Windows user, without administrator rights, and puts it in Apps with its icon, where it can be removed again. Windows may warn that the publisher is unknown; choose More info → Run anyway."}}</p>
       {{else if .Data.Launcher}}<p><a class="btn primary" href="/downloads/maxzit-launcher.exe" download>{{template "icon" "download"}}{{.T "Download the MaxZit Launcher"}}</a></p>
       <p class="small muted">{{.T "Run the downloaded file once: it installs itself for your Windows user. Windows may warn that the publisher is unknown; choose More info → Run anyway."}}</p>{{end}}
-      {{if .Data.Helper}}<p><a class="btn {{if .Data.Launcher}}secondary{{else}}primary{{end}}" href="/downloads/passzit-helper.exe" download>{{template "icon" "download"}}{{.T "Download the PassZit helper"}}</a></p>
-      <p class="small muted">{{.T "The PassZit helper opens the same connections for PassZit alone. Put it in a folder that stays; the extension menu shows the one command that registers it."}}</p>{{end}}
-      {{if not (or .Data.Launcher .Data.Helper)}}<p class="small muted">{{.T "The launcher is not on this server yet. Until then, use the PassZit helper (see the user guide)."}}</p>{{end}}
+      {{if not (or .Data.Launcher .Data.LauncherMSI)}}<p class="small muted">{{.T "The launcher is not on this server yet: download it from a WatchZit console or the WatchZit release, it is the same program."}}</p>{{end}}
     </li>
     <li>
       <h3>{{.T "Pair it with the PassZit extension"}}</h3>

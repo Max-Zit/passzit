@@ -171,6 +171,33 @@ try {
   });
   await unlock(pw);
   step("unlocked again", (await bg("search", { q: "" })).items.length === 4 + extra);
+  // "Connect with the web vault": signed out, the vault page hands over a
+  // device token the web session made (the fixture made it the same way)
+  await bg("logout");
+  await saveSettings({ server });
+  await bg("settingsChanged");
+  const info = await inPage(() => new Promise((res) => {
+    addEventListener("message", (e) => { if (e.data && e.data.type === "pz-link-info") res(e.data); });
+    postMessage({ type: "pz-link-ask" }, location.origin);
+    setTimeout(() => res(null), 3000);
+  }), []);
+  step("link: the vault page reaches the signed-out extension", info && info.device && info.signedIn === false, JSON.stringify(info));
+  const linked = await inPage((token, email) => new Promise((res) => {
+    addEventListener("message", (e) => { if (e.data && e.data.type === "pz-ext-linked") res(e.data); });
+    postMessage({ type: "pz-ext-link", token, email }, location.origin);
+    setTimeout(() => res(null), 5000);
+  }), [q.get("linktoken"), "bob@example.com"]);
+  step("link: a token of another account is refused", linked && !linked.ok, JSON.stringify(linked));
+  const linked2 = await inPage((token, email) => new Promise((res) => {
+    addEventListener("message", (e) => { if (e.data && e.data.type === "pz-ext-linked") res(e.data); });
+    postMessage({ type: "pz-ext-link", token, email }, location.origin);
+    setTimeout(() => res(null), 5000);
+  }), [q.get("linktoken"), "alice@example.com"]);
+  step("link: the extension is signed in with the token", linked2 && linked2.ok && (await bg("status")).signedIn, JSON.stringify(linked2));
+  await inPage(post, [{ type: "pz-keys-share", email: "alice@example.com", keys }]);
+  let open2 = false;
+  for (let i = 0; i < 30 && !open2; i++) { await sleep(100); open2 = (await bg("status")).unlocked; }
+  step("link: one unlock opens it", open2);
   if (q.get("stay")) {
     step("left signed in for screenshots", true);
   } else {

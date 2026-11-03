@@ -74,3 +74,5 @@ button.qrscan .ic { width: 15px; height: 15px; }
 .row.console code { font-size: 12px; word-break: break-all; }
 .addconsole { display: flex; gap: 6px; }
 .addconsole input { flex: 1; min-width: 0; }
+details.bypw { margin-top: 8px; }
+details.bypw > summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-bottom: 8px; }

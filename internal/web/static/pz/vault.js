@@ -261,6 +261,49 @@ async function openVault() {
   if (await completePending(true)) { await sync(S.revision); render(); }
   // folders of earlier versions move into the vaults
   await migrateFolders();
+  connectExtension();
+}
+
+// ---- "Connect with the web vault": the extension's popup opens
+// /vault?connect=extension; this signed-in, unlocked page asks the user,
+// makes a device token for the extension and hands it over through the
+// extension's bridge (only on this server's vault page), then shares the
+// unlocked keys (one unlock).
+
+let linkWait = null;
+window.addEventListener("message", (e) => {
+  if (e.source !== window || e.origin !== location.origin || !e.data || !linkWait) return;
+  if (e.data.type !== "pz-link-info" && e.data.type !== "pz-ext-linked") return;
+  const done = linkWait;
+  linkWait = null;
+  done(e.data);
+});
+
+function askExtension(msg, ms) {
+  return new Promise((resolve) => {
+    linkWait = resolve;
+    window.postMessage(msg, location.origin);
+    setTimeout(() => { if (linkWait === resolve) { linkWait = null; resolve(null); } }, ms);
+  });
+}
+
+async function connectExtension() {
+  // a query, not a hash: it survives the sign-in (/login?next=…)
+  if (new URLSearchParams(location.search).get("connect") !== "extension") return;
+  history.replaceState(null, "", location.pathname);
+  for (let i = 0; i < 20 && !extHere; i++) await new Promise((r) => setTimeout(r, 100));
+  const info = extHere ? await askExtension({ type: "pz-link-ask" }, 3000) : null;
+  if (!info) { toast(t("The PassZit extension does not answer on this page. Reload the extension and try again."), true); return; }
+  if (!(await confirmBox(t("Connect the PassZit extension in this browser (%s) with %s?", info.device || "", root.dataset.email), t("Connect")))) return;
+  try {
+    const r = await api("POST", "/api/ext/link", { device: info.device || "" });
+    const done = await askExtension({ type: "pz-ext-link", token: r.token, email: root.dataset.email }, 8000);
+    if (!done || !done.ok) throw new Error((done && done.error) || t("The extension did not answer."));
+    shareKeys();
+    toast(t("The extension is connected and unlocked."));
+  } catch (e) {
+    toast(e.message, true);
+  }
 }
 
 async function sync(since) {
