@@ -14,3 +14,4 @@ NOTES.md
 /internal/web/static/pz/qr.wasm
 /internal/web/static/pz/wasm_exec.js
 /extension/build/
+/packaging/appliance/vmdkstream

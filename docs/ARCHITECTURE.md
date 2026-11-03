@@ -66,7 +66,11 @@ item         = JSON (name, URLs, user, password, notes, TOTP secret, custom fiel
 - **Recovery:** without the master password the vault cannot be opened — the UI
   and the guide say so clearly at sign-up. Optional **recovery key** (random,
   128 bits, shown once as groups of letters/digits, optionally printed) wraps
-  the account key a second time. An organisation admin recovery policy comes
+  the account key a second time. **Quick unlock** (Windows Hello, Touch ID,
+  phone screen lock): a platform passkey's WebAuthn PRF output, run through
+  HKDF, seals the account key a third time per device; the server stores the
+  sealed copy and the PRF salt only (table `unlock_keys`, web sessions only).
+  The account key survives password changes, so these copies stay valid. An organisation admin recovery policy comes
   later with organisations and is visible to the user.
 - **Public keys of other users** (sharing) can be substituted by a malicious
   server. Mitigation: show a key fingerprint for members, remember keys that

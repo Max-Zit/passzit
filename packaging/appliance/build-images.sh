@@ -49,7 +49,14 @@ disk=$(pvesm path "$(qm config "$vmid" | sed -n 's/^scsi0: \([^,]*\).*/\1/p')")
 cd "$outdir"
 qemu-img convert -c -O qcow2 "$disk" "$base.qcow2"
 qemu-img convert -O vhdx -o subformat=dynamic "$disk" "$base.vhdx"
-qemu-img convert -O vmdk -o subformat=streamOptimized,adapter_type=lsilogic "$disk" "$base-disk1.vmdk"
+# Not qemu-img: its stream-optimized VMDKs lack the trailing grain tables,
+# directory and footer, and VMware Workstation rejects them ("SHA digest
+# ... does not match manifest"). vmdkstream is built from tools/vmdkstream
+# (GOOS=linux go build -o packaging/appliance/vmdkstream ./tools/vmdkstream)
+# and checks its result like VMware reads it.
+"$src/vmdkstream" -adapter lsilogic "$disk" "$base-disk1.vmdk"
+[ "$("$src/vmdkstream" -verify "$base-disk1.vmdk")" = "$(sha256sum < "$disk" | cut -d' ' -f1)" ] ||
+    { echo "the VMDK does not hold the same disk" >&2; exit 1; }
 
 # 3. The OVA: an OVF descriptor (first), its manifest and the disk.
 vmdk_size=$(stat -c %s "$base-disk1.vmdk")
@@ -58,7 +65,8 @@ capacity=$((gb * 1073741824))
 # schema's (alphabetical) order, or ESXi refuses the OVF.
 item() { # id type name extra-lines
     printf '      <Item>\n'
-    printf '        <rasd:ElementName>%s</rasd:ElementName>\n        <rasd:InstanceID>%s</rasd:InstanceID>\n        <rasd:ResourceType>%s</rasd:ResourceType>\n%s' "$3" "$1" "$2" "$4" | LC_ALL=C sort
+    printf '        <rasd:ElementName>%s</rasd:ElementName>\n        <rasd:InstanceID>%s</rasd:InstanceID>\n        <rasd:ResourceType>%s</rasd:ResourceType>\n%s' "$3" "$1" "$2" "$4" |
+        grep . | LC_ALL=C sort
     printf '      </Item>\n'
 }
 {
