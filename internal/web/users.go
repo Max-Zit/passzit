@@ -212,6 +212,7 @@ type accountData struct {
 	CodesN   int
 	Policy   Policy
 	Keys     []store.SecurityKey
+	Unlock   []store.UnlockKey
 }
 
 func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) {
@@ -231,6 +232,10 @@ func (s *Server) showAccount(w http.ResponseWriter, r *http.Request, status int,
 	}
 	d.Policy = s.policy(r.Context())
 	if d.Keys, err = s.store.SecurityKeys(r.Context(), u.ID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if d.Unlock, err = s.store.UnlockKeys(r.Context(), u.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

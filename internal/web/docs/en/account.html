@@ -19,6 +19,10 @@
 <h2 id="keys">Security keys and passkeys</h2>
 <p>Under <i>Security keys and passkeys</i> you can add a security key (YubiKey, Titan …) or a passkey of your device (Windows Hello, Touch ID, Android). At sign-in, after the master password, <i>Use a security key or passkey</i> replaces the code of the authenticator app. The app and the recovery codes stay as a fallback, and browser extensions still use the app. Keys work only on the HTTPS address they were added on.</p>
 
+<h2 id="unlock">Unlock with Windows Hello</h2>
+<p>Under <i>Unlock with Windows Hello</i>, <i>Set up on this device</i> creates a passkey of this device (Windows Hello, Touch ID, the screen lock of an Android phone). From then on the locked vault shows <i>Unlock with Windows Hello</i> and asks for it at once: a fingerprint, the face or the PIN of the device opens the vault instead of the master password, and the browser extension opens with it (one unlock).</p>
+<p>How it works: the passkey gives the browser a secret through the WebAuthn PRF extension; the browser derives a key from it and seals your account key with it. The server stores only that sealed copy, so it cannot open your vault. Each device and browser profile needs its own setup; it works in recent Chrome, Edge and Safari, on the HTTPS address it was set up on (or <code>localhost</code>). You still need the master password to sign in after the session ends, and it keeps working everywhere. Remove a device from the list to stop it.</p>
+
 <h2 id="share-key">Your key for sharing</h2>
 <p>The fingerprint of your public key, computed in your browser. People who share a vault with you see the same fingerprint; compare it once with them.</p>
 

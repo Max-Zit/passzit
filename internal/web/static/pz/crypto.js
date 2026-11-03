@@ -29,6 +29,7 @@ export const AAD = {
   file: (fileID) => "passzit/file/v1|" + fileID,
   vaultName: (vaultID) => "passzit/vault/v1|" + vaultID,
   knownKeys: () => "passzit/known-keys/v1",
+  unlockKey: (credID) => "passzit/quick-unlock/v1|" + credID,
 };
 
 // ---- encodings

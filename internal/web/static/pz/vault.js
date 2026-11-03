@@ -14,6 +14,7 @@ import { readQR, authenticatorKeys } from "./qr.js";
 import { generate as sshGenerate, fingerprint as sshFingerprint } from "./sshkey.js";
 import { initSharing, loadKnown, completePending, createVault, openVault as openVaultDialog, rotateBanner, canEditVault, vaultLabel } from "./sharing.js";
 import { initSends, openSends, itemText } from "./sends.js";
+import { helloKeys, helloLabel, unlockWithHello } from "./hello.js";
 
 const root = document.getElementById("pz-vault");
 const S = {
@@ -102,7 +103,7 @@ function showFatal(msg) {
     button(t("Try again"), { icon: "refresh", onclick: () => location.reload() }));
 }
 
-function showUnlock(msg) {
+function showUnlock(msg, locked) {
   stopTimers();
   const pw = el("input", { type: "password", name: "password", required: true, autocomplete: "current-password", "aria-label": t("Master password") });
   const err = el("div", { class: "flash err", role: "alert", hidden: !msg, text: msg || "" });
@@ -141,13 +142,50 @@ function showUnlock(msg) {
       submit.classList.remove("loading");
     }
   });
+  const hello = el("div", { class: "stack", hidden: true });
   root.replaceChildren(el("section", { class: "panel unlock" },
     el("div", { class: "unlock-icon" }, icon("lock")),
     el("h1", { text: t("The vault is locked") }),
     el("p", { class: "muted", text: t("Enter your master password to unlock %s.", root.dataset.email) }),
-    err, form));
+    err, hello, form));
   document.getElementById("pz-lock").hidden = true;
   pw.focus();
+  offerHello(hello, err, !msg && !locked);
+}
+
+// offerHello adds the Windows Hello button when this device can unlock
+// the vault with a passkey, and asks at once (not after a manual lock).
+async function offerHello(box, err, ask) {
+  const keys = await helloKeys();
+  if (!keys.length || !box.isConnected) return;
+  const go = button(helloLabel(), { type: "button", class: "primary", icon: "key" });
+  const run = async () => {
+    err.hidden = true;
+    go.disabled = true;
+    go.classList.add("loading");
+    try {
+      const accountKey = await unlockWithHello(keys);
+      const acct = await api("GET", "/api/account");
+      const privateKey = await pz.open(accountKey, acct.wrapped_private_key, pz.AAD.privateKey());
+      S.keys = { accountKey, privateKey, publicKey: pz.unb64u(acct.public_key) };
+      S.acct = acct;
+      await saveKeys(S.keys);
+      await openVault();
+    } catch (e) {
+      if (e.name !== "NotAllowedError" && e.name !== "AbortError") {
+        err.textContent = e instanceof pz.DecryptError ? t("This passkey no longer unlocks the vault. Remove it under My account and set it up again.") : e.message;
+        err.hidden = false;
+      }
+    } finally {
+      go.disabled = false;
+      go.classList.remove("loading");
+    }
+  };
+  go.addEventListener("click", run);
+  box.replaceChildren(go, el("p", { class: "small muted", text: t("or with the master password:") }));
+  box.hidden = false;
+  go.focus();
+  if (ask && document.hasFocus()) run();
 }
 
 // upgradeKDF re-wraps the account key with the policy's stronger key
@@ -167,7 +205,7 @@ async function lock() {
   S.vaults.clear(); S.items.clear(); S.folders.clear();
   S.editing = null;
   await lockNow();
-  showUnlock();
+  showUnlock("", true);
 }
 
 let lockTimer = 0, pollTimer = 0;

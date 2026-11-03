@@ -142,7 +142,9 @@ function showUnlock(st) {
   const go = el("button", { class: "primary", type: "submit" }, icon("lock"), t("Unlock"));
   const form = el("form", {}, el("h1", { text: t("The vault is locked") }),
     el("p", { class: "small muted", text: t("Enter your master password to unlock %s.", st.email) }), err,
-    el("label", {}, t("Master password"), pw), go);
+    el("label", {}, t("Master password"), pw), go,
+    // the web vault can unlock with Windows Hello; one unlock opens this too
+    el("button", { type: "button", class: "ghost", onclick: () => { openVault(); window.close(); } }, icon("external"), t("Unlock in the web vault (Windows Hello)")));
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     showErr(err, "");

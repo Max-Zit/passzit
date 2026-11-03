@@ -92,6 +92,22 @@
   <p class="small muted" id="key-unsupported" hidden>{{.T "This browser cannot use security keys here (an HTTPS address is needed)."}}</p>
 </section>
 
+<section class="panel" id="unlock">
+  <h2>{{template "icon" "lock"}}{{.T "Unlock with Windows Hello"}}</h2>
+  <p class="muted">{{.T "Unlock the vault on this device with Windows Hello, Touch ID or the screen lock of the phone instead of typing the master password. The device keeps a secret that never leaves it; the server stores only the account key sealed with it. The master password still works everywhere."}}</p>
+  {{if .Data.Unlock}}<div class="table-wrap"><table>
+    <thead><tr><th>{{.T "Name"}}</th><th class="hide-sm">{{.T "Added"}}</th><th class="hide-sm">{{.T "Last used"}}</th><th></th></tr></thead>
+    <tbody>{{range .Data.Unlock}}<tr><td>{{.Name}}</td><td class="hide-sm">{{$.Time .CreatedAt}}</td><td class="hide-sm">{{with .LastUsedAt}}{{$.Time .}}{{else}}—{{end}}</td>
+      <td class="actions"><form method="post" action="/account/unlock/delete" class="inline" data-confirm="{{$.T "Stop unlocking with %s?" .Name}}"><input type="hidden" name="id" value="{{.ID}}"><button class="ghost sm">{{template "icon" "trash"}}{{$.T "Remove"}}</button></form></td></tr>{{end}}</tbody>
+  </table></div>{{end}}
+  <form class="row" id="f-unlock">
+    <input name="name" maxlength="60" placeholder="{{.T "Name, e.g. Office laptop"}}" aria-label="{{.T "Name"}}">
+    <input name="password" type="password" autocomplete="current-password" placeholder="{{.T "Master password"}}" aria-label="{{.T "Master password"}}" hidden>
+    <button class="secondary">{{template "icon" "plus"}}{{.T "Set up on this device"}}</button>
+  </form>
+  <p class="small muted" id="unlock-unsupported" hidden>{{.T "This browser cannot use passkeys here (an HTTPS address is needed)."}}</p>
+</section>
+
 <section class="panel">
   <h2>{{template "icon" "screen"}}{{.T "Active sessions"}}</h2>
   <div class="table-wrap"><table>

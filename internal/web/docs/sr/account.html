@@ -19,6 +19,10 @@
 <h2 id="keys">Sigurnosni ključevi i passkey-evi</h2>
 <p>U delu <i>Sigurnosni ključevi i passkey-evi</i> možete dodati sigurnosni ključ (YubiKey, Titan …) ili passkey vašeg uređaja (Windows Hello, Touch ID, Android). Pri prijavi, posle glavne lozinke, <i>Koristi sigurnosni ključ ili passkey</i> zamenjuje kod aplikacije za autentifikaciju. Aplikacija i kodovi za oporavak ostaju kao rezerva, a ekstenzije pregledača i dalje koriste aplikaciju. Ključevi rade samo na HTTPS adresi na kojoj su dodati.</p>
 
+<h2 id="unlock">Otključavanje pomoću Windows Hello</h2>
+<p>U delu <i>Otključavanje pomoću Windows Hello</i>, <i>Podesi na ovom uređaju</i> pravi passkey ovog uređaja (Windows Hello, Touch ID, zaključavanje ekrana Android telefona). Od tada zaključan trezor prikazuje <i>Otključaj pomoću Windows Hello</i> i odmah ga traži: otisak prsta, lice ili PIN uređaja otvaraju trezor umesto glavne lozinke, a sa njim se otvara i ekstenzija pregledača (jedno otključavanje).</p>
+<p>Kako radi: passkey preko WebAuthn PRF proširenja daje pregledaču tajnu; pregledač iz nje izvodi ključ i njime zapečati ključ vašeg naloga. Server čuva samo tu zapečaćenu kopiju, pa ne može da otvori vaš trezor. Svaki uređaj i profil pregledača se podešava posebno; radi u novim verzijama Chrome, Edge i Safari pregledača, na HTTPS adresi na kojoj je podešen (ili <code>localhost</code>). Za prijavu posle isteka sesije i dalje vam treba glavna lozinka, koja i dalje radi svuda. Uklonite uređaj sa liste da biste to zaustavili.</p>
+
 <h2 id="share-key">Vaš ključ za deljenje</h2>
 <p>Otisak vašeg javnog ključa, izračunat u vašem pregledaču. Osobe koje dele trezor sa vama vide isti otisak; jednom ga uporedite sa njima.</p>
 

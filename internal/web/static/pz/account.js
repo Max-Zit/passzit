@@ -124,6 +124,37 @@ import("./keys.js").then(({ keysSupported, registerKey }) => {
   });
 });
 
+// Quick unlock with Windows Hello (a passkey of this device)
+import("./hello.js").then(async ({ helloSupported, setupHello }) => {
+  const f = document.getElementById("f-unlock");
+  if (!f) return;
+  if (!helloSupported()) {
+    f.hidden = true;
+    document.getElementById("unlock-unsupported").hidden = false;
+    return;
+  }
+  // the account key: from this tab's unlocked vault, or the master password
+  let keys = null;
+  try { keys = await loadKeys(); } catch (e) { keys = null; }
+  if (!keys) { f.password.hidden = false; f.password.required = true; }
+  wire("f-unlock", async () => {
+    if (!keys) {
+      const acct = await api("GET", "/api/account");
+      try { keys = (await unlockWithPassword(acct, f.password.value)).keys; } catch (e) { throw new Error(t("Wrong master password.")); }
+      f.password.value = "";
+    }
+    try {
+      await setupHello(f.name.value.trim(), keys.accountKey, document.body.dataset.email || "");
+    } catch (e) {
+      if (e.name === "NotAllowedError" || e.name === "AbortError") throw new Error(t("Windows Hello did not answer, or the request was cancelled."));
+      if (e.name === "NotSupportedError") throw new Error(t("This device has no Windows Hello (or other passkey) set up."));
+      throw e;
+    }
+    location.href = "/account#unlock";
+    location.reload();
+  });
+});
+
 // Emergency access
 import("./emergency.js").then(({ initEmergency }) => {
   const box = document.getElementById("pz-emergency");
