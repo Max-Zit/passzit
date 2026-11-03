@@ -76,8 +76,13 @@ async function start() {
   menuBtn.hidden = !st.signedIn;
   if (!st.signedIn) return showSignIn(st);
   if (!st.unlocked) return showUnlock(st);
+  // the window that opened for "Open with" of a MaxZit console closes after
+  // the unlock; the connection opens by itself
+  if (openRequest) { window.close(); return; }
   return showMain(st);
 }
+
+const openRequest = new URLSearchParams(location.search).get("unlock") === "open";
 
 function showSignIn(st) {
   const err = errBox();
@@ -162,6 +167,7 @@ function showUnlock(st) {
   const pw = el("input", { type: "password", required: true, autocomplete: "current-password" });
   const go = el("button", { class: "primary", type: "submit" }, icon("lock"), t("Unlock"));
   const form = el("form", {}, el("h1", { text: t("The vault is locked") }),
+    openRequest ? el("p", { class: "small", text: t("A MaxZit console wants to open a connection with a saved login. Unlock PassZit and it opens.") }) : "",
     el("p", { class: "small muted", text: t("Enter your master password to unlock %s.", st.email) }), err,
     el("label", {}, t("Master password"), pw), go,
     // the web vault can unlock with Windows Hello; one unlock opens this too

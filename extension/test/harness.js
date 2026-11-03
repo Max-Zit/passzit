@@ -149,6 +149,22 @@ try {
   // last: opening it fails here (no launcher), and the page shows that
   step("console: device with a saved login taken", (await inConsole(["ssh", "10.20.30.40"])) === "taken");
   await api.tabs.remove(cp.id).catch(() => {});
+  // locked: PassZit takes it and asks to unlock in a small window first
+  await bg("lock");
+  const cp2 = await openTab(consoleSite + "/console-probe");
+  await sleep(300);
+  let lockedAnswer = "";
+  for (let i = 0; i < 30; i++) {
+    try { lockedAnswer = (await api.scripting.executeScript({ target: { tabId: cp2.id }, world: "MAIN", func: openWith, args: ["ssh", "10.20.30.40"] }))[0].result; break; } catch (e) { await sleep(200); }
+  }
+  step("console: locked PassZit takes it", lockedAnswer === "taken", lockedAnswer);
+  await sleep(500);
+  const wins = await api.windows.getAll({ populate: true });
+  const uw = wins.find((w) => (w.tabs || []).some((tb) => (tb.url || "").includes("popup.html?unlock=open")));
+  step("console: an unlock window opens", !!uw, wins.length);
+  await unlock(pw);
+  if (uw) await api.windows.remove(uw.id).catch(() => {});
+  await api.tabs.remove(cp2.id).catch(() => {});
   await saveSettings({ consoles: [] });
   await bg("settingsChanged");
   // another site: refused

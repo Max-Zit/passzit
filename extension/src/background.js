@@ -444,6 +444,30 @@ async function syncConsoleScript() {
 
 let pendingConsole = "";
 
+// pendingOpen is an "Open with" that came while PassZit was locked; it runs
+// after the unlock (within two minutes).
+let pendingOpen = null;
+let unlockWindow = 0;
+
+async function openUnlockWindow() {
+  if (unlockWindow) {
+    const ok = await api.windows.update(unlockWindow, { focused: true }).then(() => true, () => false);
+    if (ok) return;
+  }
+  const w = await api.windows.create({ url: api.runtime.getURL("popup.html?unlock=open"), type: "popup", width: 380, height: 560 }).catch(() => null);
+  unlockWindow = w ? w.id : 0;
+}
+
+async function runPendingOpen() {
+  const p = pendingOpen;
+  pendingOpen = null;
+  if (!p || Date.now() - p.at > 2 * 60 * 1000 || !S.keys) return;
+  const it = consoleLogin(p.req);
+  const fail = (error) => { if (p.tabId) api.tabs.sendMessage(p.tabId, { type: "consoleOpenFailed", error }, { frameId: 0 }).catch(() => {}); };
+  if (!it) { fail(t("PassZit has no saved login for this device. Click \"Open with\" again to open it without a password.")); return; }
+  connectItem(it.id).catch((e) => fail(e.message || String(e)));
+}
+
 api.permissions.onAdded.addListener(async (p) => {
   const o = pendingConsole;
   if (!o || !(p.origins || []).includes(o + "/*")) return;
@@ -580,6 +604,7 @@ const handlers = {
     armLock();
     api.alarms.create("pz-sync", { periodInMinutes: 5 });
     await badge();
+    runPendingOpen();
     return { ok: true };
   },
   async lock() { await lock(); return { ok: true }; },
@@ -758,7 +783,12 @@ const handlers = {
     if (!page || !consoleSecure(page) || sender.frameId !== 0 || !s.consoles.includes(page.origin)) throw new Error("not allowed");
     const req = { tool: String(msg.tool), host: String(msg.host).slice(0, 255), port: Number(msg.port) || 0, user: String(msg.user || "").slice(0, 255) };
     if (!OPEN_TOOLS.includes(req.tool) || !/^[A-Za-z0-9.:\-\[\]]{1,255}$/.test(req.host) || req.port < 0 || req.port > 65535) return { taken: false };
-    if (!S.keys) return { taken: false }; // locked: the console opens the launcher without a password
+    if (!S.keys) {
+      // locked: ask to unlock in a small PassZit window, then open it
+      pendingOpen = { req, tabId: sender.tab ? sender.tab.id : 0, at: Date.now() };
+      openUnlockWindow();
+      return { taken: true };
+    }
     const it = consoleLogin(req);
     if (!it) return { taken: false };
     connectItem(it.id).catch((e) => {
