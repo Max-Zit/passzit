@@ -33,7 +33,8 @@ LockPersonality=true
 RestrictNamespaces=true
 RestrictRealtime=true
 SystemCallArchitectures=native
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# AF_NETLINK: the server lists its own addresses for the self-signed certificate
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

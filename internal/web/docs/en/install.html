@@ -31,9 +31,10 @@ sudo systemctl start passzit-server</pre>
 <p><b>Settings → Console backup</b> writes a backup every day (and on request) to <code>/var/lib/passzit/backups</code>: the database with all vaults, the secret key of the server and the console certificate. A backup is <b>always encrypted</b> with a passphrase you set (AES-256) — keep it somewhere else. Each backup can also be copied to an SFTP folder on another server; the first test of the connection shows the server's key fingerprint to trust.</p>
 <p>To restore, stop the service and run the restore on the new or repaired server (the appliance menu does it for you):</p>
 <pre>sudo systemctl stop passzit-server
-sudo -u passzit sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit -restore /path/passzit-backup-….pzb -restore-passphrase-file /path/pass.txt'
+sudo runuser -u passzit -- sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit -restore /path/passzit-backup-….pzb -restore-passphrase-file /path/pass.txt'
 sudo systemctl start passzit-server</pre>
 <p>The restore replaces the whole database in one step — if anything fails nothing changes. A newer PassZit migrates the restored database when it starts.</p>
+<p>The backup holds the console certificate of the old server. When the new server has another address, remove <code>/var/lib/passzit/tls/console.crt</code> and <code>console.key</code> before starting it: PassZit then makes a certificate for its own addresses.</p>
 
 <h2 id="app">Using the web vault as an app</h2>
 <p>Browsers offer to <b>install</b> the web vault (Chrome, Edge: the install icon in the address bar; phones: <i>Add to home screen</i>). It then opens in its own window. Nothing of the vault is stored for offline use: without the server you see a short "offline" page.</p>

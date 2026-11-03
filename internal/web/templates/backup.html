@@ -84,7 +84,7 @@
   <ul class="small">
     <li>{{.T "Appliance: the setup menu (sign in on the console of the VM) → Restore a backup."}}</li>
     <li>{{.T "Linux packages:"}}<pre>sudo systemctl stop passzit-server
-sudo -u passzit sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit -restore /path/passzit-backup-….pzb'
+sudo runuser -u passzit -- sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit -restore /path/passzit-backup-….pzb'
 sudo systemctl start passzit-server</pre></li>
   </ul>
   <p class="small muted">{{.T "The restore asks for the passphrase in PASSZIT_BACKUP_PASSPHRASE or a file given with -restore-passphrase-file. Browser extensions and the web vault keep working with a restored server at the same address."}}</p>

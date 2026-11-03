@@ -31,9 +31,10 @@ sudo systemctl start passzit-server</pre>
 <p><b>Podešavanja → Rezervna kopija konzole</b> svaki dan (i na zahtev) pravi rezervnu kopiju u <code>/var/lib/passzit/backups</code>: bazu sa svim trezorima, tajni ključ servera i sertifikat konzole. Rezervna kopija je <b>uvek šifrovana</b> lozinkom koju sami postavite (AES-256) — čuvajte je na drugom mestu. Svaka rezervna kopija može se i kopirati u SFTP folder na drugom serveru; prvi test veze pokazuje otisak ključa servera kome treba verovati.</p>
 <p>Za vraćanje zaustavite servis i pokrenite vraćanje na novom ili popravljenom serveru (appliance meni to radi umesto vas):</p>
 <pre>sudo systemctl stop passzit-server
-sudo -u passzit sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit -restore /putanja/passzit-backup-….pzb -restore-passphrase-file /putanja/lozinka.txt'
+sudo runuser -u passzit -- sh -c 'set -a; . /etc/passzit/server.env; passzit-server -data-dir /var/lib/passzit -restore /putanja/passzit-backup-….pzb -restore-passphrase-file /putanja/lozinka.txt'
 sudo systemctl start passzit-server</pre>
 <p>Vraćanje zamenjuje celu bazu u jednom koraku — ako bilo šta ne uspe, ništa se ne menja. Novija verzija PassZit-a migrira vraćenu bazu pri pokretanju.</p>
+<p>Rezervna kopija sadrži sertifikat konzole starog servera. Kada novi server ima drugu adresu, pre pokretanja uklonite <code>/var/lib/passzit/tls/console.crt</code> i <code>console.key</code>: PassZit tada pravi sertifikat za svoje adrese.</p>
 
 <h2 id="app">Web trezor kao aplikacija</h2>
 <p>Pregledači nude da <b>instalirate</b> web trezor (Chrome, Edge: ikona za instalaciju u adresnoj traci; telefoni: <i>Dodaj na početni ekran</i>). Tada se otvara u sopstvenom prozoru. Ništa iz trezora se ne čuva za rad bez mreže: bez servera vidite kratku stranicu „offline“.</p>
