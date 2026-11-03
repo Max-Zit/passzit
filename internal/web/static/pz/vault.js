@@ -295,10 +295,15 @@ async function connectExtension() {
   const info = extHere ? await askExtension({ type: "pz-link-ask" }, 3000) : null;
   if (!info) { toast(t("The PassZit extension does not answer on this page. Reload the extension and try again."), true); return; }
   if (!(await confirmBox(t("Connect the PassZit extension in this browser (%s) with %s?", info.device || "", root.dataset.email), t("Connect")))) return;
+  let token = "";
   try {
-    const r = await api("POST", "/api/ext/link", { device: info.device || "" });
-    const done = await askExtension({ type: "pz-ext-link", token: r.token, email: root.dataset.email }, 8000);
-    if (!done || !done.ok) throw new Error((done && done.error) || t("The extension did not answer."));
+    token = (await api("POST", "/api/ext/link", { device: info.device || "" })).token;
+    const done = await askExtension({ type: "pz-ext-link", token, email: root.dataset.email }, 8000);
+    if (!done || !done.ok) {
+      // the extension could not take it: the unused token is signed out again
+      fetch("/api/ext/logout", { method: "POST", credentials: "omit", headers: { Authorization: "Bearer " + token } }).catch(() => {});
+      throw new Error((done && done.error) || t("The extension did not answer."));
+    }
     shareKeys();
     toast(t("The extension is connected and unlocked."));
   } catch (e) {
