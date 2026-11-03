@@ -82,7 +82,12 @@ try {
   step("bridge answers under localhost too", title2 === "here", title2);
   // one unlock: the vault page and the extension share the unlocked keys
   const vp = await openTab(server + "/vault-probe");
-  const inPage = async (func, args) => (await api.scripting.executeScript({ target: { tabId: vp.id }, world: "MAIN", func, args }))[0].result;
+  // a just opened tab may not take scripts yet (Firefox): try again shortly
+  const inPage = async (func, args) => {
+    for (let i = 0; ; i++) {
+      try { return (await api.scripting.executeScript({ target: { tabId: vp.id }, world: "MAIN", func, args }))[0].result; } catch (e) { if (i >= 30) throw e; await sleep(200); }
+    }
+  };
   const ask = (email) => new Promise((res) => {
     addEventListener("message", (e) => { if (e.data && e.data.type === "pz-keys") res(e.data.keys || null); });
     postMessage({ type: "pz-keys-ask", email }, location.origin);
