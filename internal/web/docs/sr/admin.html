@@ -36,6 +36,14 @@
 <h2 id="network">Mreža i pristup</h2>
 <p>Adresa na kojoj server sluša, mreže kojima je dozvoljeno povezivanje (ostale se odbijaju pre TLS-a) i javna adresa koja se koristi u linkovima pozivnica. Ako sebi zaključate pristup, pokrenite <code>passzit-server --reset-allowlist</code> na serveru.</p>
 
+<h2 id="certificate">Sertifikat</h2>
+<p>Novi server koristi sopstveni samopotpisani sertifikat: pregledači jednom upozore na njega, a <b>ekstenzije pregledača ne mogu da se povežu</b> sa takvim serverom. U <i>Podešavanja → Sertifikat</i> dajte mu sertifikat kome pregledači veruju:</p>
+<ul>
+  <li><b>Otpremite sertifikat</b> — iz CA vaše firme ili kupljen — kao PEM sa međusertifikatima, i njegov privatni ključ. Može da glasi i na IP adresu.</li>
+  <li><b>Let's Encrypt</b> — besplatan, obnavlja se sam 30 dana pre isteka. Potrebno je javno DNS ime za server. Let's Encrypt proverava ime preko <b>porta 80</b> ovog servera (dostupnog sa interneta) ili preko <b>DNS zapisa na Cloudflare-u</b> — to radi i za servere samo u vašoj mreži: napravite Cloudflare API token sa <i>Zone → DNS → Edit</i> za zonu; PassZit ga čuva šifrovanog.</li>
+</ul>
+<p>Sertifikat se koristi odmah na portu konzole, bez restarta. <i>Koristi port 80</i> šalje pregledače koji ukucaju ime bez HTTPS-a na konzolu. DNS vaše mreže mora da usmeri ime na ovaj server. Povratak na samopotpisani sertifikat: izaberite <i>Sopstveni sertifikat konzole</i>.</p>
+
 <h2 id="audit">Dnevnik revizije</h2>
 <p>Prijave, neuspeli pokušaji, blokiranja, pozivnice, izmene korisnika, podešavanja, promene glavne lozinke i oporavci beleže se sa vremenom, korisnikom i adresom. Svaki unos sadrži heš prethodnog; stranica pokazuje da li je lanac netaknut. Dnevnik nikada ne sadrži lozinke ni sadržaj stavki.</p>
 

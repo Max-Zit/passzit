@@ -1,0 +1,61 @@
+{{template "app" .}}
+{{define "content"}}
+<h1>{{.T "Settings"}}</h1>
+<div class="settings">
+{{template "settingstabs" .}}
+<div class="settings-body">
+{{with .Data}}
+{{if .LastErr}}<div class="flash err" role="alert">{{template "icon" "alert"}}<span>{{.LastErr}}</span></div>{{end}}
+<section class="panel">
+  <h2>{{template "icon" "lock"}}{{$.T "Certificate in use"}}</h2>
+  {{with .Trusted}}
+  <dl class="facts">
+    <dt>{{$.T "Names"}}</dt><dd class="mono">{{range $i, $n := .Names}}{{if $i}}, {{end}}{{$n}}{{end}}</dd>
+    <dt>{{$.T "Issued by"}}</dt><dd>{{.Issuer}}</dd>
+    <dt>{{$.T "Valid until"}}</dt><dd>{{$.Time .NotAfter}} ({{$.T "%d days" .DaysLeft}})</dd>
+    <dt>{{$.T "Fingerprint (SHA-256)"}}</dt><dd class="mono small">{{.Fingerprint}}</dd>
+  </dl>
+  {{else}}
+  <p>{{$.T "The console's own (self-signed) certificate. Browsers warn about it once, and the browser extensions cannot connect to a server with it."}}</p>
+  {{with .Self}}<p class="small muted">{{$.T "Names"}}: <span class="mono">{{range $i, $n := .Names}}{{if $i}}, {{end}}{{$n}}{{end}}</span> · {{$.T "Fingerprint (SHA-256)"}}: <span class="mono">{{.Fingerprint}}</span></p>{{end}}
+  {{end}}
+  {{if eq .C.Mode "acme"}}<form method="post" action="/settings/certificate/renew"><button class="secondary">{{template "icon" "refresh"}}{{$.T "Renew now"}}</button></form>{{end}}
+</section>
+
+<form method="post" action="/settings/certificate" enctype="multipart/form-data" class="stack wide">
+  <section class="panel">
+    <h2>{{$.T "Certificate for browsers"}}</h2>
+    <label>{{$.T "Certificate"}}<select name="mode" data-switch="mode">
+      <option value="self" {{if or (eq .C.Mode "self") (eq .C.Mode "")}}selected{{end}}>{{$.T "The console's own certificate (self-signed)"}}</option>
+      <option value="upload" {{if eq .C.Mode "upload"}}selected{{end}}>{{$.T "Upload a certificate (company CA or bought)"}}</option>
+      <option value="acme" {{if eq .C.Mode "acme"}}selected{{end}}>{{$.T "Let's Encrypt (free, renewed by itself)"}}</option>
+    </select></label>
+    <div data-show="mode" data-when="upload acme">
+      <label>{{$.T "Name of the console"}}<input name="hostname" value="{{.C.Hostname}}" spellcheck="false" class="mono" placeholder="vault.example.com"><small>{{$.T "The name users type in the browser and the extension. The DNS of your network must point it to this server."}}</small></label>
+    </div>
+    <div data-show="mode" data-when="upload">
+      <label>{{$.T "Certificate (PEM, with the intermediate certificates)"}}<input type="file" name="cert_pem_file" accept=".pem,.crt,.cer"><textarea name="cert_pem" rows="4" spellcheck="false" class="mono" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+      <label>{{$.T "Private key (PEM)"}}<input type="file" name="key_pem_file" accept=".pem,.key"><textarea name="key_pem" rows="3" spellcheck="false" class="mono" placeholder="-----BEGIN PRIVATE KEY-----"></textarea><small>{{$.T "Leave both empty to keep the uploaded certificate. The key is stored only on this server, readable by the PassZit service."}}</small></label>
+    </div>
+    <div data-show="mode" data-when="acme">
+      <label>{{$.T "E-mail address for Let's Encrypt"}}<input name="acme_email" type="email" value="{{.C.ACMEEmail}}"><small>{{$.T "Let's Encrypt writes here only when a certificate was not renewed."}}</small></label>
+      <label>{{$.T "How Let's Encrypt checks the name"}}<select name="challenge" data-switch="challenge">
+        <option value="http" {{if ne .C.Challenge "cloudflare"}}selected{{end}}>{{$.T "Port 80 of this server, reachable from the internet"}}</option>
+        <option value="cloudflare" {{if eq .C.Challenge "cloudflare"}}selected{{end}}>{{$.T "A DNS record at Cloudflare (also for servers only in your network)"}}</option>
+      </select></label>
+      <div data-show="challenge" data-when="cloudflare">
+        <label>{{$.T "Cloudflare API token"}}<input name="cloudflare_token" type="password" autocomplete="off" placeholder="{{if .HasToken}}{{$.T "saved — leave empty to keep it"}}{{end}}"><small>{{$.T "A token with Zone → DNS → Edit for the zone of the name. It is stored encrypted."}}</small></label>
+      </div>
+      <label class="check"><input type="checkbox" name="staging" {{if .Staging}}checked{{end}}>{{$.T "Test with the Let's Encrypt staging service (not trusted by browsers)"}}</label>
+    </div>
+    <div data-show="mode" data-when="upload acme">
+      <label class="check"><input type="checkbox" name="redirect_http" {{if .C.RedirectHTTP}}checked{{end}}>{{$.T "Serve port 80: send browsers to the console (and answer Let's Encrypt)"}}</label>
+    </div>
+    <p class="small muted">{{$.T "The new certificate is used at once on the console port (%s), without a restart." .Port}}</p>
+  </section>
+  <div><button class="primary">{{$.T "Save"}}</button></div>
+</form>
+{{end}}
+</div>
+</div>
+{{end}}

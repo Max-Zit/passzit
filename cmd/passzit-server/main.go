@@ -201,6 +201,8 @@ func run() error {
 		log.Warn("no users yet: open the web vault and finish the setup; the setup token is in the file", "file", p)
 	}
 
+	// the self-signed certificate, or the trusted one set under Settings → Certificate
+	srv.Certs = web.NewCerts(*dataDir, cert, log)
 	errc := make(chan error, 2)
 	var servers []*http.Server
 	raw, err := net.Listen("tcp", net0.MgmtListen)
@@ -209,7 +211,7 @@ func run() error {
 	}
 	l := tls.NewListener(&netacl.Listener{Listener: raw, List: srv.MgmtACL, OnRefuse: func(remote string) {
 		log.Debug("connection refused by allow-list", "remote", remote)
-	}}, tlsutil.ServerConfig(cert))
+	}}, certConfig(srv.Certs))
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 60 * time.Second, WriteTimeout: 120 * time.Second,
 		IdleTimeout: 120 * time.Second, MaxHeaderBytes: 64 << 10, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelDebug)}
 	servers = append(servers, hs)
@@ -230,6 +232,7 @@ func run() error {
 	}
 	log.Info("PassZit server started", "version", version)
 
+	srv.StartCerts(ctx)
 	go srv.RunHousekeeping(ctx)
 	if !*devDB {
 		go srv.RunUpdates(ctx)
@@ -307,4 +310,13 @@ func restoreBackup(ctx context.Context, file, passFile, dataDir, dbURL string) e
 	fmt.Printf("Restored the backup of %s (PassZit %s, %d files). Start the server now.\n",
 		m.Created.Local().Format("2006-01-02 15:04"), m.ServerVersion, len(m.Files))
 	return nil
+}
+
+// certConfig is the console's TLS configuration with the certificate of
+// the moment (self-signed or trusted, switched without a restart).
+func certConfig(c *web.Certs) *tls.Config {
+	cfg := tlsutil.ServerConfig(tls.Certificate{})
+	cfg.Certificates = nil
+	cfg.GetCertificate = c.GetCertificate
+	return cfg
 }

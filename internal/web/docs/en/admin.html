@@ -36,6 +36,14 @@
 <h2 id="network">Network and access</h2>
 <p>The listen address, the networks allowed to connect (others are refused before TLS) and the public address used in invitation links. If you lock yourself out, run <code>passzit-server --reset-allowlist</code> on the server.</p>
 
+<h2 id="certificate">Certificate</h2>
+<p>A fresh server uses its own self-signed certificate: browsers warn about it once, and the <b>browser extensions cannot connect</b> to such a server. Under <i>Settings → Certificate</i> give it one that browsers trust:</p>
+<ul>
+  <li><b>Upload a certificate</b> — from your company CA or bought — as PEM with the intermediate certificates, and its private key. It may also be for an IP address.</li>
+  <li><b>Let's Encrypt</b> — free, renewed by itself 30 days before it expires. It needs a public DNS name for the server. Let's Encrypt checks the name either over <b>port 80</b> of this server (reachable from the internet) or through a <b>DNS record at Cloudflare</b> — that also works for servers only in your network: create a Cloudflare API token with <i>Zone → DNS → Edit</i> for the zone; PassZit stores it encrypted.</li>
+</ul>
+<p>The certificate is used at once on the console port, without a restart. <i>Serve port 80</i> sends browsers that type the name without HTTPS to the console. The DNS of your network must point the name to this server. Back to the self-signed certificate: choose <i>The console's own certificate</i>.</p>
+
 <h2 id="audit">Audit log</h2>
 <p>Sign-ins, failed attempts, blocks, invitations, user changes, settings, master-password changes and recovery are recorded with time, user and address. Every entry contains a hash of the previous one; the page shows whether the chain is intact. The log never contains passwords or item contents.</p>
 

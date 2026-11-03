@@ -36,6 +36,8 @@ type Server struct {
 	sso        ssoCache
 	mux        *http.ServeMux
 
+	// Certs serves the console certificate (self-signed or trusted).
+	Certs *Certs
 	// MgmtACL guards the console listener.
 	MgmtACL *netacl.List
 	// RunningMgmt is the listen address the server actually uses.
@@ -462,6 +464,9 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /settings/policy", s.handlePolicySave)
 	admin("GET /settings/network", s.handleNetwork)
 	admin("POST /settings/network", s.handleNetworkSave)
+	admin("GET /settings/certificate", s.handleCertificate)
+	admin("POST /settings/certificate", s.handleCertificateSave)
+	admin("POST /settings/certificate/renew", s.handleCertificateRenew)
 	admin("GET /settings/version", s.handleVersion)
 	admin("POST /settings/version/check", s.handleVersionCheck)
 	admin("POST /settings/version/install", s.handleVersionInstall)
