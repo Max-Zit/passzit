@@ -10,7 +10,7 @@
 <p>Your address was blocked after failed sign-ins. Wait until the time shown, or ask an administrator to release it (<i>Settings → Sign-in and security</i>, or <code>passzit-server --unblock-ip ADDRESS</code> on the server).</p>
 
 <h2 id="locked">The vault locks too often</h2>
-<p>It locks after the inactivity time of the policy. Administrators can raise it under <i>Settings → Vault policy</i>; users can only choose a shorter time.</p>
+<p>It locks after the inactivity time of the policy or your own (<i>My account</i>; empty = no automatic lock when the policy allows it) and when the browser closes. Administrators set 0 under <i>Settings → Vault policy</i> to let the vault stay open.</p>
 
 <h2 id="slow">Unlocking takes a few seconds</h2>
 <p>That is the key derivation working as intended — it makes guessing master passwords slow. On old PCs and phones, an administrator can lower the memory in the policy (not below 19 MiB).</p>

@@ -80,6 +80,31 @@ try {
   let title2 = "";
   for (let i = 0; i < 30 && title2 !== "here"; i++) { await sleep(100); title2 = (await api.tabs.get(twin.id)).title; }
   step("bridge answers under localhost too", title2 === "here", title2);
+  // one unlock: the vault page and the extension share the unlocked keys
+  const vp = await openTab(server + "/vault-probe");
+  const inPage = async (func, args) => (await api.scripting.executeScript({ target: { tabId: vp.id }, world: "MAIN", func, args }))[0].result;
+  const ask = (email) => new Promise((res) => {
+    addEventListener("message", (e) => { if (e.data && e.data.type === "pz-keys") res(e.data.keys || null); });
+    postMessage({ type: "pz-keys-ask", email }, location.origin);
+    setTimeout(() => res("timeout"), 3000);
+  });
+  const post = (msg) => { postMessage(msg, location.origin); return true; };
+  await sleep(300);
+  const keys = await inPage(ask, ["alice@example.com"]);
+  step("page gets the keys of the unlocked extension", keys && keys.a && keys.p && keys.u, keys ? "keys" : keys);
+  step("no keys for another account", (await inPage(ask, ["bob@example.com"])) === null);
+  await inPage(post, [{ type: "pz-lock" }]);
+  let locked = false;
+  for (let i = 0; i < 20 && !locked; i++) { await sleep(100); locked = !(await bg("status")).unlocked; }
+  step("locking the page locks the extension", locked);
+  const bad = Object.assign({}, keys, { a: keys.p });
+  await inPage(post, [{ type: "pz-keys-share", email: "alice@example.com", keys: bad }]);
+  await sleep(800);
+  step("wrong keys are refused", !(await bg("status")).unlocked);
+  await inPage(post, [{ type: "pz-keys-share", email: "alice@example.com", keys }]);
+  let open = false;
+  for (let i = 0; i < 30 && !open; i++) { await sleep(100); open = (await bg("status")).unlocked; }
+  step("unlocking the page unlocks the extension", open);
   // another site: refused
   const tab2 = await openTab(other);
   await attempt("fill refused on another site", async () => {

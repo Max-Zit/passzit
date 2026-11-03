@@ -74,6 +74,7 @@ func newExtFixture(t *testing.T) *extFixture {
 	mux.HandleFunc("/launcher-probe", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `<!doctype html><title>probe</title><script>addEventListener("message", (e) => { if (e.data && e.data.type === "pz-ext-here") document.title = "here"; }); setTimeout(() => postMessage({ type: "pz-ext-ping" }, location.origin), 300);</script>`)
 	})
+	mux.HandleFunc("/vault-probe", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, `<!doctype html><title>vault probe</title>`) })
 	mux.HandleFunc("/testsite/done", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "ok") })
 	mux.HandleFunc("/harness-result", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))

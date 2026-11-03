@@ -24,7 +24,7 @@
 <h2 id="browser">U pregledaču</h2>
 <ul>
   <li>Otključani ključevi se čuvaju samo u memoriji i, šifrovani ključem koji zna samo sesija na serveru, u memoriji sesije ove kartice. Zaključavanje, odjava ili kraj sesije ih čine neupotrebljivim.</li>
-  <li>Trezor se zaključava posle vremena neaktivnosti iz pravila; kopirane lozinke se brišu iz klipborda posle 30 sekundi (podrazumevano).</li>
+  <li>Trezor se zaključava kada se pregledač zatvori, dugmetom za zaključavanje ili posle vremena neaktivnosti ako ga pravila ili korisnik odrede; kopirane lozinke se brišu iz klipborda posle 30 sekundi (podrazumevano). Web trezor i ekstenzija dele otključane ključeve samo na stranici trezora istog servera, posle provere u odnosu na nalog.</li>
   <li>Stranice koriste strogu politiku sadržaja (CSP): izvršavaju se samo PassZit-ove skripte, ništa se ne učitava sa drugih servera.</li>
 </ul>
 

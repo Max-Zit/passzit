@@ -239,7 +239,9 @@ const settingPolicy = "policy"
 // Policy are the vault rules for all users. Users may choose shorter
 // lock and clipboard times for themselves, not longer ones.
 type Policy struct {
-	// LockMinutes: the vault locks after this much inactivity.
+	// LockMinutes: the vault locks after this much inactivity; 0: it stays
+	// open until the browser closes or the user locks it (each user may
+	// still choose a time).
 	LockMinutes int `json:"lock_minutes"`
 	// ClipboardSeconds: copied passwords are cleared after this time.
 	ClipboardSeconds int `json:"clipboard_seconds"`
@@ -267,15 +269,15 @@ type Policy struct {
 	FourEyes bool `json:"four_eyes,omitempty"`
 }
 
-// DefaultPolicy: lock after 15 minutes, clear the clipboard after 30 s,
-// Argon2id with 64 MiB, 3 passes, 4 lanes.
-var DefaultPolicy = Policy{LockMinutes: 15, ClipboardSeconds: 30, KDF: vaultcrypto.DefaultKDF, MinPasswordLength: 12, TrashDays: 30, MaxFileMB: 10, StorageMB: 500}
+// DefaultPolicy: no automatic lock (until the browser closes), clear the
+// clipboard after 30 s, Argon2id with 64 MiB, 3 passes, 4 lanes.
+var DefaultPolicy = Policy{LockMinutes: 0, ClipboardSeconds: 30, KDF: vaultcrypto.DefaultKDF, MinPasswordLength: 12, TrashDays: 30, MaxFileMB: 10, StorageMB: 500}
 
 // Validate checks the ranges.
 func (p Policy) Validate() error {
 	switch {
-	case p.LockMinutes < 1 || p.LockMinutes > 480:
-		return errors.New("the vault must lock after 1–480 minutes")
+	case p.LockMinutes < 0 || p.LockMinutes > 480:
+		return errors.New("the vault must lock after 1–480 minutes (or 0: not by itself)")
 	case p.ClipboardSeconds < 5 || p.ClipboardSeconds > 600:
 		return errors.New("the clipboard must be cleared after 5–600 seconds")
 	case p.MinPasswordLength < 10 || p.MinPasswordLength > 64:
@@ -300,7 +302,9 @@ func (s *Server) policy(ctx context.Context) Policy {
 func (s *Server) clientPrefs(ctx context.Context, u *store.User) (lock, clip int) {
 	p := s.policy(ctx)
 	lock, clip = p.LockMinutes, p.ClipboardSeconds
-	if u.Prefs.LockMinutes > 0 && u.Prefs.LockMinutes < lock {
+	// The user's own time counts when it is shorter than the policy's (or
+	// the policy does not lock by itself).
+	if u.Prefs.LockMinutes > 0 && (lock == 0 || u.Prefs.LockMinutes < lock) {
 		lock = u.Prefs.LockMinutes
 	}
 	if u.Prefs.ClipboardSeconds > 0 && u.Prefs.ClipboardSeconds < clip {

@@ -250,7 +250,7 @@ func (s *Server) handleAccountProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	pol := s.policy(r.Context())
 	p := store.Prefs{LockMinutes: formInt(r, "lock_minutes"), ClipboardSeconds: formInt(r, "clipboard_seconds")}
-	if p.LockMinutes < 0 || p.LockMinutes > pol.LockMinutes || p.ClipboardSeconds < 0 || p.ClipboardSeconds > pol.ClipboardSeconds ||
+	if p.LockMinutes < 0 || p.LockMinutes > 480 || pol.LockMinutes > 0 && p.LockMinutes > pol.LockMinutes || p.ClipboardSeconds < 0 || p.ClipboardSeconds > pol.ClipboardSeconds ||
 		p.ClipboardSeconds > 0 && p.ClipboardSeconds < 5 {
 		s.showAccount(w, r, http.StatusBadRequest, &accountData{}, "Choose times up to the limits of your administrator (or empty for the default).")
 		return

@@ -52,9 +52,49 @@ async function start() {
   wireLogout();
   let keys = null;
   try { keys = await loadKeys(); } catch (e) { showFatal(e.message); return; }
+  // one unlock: the PassZit extension of this browser may already be open
+  if (!keys && (keys = await keysFromExtension())) await saveKeys(keys);
   if (!keys) { showUnlock(); return; }
   S.keys = keys;
   await openVault();
+}
+
+// ---- one unlock: this page and the PassZit extension of the browser share
+// the unlocked keys (only on this server's own vault page, through the
+// extension's bridge script); each side checks that the keys open this
+// account before it uses them. Locking one locks the other.
+
+let keysWait = null;
+window.addEventListener("message", (e) => {
+  if (e.source !== window || e.origin !== location.origin || !e.data || e.data.type !== "pz-keys" || !keysWait) return;
+  const done = keysWait;
+  keysWait = null;
+  done(e.data.keys || null);
+});
+
+async function keysFromExtension() {
+  for (let i = 0; i < 10 && !extHere; i++) await new Promise((r) => setTimeout(r, 100));
+  if (!extHere) return null;
+  const k = await new Promise((resolve) => {
+    keysWait = resolve;
+    window.postMessage({ type: "pz-keys-ask", email: root.dataset.email }, location.origin);
+    setTimeout(() => { if (keysWait === resolve) { keysWait = null; resolve(null); } }, 3000);
+  });
+  if (!k || !k.a || !k.p || !k.u) return null;
+  try {
+    const acct = await api("GET", "/api/account");
+    const keys = { accountKey: pz.unb64u(k.a), privateKey: pz.unb64u(k.p), publicKey: pz.unb64u(k.u) };
+    const priv = await pz.open(keys.accountKey, acct.wrapped_private_key, pz.AAD.privateKey());
+    if (pz.b64u(priv) !== k.p || acct.public_key !== k.u) return null;
+    S.acct = acct;
+    return keys;
+  } catch (e) { return null; }
+}
+
+function shareKeys() {
+  if (!extHere || !S.keys) return;
+  window.postMessage({ type: "pz-keys-share", email: root.dataset.email,
+    keys: { a: pz.b64u(S.keys.accountKey), p: pz.b64u(S.keys.privateKey), u: pz.b64u(S.keys.publicKey) } }, location.origin);
 }
 
 function showFatal(msg) {
@@ -122,6 +162,7 @@ async function upgradeKDF(acct, password, currentAuth) {
 }
 
 async function lock() {
+  if (extHere) window.postMessage({ type: "pz-lock" }, location.origin);
   S.keys = null;
   S.vaults.clear(); S.items.clear(); S.folders.clear();
   S.editing = null;
@@ -132,8 +173,9 @@ async function lock() {
 let lockTimer = 0, pollTimer = 0;
 const activity = () => {
   clearTimeout(lockTimer);
-  const mins = +document.body.dataset.lock || 15;
-  lockTimer = setTimeout(() => { if (S.keys) lock(); }, mins * 60 * 1000);
+  // 0: no automatic lock (until the browser closes or the user locks)
+  const mins = +document.body.dataset.lock || 0;
+  if (mins > 0) lockTimer = setTimeout(() => { if (S.keys) lock(); }, mins * 60 * 1000);
 };
 
 function startTimers() {
@@ -175,6 +217,7 @@ async function openVault() {
   lb.onclick = () => lock();
   startTimers();
   render();
+  shareKeys();
   // Shared vaults: confirmed keys, then access that groups give.
   await loadKnown();
   if (await completePending(true)) { await sync(S.revision); render(); }

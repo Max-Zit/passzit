@@ -364,9 +364,8 @@ async function showMenu(st) {
     await saveSettings({ siteBadge: count.checked });
     await bg("settingsChanged");
   });
-  // remote connections through passzit-helper
-  const helper = el("input", { type: "checkbox" });
-  try { helper.checked = await api.permissions.contains({ permissions: ["nativeMessaging"] }); } catch (e) { helper.checked = false; }
+  // remote connections through the MaxZit Launcher (or passzit-helper);
+  // the launcher accepts this extension only after pairing
   const helperState = el("p", { class: "small muted" });
   const firefox = typeof browser !== "undefined" && api.runtime.getURL("").startsWith("moz-extension:");
   const installCmd = firefox ? "passzit-helper install --firefox" : "passzit-helper install --chrome-id " + api.runtime.id;
@@ -378,31 +377,19 @@ async function showMenu(st) {
     window.close();
   } }, t("Pair with the MaxZit Launcher"));
   const checkHelper = async () => {
-    if (!helper.checked) { helperState.textContent = ""; return; }
     const r = await bg("helperPing").catch(() => ({ ok: false }));
     helperState.replaceChildren(r && r.ok ? t("The program for connections answers (%s).", r.version || "?") : t("The PassZit helper is not installed yet. Install it, then run once:"),
       r && r.ok ? "" : el("code", { class: "cmd", text: installCmd }),
       r && r.ok ? "" : el("span", { class: "small", text: " " + t("Or, on Windows, install the MaxZit Launcher and pair it:") }),
       r && r.ok ? "" : pairBtn);
   };
-  helper.addEventListener("change", async () => {
-    showErr(err, "");
-    if (helper.checked) {
-      let ok = false;
-      try { ok = await api.permissions.request({ permissions: ["nativeMessaging"] }); } catch (e) { ok = false; }
-      if (!ok) { helper.checked = false; showErr(err, t("The browser did not allow talking to the PassZit helper.")); return; }
-    } else {
-      try { await api.permissions.remove({ permissions: ["nativeMessaging"] }); } catch (e) { /* stays */ }
-    }
-    checkHelper();
-  });
   app.replaceChildren(el("div", { class: "menu" },
     el("h1", { text: t("Settings") }), err,
     el("p", { class: "small" }, el("b", { text: s.email }), el("br"), el("span", { class: "muted", text: s.server })),
     el("label", { class: "check" }, save, t("Offer to save new and changed logins")),
     el("p", { class: "small muted", text: t("For this the extension needs to see the sign-in forms of the sites you visit. Passwords never leave your browser unencrypted.") }),
     el("label", { class: "check" }, count, t("Show on the PassZit icon how many logins a website has")),
-    el("label", { class: "check" }, helper, t("Open connections (RDP, SSH, WinSCP, WinBox, VNC, Telnet) with the MaxZit Launcher or the PassZit helper")),
+    el("p", { class: "small" }, el("b", { text: t("Connections (RDP, SSH, WinSCP, WinBox, VNC, Telnet)") })),
     helperState,
     el("button", { type: "button", class: "secondary", onclick: openVault }, t("Open the web vault")),
     el("button", { type: "button", class: "ghost", onclick: async () => { await bg("logout"); start(); } }, t("Sign out of this browser")),

@@ -12,7 +12,7 @@ const S = {
   vaultKeys: new Map(),
   items: new Map(),  // id → { id, vault_id, revision, deleted_at, data }
   revision: 0,
-  lockMinutes: 15,
+  lockMinutes: 0,
   clipSeconds: 30,
   pending: [],       // save offers: { url, site, username, password, update: id|"" }
   loaded: false,
@@ -121,8 +121,11 @@ async function saveItem(item, data) {
 
 // ---- locking
 
+// armLock (re)starts the inactivity lock; 0 minutes: no automatic lock
+// (the keys stay in storage.session until the browser closes).
 function armLock() {
-  api.alarms.create("pz-lock", { delayInMinutes: Math.max(1, S.lockMinutes) });
+  if (S.lockMinutes > 0) api.alarms.create("pz-lock", { delayInMinutes: S.lockMinutes });
+  else api.alarms.clear("pz-lock");
 }
 
 async function lock() {
@@ -198,7 +201,7 @@ async function connectItem(id) {
   try {
     res = await api.runtime.sendNativeMessage(HELPER, msg);
   } catch (e) {
-    throw new Error(t("The PassZit helper does not answer. Is it installed on this computer?"));
+    throw new Error(t("The MaxZit Launcher does not answer. Install it and pair this browser (Launcher in the web vault)."));
   }
   if (!res || !res.ok) throw new Error((res && res.error) || t("The connection could not be opened."));
   server().then((s) => call(s.server, s.token, "POST", "/api/items/" + id + "/access", { action: "connect" })).catch(() => {});
@@ -499,7 +502,7 @@ const handlers = {
   async unlocked(msg) {
     syncPairScript().catch(() => {});
     S.keys = { accountKey: pz.unb64u(msg.keys.a), privateKey: pz.unb64u(msg.keys.p), publicKey: pz.unb64u(msg.keys.u) };
-    S.lockMinutes = msg.lock || 15;
+    S.lockMinutes = Number.isInteger(msg.lock) ? msg.lock : 0;
     S.clipSeconds = msg.clip || 30;
     S.vaultKeys.clear();
     S.revision = 0;
@@ -587,6 +590,31 @@ const handlers = {
     await api.tabs.create({ url: launcherPairURL(), openerTabId: sender.tab.id });
     return { ok: true };
   },
+  // one unlock: the vault page of the own server asks for the keys, gives
+  // its keys after the user unlocked it, or locks both
+  async pageKeys(msg, sender) {
+    await ownPage(sender, "/vault");
+    const s = await settings();
+    if (!S.keys || !s.email || s.email.toLowerCase() !== String(msg.email || "").toLowerCase()) return { keys: null };
+    armLock();
+    return { keys: { a: pz.b64u(S.keys.accountKey), p: pz.b64u(S.keys.privateKey), u: pz.b64u(S.keys.publicKey) } };
+  },
+  async pageUnlocked(msg, sender) {
+    await ownPage(sender, "/vault");
+    const s = await settings();
+    if (S.keys || !s.token || !s.email || s.email.toLowerCase() !== String(msg.email || "").toLowerCase()) return { ok: true };
+    const k = msg.keys || {};
+    const acct = await call(s.server, s.token, "GET", "/api/account");
+    const accountKey = pz.unb64u(String(k.a || ""));
+    const priv = await pz.open(accountKey, acct.wrapped_private_key, pz.AAD.privateKey());
+    if (pz.b64u(priv) !== k.p || acct.public_key !== k.u) throw new Error("not this account");
+    return await handlers.unlocked({ keys: { a: k.a, p: k.p, u: k.u }, lock: acct.lock_minutes, clip: acct.clipboard_seconds });
+  },
+  async pageLock(msg, sender) {
+    await ownPage(sender, "/vault");
+    await lock();
+    return { ok: true };
+  },
   // the vault page of the own server opens the connection of an item
   async pageConnect(msg, sender) {
     await ownPage(sender, "/vault");
@@ -601,7 +629,7 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg || msg.type === "offscreen-clear") return false;
   // Content scripts may only report captured logins.
   const fromPage = !!sender.tab && sender.id === api.runtime.id && sender.url && !sender.url.startsWith(api.runtime.getURL(""));
-  if (sender.id !== api.runtime.id || (fromPage && msg.type !== "capture" && msg.type !== "launcherPair" && msg.type !== "pageConnect")) return false;
+  if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock"].includes(msg.type))) return false;
   const h = handlers[msg.type];
   if (!h) return false;
   restore().then(() => h(msg, sender)).then((r) => reply({ ok: true, data: r }), (e) => reply({ ok: false, error: e.message || String(e), status: e.status || 0 }));

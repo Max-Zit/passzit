@@ -19,7 +19,7 @@
     <label>{{.T "E-mail address"}}<input value="{{.User.Email}}" readonly></label>
     <label>{{.T "Full name"}} <small>{{.T "optional"}}</small><input name="display_name" value="{{.User.DisplayName}}" maxlength="100" autocomplete="name"></label>
     <div class="grid2">
-      <label>{{.T "Lock the vault after (minutes)"}}<input type="number" name="lock_minutes" min="1" max="{{.Data.Policy.LockMinutes}}" value="{{if .User.Prefs.LockMinutes}}{{.User.Prefs.LockMinutes}}{{end}}" placeholder="{{.Data.Policy.LockMinutes}}"><small>{{.T "Empty: %d minutes (the most your administrator allows)." .Data.Policy.LockMinutes}}</small></label>
+      <label>{{.T "Lock the vault after (minutes)"}}<input type="number" name="lock_minutes" min="1" max="{{if .Data.Policy.LockMinutes}}{{.Data.Policy.LockMinutes}}{{else}}480{{end}}" value="{{if .User.Prefs.LockMinutes}}{{.User.Prefs.LockMinutes}}{{end}}" placeholder="{{if .Data.Policy.LockMinutes}}{{.Data.Policy.LockMinutes}}{{else}}—{{end}}"><small>{{if .Data.Policy.LockMinutes}}{{.T "Empty: %d minutes (the most your administrator allows)." .Data.Policy.LockMinutes}}{{else}}{{.T "Empty: the vault stays open until you lock it or close the browser. Enter minutes to lock it after that much inactivity."}}{{end}}</small></label>
       <label>{{.T "Clear copied passwords after (seconds)"}}<input type="number" name="clipboard_seconds" min="5" max="{{.Data.Policy.ClipboardSeconds}}" value="{{if .User.Prefs.ClipboardSeconds}}{{.User.Prefs.ClipboardSeconds}}{{end}}" placeholder="{{.Data.Policy.ClipboardSeconds}}"><small>{{.T "Empty: %d seconds." .Data.Policy.ClipboardSeconds}}</small></label>
     </div>
     <div><button class="primary">{{.T "Save"}}</button></div>

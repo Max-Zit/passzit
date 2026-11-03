@@ -8,7 +8,7 @@
   <section class="panel">
     <h2>{{template "icon" "lock"}}{{.T "Locking and clipboard"}}</h2>
     <div class="cols">
-      <label>{{.T "Lock the vault after inactivity (minutes)"}}<input type="number" name="lock_minutes" value="{{.Data.LockMinutes}}" min="1" max="480" required><small>{{.T "Users may choose a shorter time for themselves, not a longer one."}}</small></label>
+      <label>{{.T "Lock the vault after inactivity (minutes)"}}<input type="number" name="lock_minutes" value="{{.Data.LockMinutes}}" min="0" max="480" required><small>{{.T "0: the vault stays open until the user locks it or closes the browser (the default). Users may choose a shorter time for themselves, not a longer one."}}</small></label>
       <label>{{.T "Clear copied passwords after (seconds)"}}<input type="number" name="clipboard_seconds" value="{{.Data.ClipboardSeconds}}" min="5" max="600" required></label>
     </div>
     <div class="cols">
