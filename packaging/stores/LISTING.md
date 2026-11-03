@@ -13,7 +13,7 @@ into `extensionStores` in `internal/web/extensions.go`.
 - Publisher / developer: MaxZit, office@maxzit.com, https://maxzit.com
 - Homepage: https://github.com/Max-Zit/passzit
 - Support: https://github.com/Max-Zit/passzit/issues
-- Privacy policy: https://github.com/Max-Zit/passzit/blob/main/PRIVACY.md
+- Privacy policy: https://github.com/Max-Zit/passzit/blob/develop/PRIVACY.md (switch to main after the next release)
 - License: AGPL-3.0-only (source: https://github.com/Max-Zit/passzit)
 - Category: Chrome "Productivity → Tools" (or "Privacy & Security"), Edge "Productivity", AMO "Privacy & Security"
 - Language: English (the extension follows the browser language: en de fr es it pt nl pl cs sr tr ru zh ja)
