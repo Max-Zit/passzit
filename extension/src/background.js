@@ -408,6 +408,51 @@ async function syncPairScript() {
   }
 }
 
+// ---- MaxZit consoles (WatchZit): "Open with" on a device opens the
+// connection with the login saved for it (console.js on the consoles the
+// user added; the sender's origin is checked when a request comes)
+
+const CONSOLE = "pz-console";
+
+async function syncConsoleScript() {
+  const s = await settings();
+  const want = [];
+  for (const o of s.consoles) {
+    if (!(await api.permissions.contains({ origins: [o + "/*"] }).catch(() => false))) continue;
+    const u = new URL(o);
+    const p = u.protocol + "//" + u.hostname + "/*";
+    if (!want.includes(p)) want.push(p);
+  }
+  const regs = await api.scripting.getRegisteredContentScripts({ ids: [CONSOLE] }).catch(() => []);
+  const same = regs.length && JSON.stringify(regs[0].matches) === JSON.stringify(want);
+  if (regs.length && !same) await api.scripting.unregisterContentScripts({ ids: [CONSOLE] });
+  if (want.length && !same) {
+    await api.scripting.registerContentScripts([{ id: CONSOLE, js: ["console.js"], matches: want, runAt: "document_idle", allFrames: false }]);
+  }
+}
+
+const OPEN_TOOLS = ["rdp", "ssh", "winscp", "winbox", "vnc", "telnet", "custom"];
+
+// consoleLogin picks the login saved for a device of a console: same
+// address and tool (any tool for "custom"), the console's user name first.
+function consoleLogin(req) {
+  const host = req.host.toLowerCase().replace(/^\[|\]$/g, "");
+  const found = [];
+  for (const it of S.items.values()) {
+    const d = it.data;
+    if (!d || it.deleted_at || !d.connect || !d.connect.host) continue;
+    if (d.connect.host.toLowerCase().replace(/^\[|\]$/g, "") !== host) continue;
+    if (req.tool !== "custom" && d.connect.tool !== req.tool) continue;
+    found.push(it);
+  }
+  const user = (it) => ((it.data.login && it.data.login.username) || it.data.connect.user || "").toLowerCase();
+  const port = (it) => it.data.connect.port || 0;
+  found.sort((a, b) => (req.user ? (user(b) === req.user.toLowerCase()) - (user(a) === req.user.toLowerCase()) : 0) ||
+    (req.port ? (port(b) === req.port) - (port(a) === req.port) : 0) ||
+    (a.data.name || "").localeCompare(b.data.name || "", undefined, { sensitivity: "base" }));
+  return found[0] || null;
+}
+
 const CAPTURE = "pz-capture";
 
 async function syncCapture() {
@@ -583,7 +628,7 @@ const handlers = {
   },
   async pending(msg) { await savePending(msg.index, msg.action); return { ok: true }; },
   async capture(msg, sender) { await capture(msg, sender); return { ok: true }; },
-  async settingsChanged() { await syncCapture(); await syncPairScript().catch(() => {}); await badge(); return { ok: true }; },
+  async settingsChanged() { await syncCapture(); await syncPairScript().catch(() => {}); await syncConsoleScript().catch(() => {}); await badge(); return { ok: true }; },
   // the Launcher page of the own server asks to pair this browser
   async launcherPair(msg, sender) {
     await ownPage(sender, "/launcher");
@@ -623,13 +668,30 @@ const handlers = {
     return await connectItem(String(msg.id || ""));
   },
   async sync() { await sync(true); return { ok: true, count: S.items.size }; },
+  // "Open with" on a MaxZit console the user added: answers at once whether
+  // PassZit takes it (the console waits only briefly), then opens it
+  async consoleOpen(msg, sender) {
+    const s = await settings();
+    let page = null;
+    try { page = new URL(sender.url); } catch (e) { page = null; }
+    if (!page || sender.frameId !== 0 || !s.consoles.includes(page.origin)) throw new Error("not allowed");
+    const req = { tool: String(msg.tool), host: String(msg.host).slice(0, 255), port: Number(msg.port) || 0, user: String(msg.user || "").slice(0, 255) };
+    if (!OPEN_TOOLS.includes(req.tool) || !/^[A-Za-z0-9.:\-\[\]]{1,255}$/.test(req.host) || req.port < 0 || req.port > 65535) return { taken: false };
+    if (!S.keys) return { taken: false }; // locked: the console opens the launcher without a password
+    const it = consoleLogin(req);
+    if (!it) return { taken: false };
+    connectItem(it.id).catch((e) => {
+      if (sender.tab) api.tabs.sendMessage(sender.tab.id, { type: "consoleOpenFailed", error: e.message || String(e) }, { frameId: 0 }).catch(() => {});
+    });
+    return { taken: true };
+  },
 };
 
 api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg || msg.type === "offscreen-clear") return false;
   // Content scripts may only report captured logins.
   const fromPage = !!sender.tab && sender.id === api.runtime.id && sender.url && !sender.url.startsWith(api.runtime.getURL(""));
-  if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock"].includes(msg.type))) return false;
+  if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock", "consoleOpen"].includes(msg.type))) return false;
   const h = handlers[msg.type];
   if (!h) return false;
   restore().then(() => h(msg, sender)).then((r) => reply({ ok: true, data: r }), (e) => reply({ ok: false, error: e.message || String(e), status: e.status || 0 }));
@@ -658,6 +720,6 @@ api.tabs.onUpdated.addListener((id, info, tab) => {
   if (info.url || info.status === "complete") restore().then(() => tabBadge(tab)).catch(() => {});
 });
 
-api.runtime.onInstalled.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); });
-api.runtime.onStartup.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); });
+api.runtime.onInstalled.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); syncConsoleScript().catch(() => {}); });
+api.runtime.onStartup.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); syncConsoleScript().catch(() => {}); });
 api.permissions.onRemoved.addListener(() => { syncCapture().catch(() => {}); });

@@ -76,6 +76,10 @@ func newExtFixture(t *testing.T) *extFixture {
 	mux.HandleFunc("/launcher-probe", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `<!doctype html><title>probe</title><script>addEventListener("message", (e) => { if (e.data && e.data.type === "pz-ext-here") document.title = "here"; }); setTimeout(() => postMessage({ type: "pz-ext-ping" }, location.origin), 300);</script>`)
 	})
+	// a page of a MaxZit console (WatchZit) the user added in the extension
+	mux.HandleFunc("/console-probe", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `<!doctype html><title>console probe</title>`)
+	})
 	mux.HandleFunc("/vault-probe", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `<!doctype html><title>vault probe</title>`)
 	})
@@ -98,6 +102,10 @@ func newExtFixture(t *testing.T) *extFixture {
 		"login": map[string]any{"username": "alice@example.com", "password": "S3cret-For-Test!", "urls": []string{site}, "totp": "JBSWY3DPEHPK3PXP"}})}, nil)
 	id2 := newUUID()
 	c.must("PUT", "/api/items/"+id2, putItemReq{VaultID: vid, Data: c.sealItem(vid, id2, map[string]any{"type": "note", "name": "Wi-Fi", "notes": "x"})}, nil)
+	// a device login: "Open with" of a MaxZit console finds it by address and tool
+	id3 := newUUID()
+	c.must("PUT", "/api/items/"+id3, putItemReq{VaultID: vid, Data: c.sealItem(vid, id3, map[string]any{"type": "login", "name": "Probe server",
+		"login": map[string]any{"username": "root", "password": "Device-Pass-1"}, "connect": map[string]any{"tool": "ssh", "host": "10.20.30.40", "port": 22}})}, nil)
 	f.query = url.Values{"server": {f.ts.URL}, "email": {"alice@example.com"}, "pw": {"Alice-Master-Password-9"}, "site": {site}, "other": {other}}
 	if os.Getenv("PZ_EXT_SHOTS") != "" {
 		// sample logins for the screenshots of the store listings
@@ -161,8 +169,8 @@ func (f *extFixture) check(t *testing.T) {
 	}
 	// the saved login reached the server, encrypted
 	extra, _ := strconv.Atoi(f.query.Get("extra"))
-	if s := f.c.sync(0); len(s.Items) != 3+extra {
-		t.Errorf("server has %d items, want %d", len(s.Items), 3+extra)
+	if s := f.c.sync(0); len(s.Items) != 4+extra {
+		t.Errorf("server has %d items, want %d", len(s.Items), 4+extra)
 	}
 }
 

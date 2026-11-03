@@ -28,5 +28,7 @@
 
 <h2 id="devices">Device pages</h2>
 <p>On the device page of a monitoring console such as WatchZit, the extension shows the logins saved for that device under <i>Device …</i>, so you can connect from there. The page names the device in a <code>&lt;meta name="passzit-device"&gt;</code> tag; PassZit only offers logins whose connection address matches it.</p>
+<h2 id="one-click">One click from WatchZit</h2>
+<p>Add the console under <i>Settings → MaxZit consoles (WatchZit)</i> in the extension (for example <code>https://watchzit.example.com:8443</code>; the browser asks once for access to it). Then <i>Open with</i> on a device of that console opens the connection with the login saved for the device: same address and the same tool (any tool for custom tools of the console), the console's user name first. This works while PassZit is unlocked; when it is locked, or no login fits, the console opens the MaxZit Launcher as before and you type the password. The console never sees the password: it only names the device, and the extension hands the login to the launcher on your computer.</p>
 
 <div class="callout"><p>The helper gets one login per click, only from the PassZit extension (the browser checks its id), and keeps nothing. The vault stays encrypted in the browser.</p></div>

@@ -26,6 +26,7 @@
   <li>Otključani ključevi se čuvaju samo u memoriji i, šifrovani ključem koji zna samo sesija na serveru, u memoriji sesije ove kartice. Zaključavanje, odjava ili kraj sesije ih čine neupotrebljivim.</li>
   <li>Trezor se zaključava kada se pregledač zatvori, dugmetom za zaključavanje ili posle vremena neaktivnosti ako ga pravila ili korisnik odrede; kopirane lozinke se brišu iz klipborda posle 30 sekundi (podrazumevano). Web trezor i ekstenzija dele otključane ključeve samo na stranici trezora istog servera, posle provere u odnosu na nalog.</li>
   <li>Otključavanje pomoću Windows Hello (ili drugog passkey-a uređaja) koristi WebAuthn PRF proširenje: tajna ostaje u autentifikatoru, server čuva samo ključ naloga zapečaćen ključem izvedenim iz nje, a svaki passkey radi samo na adresi na kojoj je podešen.</li>
+  <li>Na MaxZit konzoli koju je korisnik dodao u ekstenziji (WatchZit), stranica može samo da imenuje uređaj i alat; ekstenzija sama bira prijavu, samo dok je otključana, i predaje je uparenom MaxZit Launcher-u na istom računaru. Nijedna druga stranica ne može da traži prijave, a konzola nikada ne dobija lozinku.</li>
   <li>Stranice koriste strogu politiku sadržaja (CSP): izvršavaju se samo PassZit-ove skripte, ništa se ne učitava sa drugih servera.</li>
 </ul>
 

@@ -7,8 +7,21 @@ export const api = globalThis.browser && globalThis.browser.runtime ? globalThis
 // only reaches encrypted data; the master password is never stored)
 
 export async function settings() {
-  const s = await api.storage.local.get({ server: "", email: "", token: "", device: "", offerSave: false, siteBadge: false });
+  const s = await api.storage.local.get({ server: "", email: "", token: "", device: "", offerSave: false, siteBadge: false, consoles: [] });
+  if (!Array.isArray(s.consoles)) s.consoles = [];
   return s;
+}
+
+// consoleOrigin turns what the user typed for a MaxZit console (WatchZit)
+// into its origin, or "" when it is no web address.
+export function consoleOrigin(text) {
+  let v = String(text || "").trim();
+  if (!v) return "";
+  if (!/^https?:\/\//i.test(v)) v = "https://" + v;
+  try {
+    const u = new URL(v);
+    return /^https?:$/.test(u.protocol) && u.hostname ? u.origin : "";
+  } catch (e) { return ""; }
 }
 
 export async function saveSettings(patch) {

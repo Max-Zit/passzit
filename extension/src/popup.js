@@ -2,7 +2,7 @@
 // search, generator, save offers and settings. The master password is used
 // only here, to derive keys; it is never stored or sent.
 import { generate, entropy, loadOptions, saveOptions } from "./pz/generator.js";
-import { api, settings, saveSettings, loadTexts, t, normServer, deviceName, sameServer } from "./ext.js";
+import { api, settings, saveSettings, loadTexts, t, normServer, deviceName, sameServer, consoleOrigin } from "./ext.js";
 import { bg, signIn, secondFactor, unlock } from "./client.js";
 import { readQR, authenticatorKeys } from "./pz/qr.js";
 import { parse as totpParse } from "./pz/totp.js";
@@ -385,6 +385,32 @@ async function showMenu(st) {
       r && r.ok ? "" : el("span", { class: "small", text: " " + t("Or, on Windows, install the MaxZit Launcher and pair it:") }),
       r && r.ok ? "" : pairBtn);
   };
+  // MaxZit consoles (WatchZit) whose "Open with" uses the logins of the vault
+  const consoles = el("div", { class: "consoles" });
+  const showConsoles = async () => {
+    const cur = (await settings()).consoles;
+    consoles.replaceChildren(...cur.map((o) => el("div", { class: "row console" }, el("code", { text: o }),
+      el("button", { type: "button", class: "ghost", title: t("Remove"), "aria-label": t("Remove"), onclick: async () => {
+        await saveSettings({ consoles: (await settings()).consoles.filter((x) => x !== o) });
+        await bg("settingsChanged");
+        showConsoles();
+      } }, "×"))));
+  };
+  const consoleIn = el("input", { type: "url", placeholder: "https://watchzit.example.com:8443", "aria-label": t("Address of a MaxZit console") });
+  const consoleAdd = el("button", { type: "button", class: "secondary", onclick: async () => {
+    showErr(err, "");
+    const origin = consoleOrigin(consoleIn.value);
+    if (!origin) { showErr(err, t("Enter the address of the console, e.g. https://watchzit.example.com:8443.")); return; }
+    // asked right away: the browser allows the question only on the click
+    let ok = false;
+    try { ok = await api.permissions.request({ origins: [origin + "/*"] }); } catch (e) { ok = false; }
+    if (!ok) { showErr(err, t("The browser did not allow PassZit on that console.")); return; }
+    const cur = (await settings()).consoles;
+    if (!cur.includes(origin)) await saveSettings({ consoles: cur.concat(origin).slice(0, 20) });
+    await bg("settingsChanged");
+    consoleIn.value = "";
+    showConsoles();
+  } }, t("Add"));
   app.replaceChildren(el("div", { class: "menu" },
     el("h1", { text: t("Settings") }), err,
     el("p", { class: "small" }, el("b", { text: s.email }), el("br"), el("span", { class: "muted", text: s.server })),
@@ -393,10 +419,14 @@ async function showMenu(st) {
     el("label", { class: "check" }, count, t("Show on the PassZit icon how many logins a website has")),
     el("p", { class: "small" }, el("b", { text: t("Connections (RDP, SSH, WinSCP, WinBox, VNC, Telnet)") })),
     helperState,
+    el("p", { class: "small" }, el("b", { text: t("MaxZit consoles (WatchZit)") })),
+    el("p", { class: "small muted", text: t("On these consoles \"Open with\" on a device opens the connection with the login saved for it, while PassZit is unlocked.") }),
+    consoles, el("div", { class: "addconsole" }, consoleIn, consoleAdd),
     el("button", { type: "button", class: "secondary", onclick: openVault }, t("Open the web vault")),
     el("button", { type: "button", class: "ghost", onclick: async () => { await bg("logout"); start(); } }, t("Sign out of this browser")),
     el("button", { type: "button", class: "ghost", onclick: () => start() }, t("Back"))));
   checkHelper();
+  showConsoles();
   if (!st.signedIn) start();
 }
 

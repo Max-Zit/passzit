@@ -26,6 +26,7 @@
   <li>Unlocked keys are kept only in memory and, encrypted with a key that only the server session knows, in the session storage of this tab. Locking, signing out or closing the session makes them useless.</li>
   <li>The vault locks when the browser closes, with the lock button, or after an inactivity time if the policy or the user sets one; copied passwords are cleared from the clipboard after 30 seconds (by default). The web vault and the extension share the unlocked keys only on the server's own vault page, after checking them against the account.</li>
   <li>Unlock with Windows Hello (or another passkey of the device) uses the WebAuthn PRF extension: the secret stays in the authenticator, the server stores only the account key sealed under a key derived from it, and each passkey works only on the address it was set up on.</li>
+  <li>On a MaxZit console the user added in the extension (WatchZit), the page may only name a device and a tool; the extension picks the login itself, only while unlocked, and passes it to the paired MaxZit Launcher on the same computer. No other page can ask for logins, and the console never receives a password.</li>
   <li>The pages use a strict content security policy: only PassZit's own scripts run, nothing is loaded from other servers.</li>
 </ul>
 

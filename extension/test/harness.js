@@ -47,7 +47,7 @@ try {
   const st = await bg("status");
   step("signed in and unlocked", st.signedIn && st.unlocked);
   const all = await bg("search", { q: "" });
-  step("items synced", all.items.length === 2 + extra, all.items.map((i) => i.name).join(","));
+  step("items synced", all.items.length === 3 + extra, all.items.map((i) => i.name).join(","));
   const login = all.items.find((i) => i.name === "Test site");
   // fill on the right site
   const tab = await openTab(site);
@@ -111,6 +111,33 @@ try {
   let open = false;
   for (let i = 0; i < 30 && !open; i++) { await sleep(100); open = (await bg("status")).unlocked; }
   step("unlocking the page unlocks the extension", open);
+  // a MaxZit console (WatchZit) the user added: "Open with" of a device with
+  // a saved login is taken by PassZit, others are left to the console
+  const consoleSite = server.replace("127.0.0.1", "localhost");
+  await saveSettings({ consoles: [consoleSite] });
+  await bg("settingsChanged");
+  const regs2 = await api.scripting.getRegisteredContentScripts().catch(() => []);
+  step("console script registered", regs2.some((r) => r.id === "pz-console"), JSON.stringify(regs2.map((r) => [r.id, r.matches])));
+  const cp = await openTab(consoleSite + "/console-probe");
+  const openWith = (tool, host) => new Promise((res) => {
+    const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    addEventListener("message", (e) => { if (e.source === window && e.data && e.data.type === "maxzit-open-taken" && e.data.nonce === nonce) res("taken"); });
+    postMessage({ type: "maxzit-open", nonce, tool, host, port: 0, user: "", device: "probe" }, location.origin);
+    setTimeout(() => res("not taken"), 400);
+  });
+  const inConsole = async (args) => {
+    for (let i = 0; ; i++) {
+      try { return (await api.scripting.executeScript({ target: { tabId: cp.id }, world: "MAIN", func: openWith, args }))[0].result; } catch (e) { if (i >= 30) throw e; await sleep(200); }
+    }
+  };
+  await sleep(300);
+  step("console: unknown device left to the console", (await inConsole(["ssh", "10.99.99.99"])) === "not taken");
+  step("console: other tool left to the console", (await inConsole(["rdp", "10.20.30.40"])) === "not taken");
+  // last: opening it fails here (no launcher), and the page shows that
+  step("console: device with a saved login taken", (await inConsole(["ssh", "10.20.30.40"])) === "taken");
+  await api.tabs.remove(cp.id).catch(() => {});
+  await saveSettings({ consoles: [] });
+  await bg("settingsChanged");
   // another site: refused
   const tab2 = await openTab(other);
   await attempt("fill refused on another site", async () => {
@@ -143,7 +170,7 @@ try {
     throw new Error("unlocked with a wrong password");
   });
   await unlock(pw);
-  step("unlocked again", (await bg("search", { q: "" })).items.length === 3 + extra);
+  step("unlocked again", (await bg("search", { q: "" })).items.length === 4 + extra);
   if (q.get("stay")) {
     step("left signed in for screenshots", true);
   } else {
