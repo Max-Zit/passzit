@@ -60,5 +60,5 @@ export PASSZIT_DB=postgres://passzit:SECRET@localhost/passzit
   <tr><td><code>--unblock-ip</code></td><td>release a blocked address (or <code>all</code>) and exit</td></tr>
   <tr><td><code>--version</code></td><td>print the version and exit</td></tr>
   <tr><td><code>--dev-embedded-db</code></td><td>a private PostgreSQL in the data directory — for tests and demos only</td></tr>
-  <tr><td><code>--dev-no-2fa</code></td><td>sign in without the second factor — test and demo servers only, needs <code>--dev-embedded-db</code>; every page shows a warning</td></tr>
+  <tr><td><code>--dev-no-2fa</code></td><td>sign in without the second factor — test and demo servers only (on a package install: <code>PASSZIT_TEST_NO_2FA=yes</code> in <code>/etc/passzit/server.env</code>); every page shows a warning</td></tr>
 </table>

@@ -70,7 +70,7 @@ func run() error {
 	listen := flag.String("listen", "", "console address; overrides the saved setting (e.g. 127.0.0.1:8443)")
 	downloads := flag.String("downloads-dir", env("PASSZIT_DOWNLOADS", defaultDownloadsDir()), "folder with programs users download (maxzit-launcher.exe)")
 	devHTTP := flag.String("dev-http", "", "also serve the console over plain HTTP on this loopback address (development only)")
-	devNo2FA := flag.Bool("dev-no-2fa", false, "sign in without the second factor (test and demo servers only, needs --dev-embedded-db; shown as a warning and audited)")
+	devNo2FA := flag.Bool("dev-no-2fa", env("PASSZIT_TEST_NO_2FA", "") == "yes", "sign in without the second factor (test and demo servers only; PASSZIT_TEST_NO_2FA=yes in server.env does the same; shown as a warning on every page and audited)")
 	resetACL := flag.Bool("reset-allowlist", false, "allow the console again from the private networks (10/8, 172.16/12, 192.168/16, fc00::/7) and exit")
 	unblock := flag.String("unblock-ip", "", "lift the sign-in block of an address (or \"all\") and exit")
 	showVersion := flag.Bool("version", false, "print the version and exit")
@@ -82,9 +82,6 @@ func run() error {
 	if *showVersion {
 		fmt.Println("passzit-server", version)
 		return nil
-	}
-	if *devNo2FA && !*devDB {
-		return errors.New("--dev-no-2fa works only together with --dev-embedded-db")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
