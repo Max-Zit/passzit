@@ -88,7 +88,7 @@ export function setArgonBase(url) { argonBase = url; argonReady = null; }
 function loadArgon() {
   if (!argonReady) {
     argonReady = (async () => {
-      if (!globalThis.Go) await import(argonBase + "wasm_exec.js");
+      if (!globalThis.Go) await import("./wasm_exec.js"); // next to this file, in the web vault and the extension
       const go = new globalThis.Go();
       const resp = await fetch(argonBase + "argon2.wasm");
       if (!resp.ok) throw new Error("argon2.wasm: " + resp.status);

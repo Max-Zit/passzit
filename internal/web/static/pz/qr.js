@@ -8,7 +8,7 @@ let ready = null;
 function load() {
   if (!ready) {
     ready = (async () => {
-      if (!globalThis.Go) await import(base + "wasm_exec.js");
+      if (!globalThis.Go) await import("./wasm_exec.js");
       const go = new globalThis.Go();
       const resp = await fetch(base + "qr.wasm");
       if (!resp.ok) throw new Error("qr.wasm: " + resp.status);
