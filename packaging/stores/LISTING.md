@@ -24,6 +24,8 @@ Fill and save passwords and one-time codes from your own PassZit server. End-to-
 
 ## Detailed description
 
+<!-- Chrome Web Store rejected a list of protocol names as keyword spam (2026-11-03, "Yellow Argon"): keep tool names out of the description. -->
+
 PassZit is a free, open-source password manager you run on your own server. This extension connects your browser to it.
 
 - Fills user name, password and the one-time code (2FA) on the website they belong to — only on the matching site.
@@ -31,7 +33,7 @@ PassZit is a free, open-source password manager you run on your own server. This
 - Generates strong passwords and passphrases.
 - Searches all your vaults, including team vaults shared with you.
 - Adds one-time codes by scanning the QR code on the page.
-- Opens RDP, SSH, WinSCP, WinBox, VNC and Telnet connections through the MaxZit Launcher on Windows.
+- Opens remote desktop and terminal connections of your logins through the MaxZit Launcher on Windows.
 - One unlock for the extension and the web vault; unlock with Windows Hello in the web vault.
 
 Everything is encrypted in your browser (Argon2id, AES-256-GCM). Your server stores only encrypted data, and the extension talks to no one but your server — no tracking, no analytics.
