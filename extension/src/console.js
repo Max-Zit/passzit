@@ -10,6 +10,16 @@
   const api = globalThis.browser || globalThis.chrome;
   if (window.__pzConsole) return;
   window.__pzConsole = true;
+  // tell the console that PassZit takes "Open with" here, and whether it is
+  // unlocked (the console may show it next to the buttons); asked again with
+  // {type: "maxzit-passzit-ask"}
+  const announce = () => api.runtime.sendMessage({ type: "consoleState" }).then((r) => {
+    if (r && r.ok && r.data) window.postMessage({ type: "maxzit-passzit", state: r.data.unlocked ? "ready" : "locked" }, location.origin);
+  }, () => {});
+  window.addEventListener("message", (e) => {
+    if (e.source === window && e.origin === location.origin && e.data && e.data.type === "maxzit-passzit-ask") announce();
+  });
+  announce();
   window.addEventListener("message", (e) => {
     if (e.source !== window || e.origin !== location.origin || !e.data || e.data.type !== "maxzit-open") return;
     const m = e.data;

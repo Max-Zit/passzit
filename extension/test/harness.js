@@ -131,6 +131,19 @@ try {
     }
   };
   await sleep(300);
+  const state = async () => {
+    for (let i = 0; ; i++) {
+      try {
+        return (await api.scripting.executeScript({ target: { tabId: cp.id }, world: "MAIN", func: () => new Promise((res) => {
+          addEventListener("message", (e) => { if (e.source === window && e.data && e.data.type === "maxzit-passzit") res(e.data.state); });
+          postMessage({ type: "maxzit-passzit-ask" }, location.origin);
+          setTimeout(() => res("no answer"), 1000);
+        }) }))[0].result;
+      } catch (e) { if (i >= 30) throw e; await sleep(200); }
+    }
+  };
+  const st1 = await state();
+  step("console: PassZit tells the console it is ready", st1 === "ready", st1);
   step("console: unknown device left to the console", (await inConsole(["ssh", "10.99.99.99"])) === "not taken");
   step("console: other tool left to the console", (await inConsole(["rdp", "10.20.30.40"])) === "not taken");
   // last: opening it fails here (no launcher), and the page shows that

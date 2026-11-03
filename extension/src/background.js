@@ -743,6 +743,14 @@ const handlers = {
   async sync() { await sync(true); return { ok: true, count: S.items.size }; },
   // "Open with" on a MaxZit console the user added: answers at once whether
   // PassZit takes it (the console waits only briefly), then opens it
+  // whether PassZit takes "Open with" right now (only to allowed consoles)
+  async consoleState(msg, sender) {
+    const s = await settings();
+    let page = null;
+    try { page = new URL(sender.url); } catch (e) { page = null; }
+    if (!page || !consoleSecure(page) || sender.frameId !== 0 || !s.consoles.includes(page.origin)) throw new Error("not allowed");
+    return { unlocked: !!S.keys };
+  },
   async consoleOpen(msg, sender) {
     const s = await settings();
     let page = null;
@@ -764,7 +772,7 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg || msg.type === "offscreen-clear") return false;
   // Content scripts may only report captured logins.
   const fromPage = !!sender.tab && sender.id === api.runtime.id && sender.url && !sender.url.startsWith(api.runtime.getURL(""));
-  if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock", "consoleOpen", "pageLinkInfo", "pageLink"].includes(msg.type))) return false;
+  if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock", "consoleOpen", "consoleState", "pageLinkInfo", "pageLink"].includes(msg.type))) return false;
   const h = handlers[msg.type];
   if (!h) return false;
   restore().then(() => h(msg, sender)).then((r) => reply({ ok: true, data: r }), (e) => reply({ ok: false, error: e.message || String(e), status: e.status || 0 }));
