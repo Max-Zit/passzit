@@ -5,6 +5,7 @@ import { api, saveSettings } from "../ext.js";
 import { bg, signIn, unlock } from "../client.js";
 
 const q = new URLSearchParams(location.search);
+const extra = +(q.get("extra") || 0); // sample logins of the screenshot mode
 const server = q.get("server"), email = q.get("email"), pw = q.get("pw"), site = q.get("site"), other = q.get("other");
 const out = { steps: [] };
 const step = (name, ok, info) => { out.steps.push({ name, ok: !!ok, info: info === undefined ? "" : String(info) }); };
@@ -46,7 +47,7 @@ try {
   const st = await bg("status");
   step("signed in and unlocked", st.signedIn && st.unlocked);
   const all = await bg("search", { q: "" });
-  step("items synced", all.items.length === 2, all.items.map((i) => i.name).join(","));
+  step("items synced", all.items.length === 2 + extra, all.items.map((i) => i.name).join(","));
   const login = all.items.find((i) => i.name === "Test site");
   // fill on the right site
   const tab = await openTab(site);
@@ -65,7 +66,7 @@ try {
   await bg("settingsChanged");
   let badgeText = "";
   for (let i = 0; i < 20 && badgeText !== "1"; i++) { badgeText = await api.action.getBadgeText({ tabId: tab.id }); if (badgeText !== "1") await sleep(100); }
-  step("icon shows the login count", badgeText === "1", badgeText);
+  step("icon shows the login count", badgeText === String(1 + +(q.get("siteextra") || 0)), badgeText);
   await saveSettings({ siteBadge: false });
   await bg("settingsChanged");
   // the bridge script answers on the server's own Launcher page
@@ -142,7 +143,7 @@ try {
     throw new Error("unlocked with a wrong password");
   });
   await unlock(pw);
-  step("unlocked again", (await bg("search", { q: "" })).items.length === 3);
+  step("unlocked again", (await bg("search", { q: "" })).items.length === 3 + extra);
   if (q.get("stay")) {
     step("left signed in for screenshots", true);
   } else {

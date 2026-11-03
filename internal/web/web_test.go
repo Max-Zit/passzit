@@ -1090,6 +1090,16 @@ func TestExtensionDownload(t *testing.T) {
 	if code != http.StatusOK || !strings.Contains(page, "/extensions/passzit-extension-chromium-0.0.0.zip") {
 		t.Fatalf("extensions page: %d", code)
 	}
+	if strings.Contains(page, "data-store=") {
+		t.Fatal("store buttons without store pages")
+	}
+	saved := extensionStores
+	t.Cleanup(func() { extensionStores = saved })
+	extensionStores = []extensionStore{{Browser: "firefox", Name: "Firefox Add-ons", URL: "https://addons.mozilla.org/firefox/addon/passzit/"}, {Browser: "edge", Name: "Microsoft Edge Add-ons"}}
+	_, page = c.get("/extensions")
+	if !strings.Contains(page, `data-store="firefox" href="https://addons.mozilla.org/firefox/addon/passzit/"`) || strings.Contains(page, `data-store="edge"`) || !strings.Contains(page, "<details class=\"manual\">") {
+		t.Fatal("store buttons")
+	}
 	for _, target := range []string{"chromium", "firefox"} {
 		code, body := c.get("/extensions/passzit-extension-" + target + "-0.0.0.zip")
 		if code != http.StatusOK {

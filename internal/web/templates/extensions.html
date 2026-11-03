@@ -3,7 +3,13 @@
 <h1>{{.T "Browser extensions"}}</h1>
 <p class="muted">{{.T "The PassZit extension recognizes the websites you have logins for, fills user name, password and the one-time code, offers to save new logins and opens remote connections."}}</p>
 {{with .Data}}
-<div class="extgrid">
+{{if .Stores}}<section class="panel">
+  <h2>{{template "icon" "download"}}{{$.T "Install in one click"}}</h2>
+  <p>{{$.T "Install PassZit from the store of your browser; the store keeps it up to date. Chrome Web Store serves Chrome, Brave, Opera and Vivaldi too."}}</p>
+  <p class="row">{{range .Stores}}<a class="btn secondary" data-store="{{.Browser}}" href="{{.URL}}" target="_blank" rel="noopener">{{template "icon" "download"}}{{.Name}}</a>{{end}}</p>
+</section>
+<details class="manual"><summary>{{$.T "Install by hand (without a store)"}}</summary>
+{{end}}<div class="extgrid">
   <section class="panel">
     <h2>{{$.T "Chrome, Edge, Brave, Opera, Vivaldi"}}</h2>
     <p><a class="btn primary" href="/extensions/{{.Chromium}}" download>{{template "icon" "download"}}{{$.T "Download for Chromium browsers"}}</a></p>
@@ -24,6 +30,7 @@
     <p class="small muted">{{$.T "Firefox keeps add-ons that are not from addons.mozilla.org only until it closes; load it again after a restart."}}</p>
   </section>
 </div>
+{{if .Stores}}</details>{{end}}
 <section class="panel">
   <h2>{{template "icon" "terminal"}}{{$.T "MaxZit Launcher (Windows)"}}</h2>
   <p>{{$.T "Opens RDP, SSH, WinSCP, WinBox, VNC and Telnet connections of your logins from the extension. It is the same program WatchZit uses; one installation serves both."}}</p>

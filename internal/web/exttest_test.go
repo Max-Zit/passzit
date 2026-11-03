@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -47,6 +48,7 @@ type extFixture struct {
 	ts     *httptest.Server
 	result chan []byte
 	query  url.Values // harness parameters
+	demo   []string   // ids of the sample logins (screenshot mode)
 }
 
 func newExtFixture(t *testing.T) *extFixture {
@@ -97,6 +99,25 @@ func newExtFixture(t *testing.T) *extFixture {
 	id2 := newUUID()
 	c.must("PUT", "/api/items/"+id2, putItemReq{VaultID: vid, Data: c.sealItem(vid, id2, map[string]any{"type": "note", "name": "Wi-Fi", "notes": "x"})}, nil)
 	f.query = url.Values{"server": {f.ts.URL}, "email": {"alice@example.com"}, "pw": {"Alice-Master-Password-9"}, "site": {site}, "other": {other}}
+	if os.Getenv("PZ_EXT_SHOTS") != "" {
+		// sample logins for the screenshots of the store listings
+		demo := []map[string]any{
+			{"type": "login", "name": "GitHub", "login": map[string]any{"username": "alice", "password": "x", "urls": []string{"https://github.com/login"}, "totp": "JBSWY3DPEHPK3PXP"}},
+			{"type": "login", "name": "Microsoft 365", "login": map[string]any{"username": "alice@contoso.com", "password": "x", "urls": []string{"https://login.microsoftonline.com"}}},
+			{"type": "login", "name": "Office file server", "login": map[string]any{"username": "alice@contoso.com", "password": "x"}, "connect": map[string]any{"tool": "rdp", "host": "fs01.contoso.local", "port": 0}},
+			{"type": "login", "name": "Web server", "login": map[string]any{"username": "root", "password": "x"}, "connect": map[string]any{"tool": "ssh", "host": "10.0.10.21", "port": 22}},
+			{"type": "login", "name": "Branch router", "login": map[string]any{"username": "admin", "password": "x"}, "connect": map[string]any{"tool": "winbox", "host": "192.168.88.1", "port": 0}},
+			{"type": "login", "name": "Company intranet", "login": map[string]any{"username": "alice@contoso.com", "password": "x", "urls": []string{site}, "totp": "JBSWY3DPEHPK3PXP"}},
+			{"type": "login", "name": "Accounting portal", "login": map[string]any{"username": "alice@contoso.com", "password": "x", "urls": []string{"https://portal.example.com"}}},
+		}
+		for _, d := range demo {
+			id := newUUID()
+			c.must("PUT", "/api/items/"+id, putItemReq{VaultID: vid, Data: c.sealItem(vid, id, d)}, nil)
+			f.demo = append(f.demo, id)
+		}
+		f.query.Set("extra", strconv.Itoa(len(demo)))
+		f.query.Set("siteextra", "1") // Company intranet is a login of the test site
+	}
 	return f
 }
 
@@ -139,8 +160,9 @@ func (f *extFixture) check(t *testing.T) {
 		t.Errorf("only %d steps ran", len(got.Steps))
 	}
 	// the saved login reached the server, encrypted
-	if s := f.c.sync(0); len(s.Items) != 3 {
-		t.Errorf("server has %d items, want 3", len(s.Items))
+	extra, _ := strconv.Atoi(f.query.Get("extra"))
+	if s := f.c.sync(0); len(s.Items) != 3+extra {
+		t.Errorf("server has %d items, want %d", len(s.Items), 3+extra)
 	}
 }
 
@@ -207,11 +229,32 @@ func TestExtensionInBrowser(t *testing.T) {
 	}
 	f.check(t)
 	if shots != "" {
+		// only the sample logins stay; the extension syncs, and a tab of the
+		// test site is the current tab of the popup's "This site"
+		keep := map[string]bool{}
+		for _, id := range f.demo {
+			keep[id] = true
+		}
+		for _, it := range f.c.sync(0).Items {
+			if !keep[it.ID] {
+				f.c.must("POST", "/api/items/"+it.ID+"/trash", nil, nil)
+			}
+		}
+		ext := "chrome-extension://" + loaded.ID
+		if err := cdp.eval(ext+"/popup.html", `chrome.runtime.sendMessage({ type: "sync" })`); err != nil {
+			t.Errorf("sync: %v", err)
+		}
+		if err := cdp.call("Target.createTarget", map[string]any{"url": f.query.Get("site")}, nil); err != nil {
+			t.Errorf("site tab: %v", err)
+		}
+		time.Sleep(time.Second)
+		cdp.background = true
 		for _, view := range []string{"site", "all", "gen"} {
-			if err := cdp.screenshot("chrome-extension://"+loaded.ID+"/popup.html#"+view, filepath.Join(shots, "popup-"+view+".png")); err != nil {
+			if err := cdp.screenshot("chrome-extension://"+loaded.ID+"/popup.html#"+view, filepath.Join(shots, "popup-"+view+".png"), 360, 560, 2); err != nil {
 				t.Errorf("screenshot %s: %v", view, err)
 			}
 		}
+		storeImages(t, cdp, shots)
 	}
 }
 
@@ -222,6 +265,8 @@ type pipeCDP struct {
 	mu   sync.Mutex
 	next int
 	wait map[int]chan cdpReply
+	// background makes screenshot tabs in a new window behind the current one
+	background bool
 }
 
 type cdpReply struct {
@@ -309,11 +354,40 @@ func (c *pipeCDP) callIn(session, method string, params, out any) error {
 }
 
 // screenshot opens a page at popup size and saves a PNG of it.
-func (c *pipeCDP) screenshot(pageURL, file string) error {
+// storeImages frames the popup screenshots into the images of the store
+// listings (packaging/stores/frame.html, rendered by the same browser).
+func storeImages(t *testing.T, cdp *pipeCDP, shots string) {
+	frame, err := filepath.Abs(filepath.Join("..", "..", "packaging", "stores", "frame.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs, _ := filepath.Abs(shots)
+	page := func(q url.Values) string { return "file://" + filepath.ToSlash(frame) + "?" + q.Encode() }
+	for i, s := range []struct{ img, title, text string }{
+		{"popup-site.png", "Fills the right login", "User name, password and the 2FA code — only on the site they belong to."},
+		{"popup-all.png", "All your vaults in one place", "Websites, RDP, SSH, WinBox and more, from your own PassZit server."},
+		{"popup-gen.png", "Strong passwords in a click", "Random passwords and passphrases, saved encrypted right away."},
+		{"", "Your server. Your keys.", "End-to-end encrypted in the browser. Open source, self-hosted, no tracking."},
+	} {
+		q := url.Values{"title": {s.title}, "text": {s.text}}
+		if s.img != "" {
+			q.Set("img", "file://"+filepath.ToSlash(filepath.Join(abs, s.img)))
+		}
+		if err := cdp.screenshot(page(q), filepath.Join(shots, fmt.Sprintf("store-%d.png", i+1)), 1280, 800, 1); err != nil {
+			t.Errorf("store image %d: %v", i+1, err)
+		}
+	}
+	if err := cdp.screenshot(page(url.Values{"tile": {"1"}}), filepath.Join(shots, "store-tile.png"), 440, 280, 1); err != nil {
+		t.Errorf("store tile: %v", err)
+	}
+}
+
+// eval runs a script in a new tab of pageURL and waits for its promise.
+func (c *pipeCDP) eval(pageURL, expr string) error {
 	var tgt struct {
 		TargetID string `json:"targetId"`
 	}
-	if err := c.call("Target.createTarget", map[string]any{"url": "about:blank"}, &tgt); err != nil {
+	if err := c.call("Target.createTarget", map[string]any{"url": pageURL}, &tgt); err != nil {
 		return err
 	}
 	var att struct {
@@ -322,7 +396,29 @@ func (c *pipeCDP) screenshot(pageURL, file string) error {
 	if err := c.call("Target.attachToTarget", map[string]any{"targetId": tgt.TargetID, "flatten": true}, &att); err != nil {
 		return err
 	}
-	if err := c.callIn(att.SessionID, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 360, "height": 560, "deviceScaleFactor": 2, "mobile": false}, nil); err != nil {
+	time.Sleep(time.Second)
+	if err := c.callIn(att.SessionID, "Runtime.evaluate", map[string]any{"expression": expr, "awaitPromise": true}, nil); err != nil {
+		return err
+	}
+	return c.call("Target.closeTarget", map[string]any{"targetId": tgt.TargetID}, nil)
+}
+
+func (c *pipeCDP) screenshot(pageURL, file string, width, height int, scale float64) error {
+	var tgt struct {
+		TargetID string `json:"targetId"`
+	}
+	// background: a new window behind the current one, so the current tab
+	// stays what the extension sees
+	if err := c.call("Target.createTarget", map[string]any{"url": "about:blank", "newWindow": c.background, "background": c.background}, &tgt); err != nil {
+		return err
+	}
+	var att struct {
+		SessionID string `json:"sessionId"`
+	}
+	if err := c.call("Target.attachToTarget", map[string]any{"targetId": tgt.TargetID, "flatten": true}, &att); err != nil {
+		return err
+	}
+	if err := c.callIn(att.SessionID, "Emulation.setDeviceMetricsOverride", map[string]any{"width": width, "height": height, "deviceScaleFactor": scale, "mobile": false}, nil); err != nil {
 		return err
 	}
 	if err := c.callIn(att.SessionID, "Page.navigate", map[string]any{"url": pageURL}, nil); err != nil {

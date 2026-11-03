@@ -1,0 +1,41 @@
+<!doctype html>
+<!-- Frame of the store listing images: a screenshot of the extension popup
+     (img=…) next to a headline (title=…, text=…), or the small promo tile
+     (tile=1). Rendered by TestExtensionInBrowser with PZ_EXT_SHOTS=dir. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PassZit store image</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 100%; height: 100%; }
+  body { font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif; color: #f8fafc;
+    background: radial-gradient(circle at 78% 30%, #312e81 0, #0f172a 62%); overflow: hidden; }
+  .slide { display: grid; grid-template-columns: 1fr 420px; align-items: center; gap: 64px; height: 100%; padding: 0 96px; }
+  .slide.solo { grid-template-columns: 1fr; text-align: center; justify-items: center; }
+  .logo { height: 56px; margin-bottom: 40px; }
+  .solo .logo { height: 96px; }
+  h1 { font-size: 54px; line-height: 1.12; font-weight: 750; letter-spacing: -0.02em; }
+  p { font-size: 25px; line-height: 1.45; color: #cbd5e1; margin-top: 22px; max-width: 620px; }
+  .shot { width: 400px; border-radius: 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 0 0 1px rgba(129, 140, 248, .35); }
+  .tile { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; gap: 18px; }
+  .tile .logo { height: 64px; margin: 0; }
+  .tile p { font-size: 20px; margin: 0; text-align: center; color: #e2e8f0; }
+</style>
+</head>
+<body>
+<script>
+  const q = new URLSearchParams(location.search);
+  const logo = '<img class="logo" src="../../brand/passzit-logo-on-dark.svg" alt="PassZit">';
+  const esc = (s) => String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  if (q.get("tile")) {
+    document.body.innerHTML = '<div class="tile">' + logo + '<p>Self-hosted password manager<br>End-to-end encrypted</p></div>';
+  } else {
+    const img = q.get("img");
+    document.body.innerHTML = '<div class="slide' + (img ? "" : " solo") + '"><div>' + logo +
+      '<h1>' + esc(q.get("title")) + '</h1><p>' + esc(q.get("text")) + '</p></div>' +
+      (img ? '<img class="shot" src="' + esc(img) + '" alt="">' : "") + '</div>';
+  }
+</script>
+</body>
+</html>

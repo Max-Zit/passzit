@@ -21,6 +21,34 @@ type extensionsData struct {
 	Version, Server string
 	Chromium        string // file names
 	Firefox         string
+	Stores          []extensionStore
+}
+
+// extensionStore is a browser's add-on store that has the PassZit extension:
+// one click installs it there, and the store keeps it up to date.
+type extensionStore struct {
+	Browser string // chrome, edge, firefox (the page marks the visitor's browser)
+	Name    string
+	URL     string
+}
+
+// extensionStores lists the store pages; an entry without URL (not
+// published there yet) is not shown. Chrome Web Store serves Chrome,
+// Brave, Opera and Vivaldi too.
+var extensionStores = []extensionStore{
+	{Browser: "chrome", Name: "Chrome Web Store"},
+	{Browser: "edge", Name: "Microsoft Edge Add-ons"},
+	{Browser: "firefox", Name: "Firefox Add-ons"},
+}
+
+func publishedStores() []extensionStore {
+	var out []extensionStore
+	for _, st := range extensionStores {
+		if st.URL != "" {
+			out = append(out, st)
+		}
+	}
+	return out
 }
 
 // Programs in the downloads folder: the MaxZit Launcher (the Windows
@@ -73,7 +101,7 @@ func extensionFile(target, version string) string {
 func (s *Server) handleExtensions(w http.ResponseWriter, r *http.Request) {
 	v := s.extensionVersion()
 	s.render(w, r, http.StatusOK, "extensions", &Page{Title: "Browser extensions", Nav: "extensions",
-		Data: extensionsData{Version: v, Server: s.publicBase(r), Chromium: extensionFile("chromium", v), Firefox: extensionFile("firefox", v)}})
+		Data: extensionsData{Version: v, Server: s.publicBase(r), Chromium: extensionFile("chromium", v), Firefox: extensionFile("firefox", v), Stores: publishedStores()}})
 }
 
 var extZips struct {

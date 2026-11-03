@@ -155,6 +155,17 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
+// Browser extensions: the store of this browser comes first as the main button.
+document.addEventListener("DOMContentLoaded", function () {
+  "use strict";
+  var ua = navigator.userAgent;
+  var b = /Firefox\//.test(ua) ? "firefox" : /Edg\//.test(ua) ? "edge" : window.chrome ? "chrome" : "";
+  var a = b && document.querySelector("[data-store=\"" + b + "\"]");
+  if (!a) return;
+  a.classList.replace("secondary", "primary");
+  a.parentElement.prepend(a);
+});
+
 // Forms that wait for a long answer (scripts): show that the page is working.
 document.addEventListener("submit", function (ev) {
   "use strict";
