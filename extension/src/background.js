@@ -3,7 +3,7 @@
 // it closes), syncs the encrypted vault, finds logins for the open site and
 // fills them into the page when the user asks.
 import * as pz from "./pz/crypto.js";
-import { api, settings, saveSettings, call, loadTexts, t, sameServer, deviceName } from "./ext.js";
+import { api, settings, saveSettings, call, loadTexts, t, sameServer, deviceName, consoleSecure } from "./ext.js";
 import { match, parse } from "./domain.js";
 import { parse as totpParse, code as totpCode } from "./pz/totp.js";
 
@@ -179,6 +179,16 @@ async function deviceHint(tab) {
     const v = r && typeof r.result === "string" ? r.result.trim() : "";
     return /^[A-Za-z0-9.:\-\[\]]{1,255}$/.test(v) ? v : "";
   } catch (e) { return ""; }
+}
+
+// consoleHint tells whether the page looks like a MaxZit console (WatchZit):
+// "Open with" buttons or its device tag. Only that yes/no is read.
+async function consoleHint(tab) {
+  try {
+    const [r] = await api.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] },
+      func: () => !!document.querySelector('[data-open-tool], meta[name="passzit-device"], meta[name="maxzit-console"]') });
+    return !!(r && r.result);
+  } catch (e) { return false; }
 }
 
 // ---- remote connections through passzit-helper (native messaging)
@@ -419,7 +429,7 @@ async function syncConsoleScript() {
   const s = await settings();
   const want = [];
   for (const o of s.consoles) {
-    if (!(await api.permissions.contains({ origins: [o + "/*"] }).catch(() => false))) continue;
+    if (!consoleSecure(new URL(o)) || !(await api.permissions.contains({ origins: [o + "/*"] }).catch(() => false))) continue;
     const u = new URL(o);
     const p = u.protocol + "//" + u.hostname + "/*";
     if (!want.includes(p)) want.push(p);
@@ -431,6 +441,20 @@ async function syncConsoleScript() {
     await api.scripting.registerContentScripts([{ id: CONSOLE, js: ["console.js"], matches: want, runAt: "document_idle", allFrames: false }]);
   }
 }
+
+let pendingConsole = "";
+
+api.permissions.onAdded.addListener(async (p) => {
+  const o = pendingConsole;
+  if (!o || !(p.origins || []).includes(o + "/*")) return;
+  pendingConsole = "";
+  const s = await settings();
+  if (!s.consoles.includes(o)) await saveSettings({ consoles: s.consoles.concat(o).slice(0, 20) });
+  await syncConsoleScript().catch(() => {});
+  const tab = await activeTab().catch(() => null);
+  const cur = tab ? parse(await tabURL(tab)) : null;
+  if (cur && cur.origin === o) await api.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, files: ["console.js"] }).catch(() => {});
+});
 
 const OPEN_TOOLS = ["rdp", "ssh", "winscp", "winbox", "vnc", "telnet", "custom"];
 
@@ -575,11 +599,39 @@ const handlers = {
     const url = await tabURL(tab);
     const p = parse(url);
     const device = tab ? await deviceHint(tab) : "";
-    return { url, host: p ? p.hostname : "", secure: p ? p.protocol === "https:" : false, matches: p ? matchesFor(url) : [],
+    // a MaxZit console: offer "Open with" with PassZit's logins (HTTPS only)
+    const s = await settings();
+    const origin = p && consoleSecure(new URL(p.origin)) ? p.origin : "";
+    const active = !!origin && s.consoles.includes(origin);
+    const consoleInfo = origin && (active || (tab && await consoleHint(tab))) ? { origin, active } : null;
+    return { url, console: consoleInfo, host: p ? p.hostname : "", secure: p ? p.protocol === "https:" : false, matches: p ? matchesFor(url) : [],
       device, deviceMatches: device ? devicesFor(device) : [], helper: await helperAllowed(),
       pending: S.pending.map((x, i) => ({ i, host: x.host, username: x.username, update: !!x.update })) };
   },
   async connect(msg) { return await connectItem(msg.id); },
+  // the popup allows the console of the current tab (after the browser's
+  // own permission prompt); the console script starts there at once
+  // remembered before the permission prompt: Firefox closes the popup when
+  // the prompt opens, then the granted permission finishes the step
+  async consolePending(msg) {
+    const tab = await activeTab();
+    const cur = parse(await tabURL(tab));
+    pendingConsole = cur && consoleSecure(new URL(cur.origin)) && cur.origin === String(msg.origin || "") ? cur.origin : "";
+    return { ok: !!pendingConsole };
+  },
+  async consoleAdd(msg) {
+    pendingConsole = "";
+    const tab = await activeTab();
+    const cur = parse(await tabURL(tab));
+    const origin = String(msg.origin || "");
+    if (!cur || !consoleSecure(new URL(cur.origin)) || cur.origin !== origin) throw new Error(t("Open the console in this tab first."));
+    if (!(await api.permissions.contains({ origins: [origin + "/*"] }))) throw new Error(t("The browser did not allow PassZit on that console."));
+    const s = await settings();
+    if (!s.consoles.includes(origin)) await saveSettings({ consoles: s.consoles.concat(origin).slice(0, 20) });
+    await syncConsoleScript();
+    await api.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, files: ["console.js"] }).catch(() => {});
+    return { origin };
+  },
   async helperPing() {
     if (!(await helperAllowed())) return { ok: false, error: "permission" };
     try { return await api.runtime.sendNativeMessage(HELPER, { v: 1, ping: true }); } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
@@ -695,7 +747,7 @@ const handlers = {
     const s = await settings();
     let page = null;
     try { page = new URL(sender.url); } catch (e) { page = null; }
-    if (!page || sender.frameId !== 0 || !s.consoles.includes(page.origin)) throw new Error("not allowed");
+    if (!page || !consoleSecure(page) || sender.frameId !== 0 || !s.consoles.includes(page.origin)) throw new Error("not allowed");
     const req = { tool: String(msg.tool), host: String(msg.host).slice(0, 255), port: Number(msg.port) || 0, user: String(msg.user || "").slice(0, 255) };
     if (!OPEN_TOOLS.includes(req.tool) || !/^[A-Za-z0-9.:\-\[\]]{1,255}$/.test(req.host) || req.port < 0 || req.port > 65535) return { taken: false };
     if (!S.keys) return { taken: false }; // locked: the console opens the launcher without a password

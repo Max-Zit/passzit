@@ -12,6 +12,12 @@ export async function settings() {
   return s;
 }
 
+// consoleSecure: MaxZit consoles only over HTTPS (a page over plain HTTP
+// could be changed on the way), or plain HTTP on this computer itself.
+export function consoleSecure(u) {
+  return !!u.hostname && (u.protocol === "https:" || (u.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname)));
+}
+
 // consoleOrigin turns what the user typed for a MaxZit console (WatchZit)
 // into its origin, or "" when it is no web address.
 export function consoleOrigin(text) {
@@ -20,7 +26,7 @@ export function consoleOrigin(text) {
   if (!/^https?:\/\//i.test(v)) v = "https://" + v;
   try {
     const u = new URL(v);
-    return /^https?:$/.test(u.protocol) && u.hostname ? u.origin : "";
+    return consoleSecure(u) ? u.origin : "";
   } catch (e) { return ""; }
 }
 

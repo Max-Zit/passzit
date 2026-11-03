@@ -196,6 +196,7 @@ async function showMain() {
   const p = await bg("page");
   if (p.locked) return start();
   for (const o of p.pending) body.append(offer(o));
+  if (p.console && !p.console.active) body.append(consoleOffer(p.console.origin));
   body.append(el("div", { class: "site" }, icon("globe"), p.host || t("No website")));
   if (p.host && !p.secure) body.append(el("div", { class: "warn" }, t("This page is not encrypted (HTTP). Logins saved for HTTPS are not offered here.")));
   body.append(itemList(p.matches, true, t("No saved login for this website."), p.helper));
@@ -207,6 +208,32 @@ async function showMain() {
   body.append(el("div", { class: "foot" },
     el("a", { href: "#", onclick: (e) => { e.preventDefault(); openVault(); } }, t("Open the web vault")),
     el("button", { type: "button", class: "iconbtn", title: t("Reload"), "aria-label": t("Reload"), onclick: async () => { await bg("sync"); showMain(); } }, icon("refresh"))));
+}
+
+// consoleOffer: this tab is a MaxZit console (WatchZit) — one click lets its
+// "Open with" use PassZit's logins. The address is shown, and the browser
+// asks for its own permission; only this exact console is added.
+function consoleOffer(origin) {
+  const err = errBox();
+  const box = el("div", { class: "offer console-offer" },
+    el("b", { text: t("MaxZit console") }),
+    el("p", { class: "small", text: t("Let \"Open with\" on the devices of this console use your PassZit logins?") }),
+    el("code", { class: "cmd", text: origin }), err);
+  const allow = el("button", { type: "button", class: "primary", onclick: async () => {
+    showErr(err, "");
+    // the background remembers it first (Firefox closes this popup for the
+    // prompt); the permission is asked right away, still in the click
+    bg("consolePending", { origin }).catch(() => {});
+    let ok = false;
+    try { ok = await api.permissions.request({ origins: [origin + "/*"] }); } catch (e) { ok = false; }
+    if (!ok) { showErr(err, t("The browser did not allow PassZit on that console.")); return; }
+    try {
+      await bg("consoleAdd", { origin });
+      box.replaceChildren(el("b", { text: t("MaxZit console") }), el("p", { class: "small", text: t("Done. \"Open with\" on this console now uses your PassZit logins.") }));
+    } catch (e) { showErr(err, e); }
+  } }, t("Allow on this console"));
+  box.append(allow);
+  return box;
 }
 
 const TOOLS = { rdp: "RDP", ssh: "SSH", winscp: "WinSCP", winbox: "WinBox", vnc: "VNC", telnet: "Telnet" };
