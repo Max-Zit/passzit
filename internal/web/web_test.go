@@ -1142,6 +1142,16 @@ func TestExtensionDownload(t *testing.T) {
 	if code, body := c.get("/downloads/maxzit-launcher.exe"); code != http.StatusOK || body != "MZ launcher" {
 		t.Fatalf("launcher download: %d %q", code, body)
 	}
+	// with the installer (setup wizard) it is the main button
+	if err := os.WriteFile(filepath.Join(e.srv.DownloadsDir, "maxzit-launcher-x64.msi"), []byte("MSI launcher"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, page := c.get("/launcher"); !strings.Contains(page, `class="btn primary" href="/downloads/maxzit-launcher-x64.msi"`) || !strings.Contains(page, "/downloads/maxzit-launcher.exe") {
+		t.Fatal("installer not offered first")
+	}
+	if code, body := c.get("/downloads/maxzit-launcher-x64.msi"); code != http.StatusOK || body != "MSI launcher" {
+		t.Fatalf("installer download: %d %q", code, body)
+	}
 	for _, p := range []string{"/downloads/other.exe", "/downloads/..%2Fmaxzit-launcher.exe"} {
 		if code, _ := c.get(p); code != http.StatusNotFound {
 			t.Fatalf("%s: %d", p, code)

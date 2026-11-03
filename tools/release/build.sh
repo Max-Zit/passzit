@@ -37,6 +37,11 @@ if [ -z "$LAUNCHER" ]; then
   if gh release download --repo Max-Zit/watchzit --pattern "maxzit-launcher-*-windows-amd64.exe" --dir dist >/dev/null 2>&1; then
     LAUNCHER=$(ls dist/maxzit-launcher-*-windows-amd64.exe | head -1)
     echo "MaxZit Launcher: $LAUNCHER"
+    # its installer with the setup wizard (WatchZit releases from 1.3.1 on)
+    rm -f dist/maxzit-launcher-*-x64.msi
+    if gh release download --repo Max-Zit/watchzit --pattern "maxzit-launcher-*-x64.msi" --dir dist >/dev/null 2>&1; then
+      LAUNCHER_MSI=$(ls dist/maxzit-launcher-*-x64.msi | head -1)
+    fi
   else
     echo "note: the MaxZit Launcher could not be downloaded from the WatchZit release; packages offer only the PassZit helper"
   fi
@@ -54,6 +59,7 @@ for arch in amd64 arm64; do
   mkdir -p bin/pkg/downloads
   cp "dist/passzit-helper-$V-windows-amd64.exe" bin/pkg/downloads/passzit-helper.exe
   if [ -n "$LAUNCHER" ]; then cp "$LAUNCHER" bin/pkg/downloads/maxzit-launcher.exe; fi
+  if [ -n "${LAUNCHER_MSI:-}" ]; then cp "$LAUNCHER_MSI" bin/pkg/downloads/maxzit-launcher-x64.msi; fi
   export ARCH=$arch
   rm -f "dist/passzit-server_${V}_$arch.deb" dist/passzit-server-"${V}"-1.*.rpm.$arch
   $NFPM package --config packaging/linux/nfpm-server.yaml --packager deb --target dist/ >/dev/null

@@ -57,13 +57,14 @@ func publishedStores() []extensionStore {
 // Telnet for the extension.
 const (
 	launcherFile = "maxzit-launcher.exe"
+	launcherMSI  = "maxzit-launcher-x64.msi" // the same launcher with its setup wizard
 	helperFile   = "passzit-helper.exe"
 )
 
 // download returns the path of a file the console offers ("" when it is
 // not on this server).
 func (s *Server) download(name string) string {
-	if s.DownloadsDir == "" || (name != launcherFile && name != helperFile) {
+	if s.DownloadsDir == "" || (name != launcherFile && name != launcherMSI && name != helperFile) {
 		return ""
 	}
 	p := filepath.Join(s.DownloadsDir, name)
@@ -162,5 +163,5 @@ func (s *Server) handleExtensionDownload(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleLauncher(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "launcher", &Page{Title: "MaxZit Launcher", Nav: "launcher", Data: struct{ Launcher, Helper bool }{s.download(launcherFile) != "", s.download(helperFile) != ""}})
+	s.render(w, r, http.StatusOK, "launcher", &Page{Title: "MaxZit Launcher", Nav: "launcher", Data: struct{ Launcher, LauncherMSI, Helper bool }{s.download(launcherFile) != "", s.download(launcherMSI) != "", s.download(helperFile) != ""}})
 }
