@@ -29,7 +29,10 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.embedded-postgres-go
-          key: embedded-postgres-${{ hashFiles('go.sum') }}
+          # the PostgreSQL version of the tests, not go.sum: a new module must not
+          # mean a new download
+          key: embedded-postgres-18.3.0
+          restore-keys: embedded-postgres-
       - name: Tests (the browser crypto and the extension run in Chrome)
         env:
           PASSZIT_BROWSER: google-chrome
