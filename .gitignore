@@ -15,3 +15,4 @@ NOTES.md
 /internal/web/static/pz/wasm_exec.js
 /extension/build/
 /packaging/appliance/vmdkstream
+/internal/web/static/pz/wasm-licenses.txt

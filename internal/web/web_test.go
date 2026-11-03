@@ -1113,7 +1113,7 @@ func TestExtensionDownload(t *testing.T) {
 		for _, f := range zr.File {
 			names[f.Name] = true
 		}
-		for _, want := range []string{"manifest.json", "popup.js", "background.js", "pz/crypto.js", "pz/argon2.wasm", "pz/qr.wasm", "i18n/de.json"} {
+		for _, want := range []string{"manifest.json", "popup.js", "background.js", "pz/crypto.js", "pz/argon2.wasm", "pz/qr.wasm", "i18n/de.json", "LICENSE", "THIRD_PARTY_LICENSES.txt"} {
 			if !names[want] {
 				t.Errorf("%s: %s missing", target, want)
 			}

@@ -15,101 +15,30 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/max-zit/passzit/internal/licenses"
 )
-
-// kinds maps a phrase of the license text to its name; all are compatible
-// with the AGPL-3.0.
-var kinds = []struct{ phrase, name string }{
-	{"Apache License", "Apache-2.0"},
-	{"Mozilla Public License", "MPL-2.0"},
-	{"Redistribution and use in source and binary forms", "BSD"},
-	{"Permission is hereby granted, free of charge", "MIT"},
-	{"Permission to use, copy, modify, and", "ISC"},
-	{"public domain", "Public domain"},
-}
-
-func detect(text string) string {
-	for _, k := range kinds {
-		if strings.Contains(text, k.phrase) {
-			if k.name == "BSD" && strings.Contains(text, "Neither the name") {
-				return "BSD-3-Clause"
-			}
-			if k.name == "BSD" {
-				return "BSD-2-Clause"
-			}
-			return k.name
-		}
-	}
-	return ""
-}
-
-// licenseText finds the license file of a module directory.
-func licenseText(dir string) (string, error) {
-	ents, err := os.ReadDir(dir)
-	if err != nil {
-		return "", err
-	}
-	for _, e := range ents {
-		n := strings.ToUpper(e.Name())
-		if !e.IsDir() && (strings.HasPrefix(n, "LICENSE") || strings.HasPrefix(n, "LICENCE") || strings.HasPrefix(n, "COPYING")) {
-			b, err := os.ReadFile(filepath.Join(dir, e.Name())) // #nosec G304 -- module cache
-			return string(b), err
-		}
-	}
-	// Some modules state it in the README only.
-	for _, name := range []string{"README.md", "README"} {
-		if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil { // #nosec G304 -- module cache
-			return string(b), nil
-		}
-	}
-	return "", fmt.Errorf("no license file in %s", dir)
-}
 
 // wasmDeps lists the modules of a browser module (outside the main module).
 func wasmDeps(pkg string) map[string]string {
-	cmd := exec.Command("go", "list", "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{end}}{{end}}", pkg) // #nosec G204 -- a package of this repository
-	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
-	out, err := cmd.Output()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, pkg+":", err)
-		os.Exit(1)
-	}
-	mods := map[string]string{}
-	for _, l := range strings.Split(string(out), "\n") {
-		if f := strings.Fields(l); len(f) == 2 {
-			mods[f[0]] = f[1]
-		}
-	}
-	return mods
-}
-
-func modCache() string { return goEnv("GOMODCACHE") }
-
-func goEnv(name string) string {
-	out, err := exec.Command("go", "env", name).Output() // #nosec G204 -- fixed command
+	mods, err := licenses.WasmModules(pkg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	return strings.TrimSpace(string(out))
+	return mods
 }
 
-// escapePath applies the module cache case encoding (!x for X).
-func escapePath(p string) string {
-	var b strings.Builder
-	for _, r := range p {
-		if r >= 'A' && r <= 'Z' {
-			b.WriteByte('!')
-			b.WriteRune(r + 'a' - 'A')
-			continue
-		}
-		b.WriteRune(r)
+func goEnv(name string) string {
+	v, err := licenses.GoEnv(name)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	return b.String()
+	return v
 }
 
 func main() {
@@ -148,7 +77,7 @@ func main() {
 		paths = append(paths, p)
 	}
 	sort.Strings(paths)
-	cache := modCache()
+	cache := goEnv("GOMODCACHE")
 	var b bytes.Buffer
 	b.WriteString("# Third-party licenses\n\nPassZit is licensed under the GNU Affero General Public License v3.0 (see LICENSE).\n")
 	b.WriteString("Its programs contain the following components under their own licenses, all compatible with the AGPL-3.0.\n\n")
@@ -158,9 +87,9 @@ func main() {
 	var list []entry
 	failed := false
 	for _, p := range paths {
-		dir := filepath.Join(cache, escapePath(p)+"@"+mods[p])
-		text, err := licenseText(dir)
-		kind := detect(text)
+		dir := licenses.ModuleDir(cache, p, mods[p])
+		text, err := licenses.Text(dir)
+		kind := licenses.Detect(text)
 		if err != nil || kind == "" {
 			fmt.Fprintf(os.Stderr, "%s %s: license not recognized (%v); check it by hand\n", p, mods[p], err)
 			failed = true

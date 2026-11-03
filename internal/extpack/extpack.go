@@ -7,6 +7,8 @@
 package extpack
 
 import (
+	_ "embed"
+
 	"archive/zip"
 	"bytes"
 	"encoding/json"
@@ -117,6 +119,13 @@ func Files(src Sources, o Options) (map[string][]byte, error) {
 		}
 		files["pz/"+f] = b
 	}
+	// the extension's license and the notices of the third-party code in it
+	notices, err := fs.ReadFile(src.Pz, "wasm-licenses.txt")
+	if err != nil {
+		return nil, fmt.Errorf("%w (run go run ./tools/buildwasm first)", err)
+	}
+	files["LICENSE"] = []byte(agplText)
+	files["THIRD_PARTY_LICENSES.txt"] = []byte(thirdParty(string(notices)))
 	if err := addTexts(src, files); err != nil {
 		return nil, err
 	}
@@ -126,6 +135,39 @@ func Files(src Sources, o Options) (map[string][]byte, error) {
 	}
 	files["manifest.json"] = m
 	return files, nil
+}
+
+//go:embed LICENSE
+var agplText string
+
+//go:embed MPL-2.0.txt
+var mplText string
+
+// thirdParty is THIRD_PARTY_LICENSES.txt of the extension: the notices of
+// the WebAssembly modules (written by tools/buildwasm from the module
+// cache) and of the data files in the extension.
+func thirdParty(wasmNotices string) string {
+	var b strings.Builder
+	b.WriteString("PassZit browser extension: third-party components\n")
+	b.WriteString("==================================================\n\n")
+	b.WriteString("The PassZit extension is licensed under the GNU Affero General Public License v3.0 (see LICENSE);\n")
+	b.WriteString("its source is at https://github.com/Max-Zit/passzit. It contains the following components under\n")
+	b.WriteString("their own licenses, all compatible with the AGPL-3.0:\n\n")
+	b.WriteString("- pz/argon2.wasm: golang.org/x/crypto/argon2 and the Go runtime, compiled to WebAssembly\n")
+	b.WriteString("- pz/qr.wasm: the QR code reader github.com/makiuchi-d/gozxing and the Go runtime, compiled to WebAssembly\n")
+	b.WriteString("- pz/wasm_exec.js: the WebAssembly loader of the Go distribution\n")
+	b.WriteString("- psl-rules.js: the Public Suffix List\n")
+	b.WriteString("- pz/words.js: the EFF Large Wordlist\n\n")
+	b.WriteString(strings.TrimSpace(wasmNotices) + "\n\n")
+	b.WriteString("== Public Suffix List (MPL-2.0) — in psl-rules.js ==\n\n")
+	b.WriteString("The Public Suffix List (https://publicsuffix.org), converted unchanged into psl-rules.js by\n")
+	b.WriteString("tools/pslgen. Its source: https://publicsuffix.org/list/public_suffix_list.dat\n\n")
+	b.WriteString(strings.TrimSpace(mplText) + "\n\n")
+	b.WriteString("== EFF Large Wordlist (CC BY 3.0 US) — in pz/words.js ==\n\n")
+	b.WriteString("The EFF Large Wordlist for passphrases by the Electronic Frontier Foundation\n")
+	b.WriteString("(https://www.eff.org/dice), licensed under the Creative Commons Attribution 3.0 United States\n")
+	b.WriteString("License (https://creativecommons.org/licenses/by/3.0/us/). The list is used unchanged.\n")
+	return b.String()
 }
 
 // TextRE finds the texts the extension translates: t("…").

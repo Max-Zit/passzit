@@ -74,3 +74,15 @@ No. All JavaScript and WebAssembly (Argon2id, QR reader) are in the package.
 ## Test account for reviewers
 
 Reviewers need a PassZit server. Give them a demo server address and a test account in the reviewer notes (never a real one).
+
+## License notices in the package
+
+Every package (store zips and the server's downloads) carries `LICENSE`
+(AGPL-3.0) and `THIRD_PARTY_LICENSES.txt` in its root: the Go runtime and
+the modules compiled into `pz/argon2.wasm` and `pz/qr.wasm` with their full
+license texts (written by `go run ./tools/buildwasm` from the module cache;
+an unknown license stops the build), `wasm_exec.js`, the Public Suffix List
+(MPL-2.0 text) and the EFF wordlist (CC BY 3.0 US). Store license field:
+AGPL-3.0 (AMO has it; Chrome and Edge have no such field). Packages from
+0.9.6 on (store version 0.9.1, still in review on 2026-11-03, does not have
+them yet: send the next store version as soon as the reviews are done).
