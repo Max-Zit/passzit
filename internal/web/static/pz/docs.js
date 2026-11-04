@@ -115,6 +115,9 @@ async function picURL(f) {
   return url;
 }
 
+// docID is the file id of an item's page ("" without one).
+function docID(d) { return d && d.doc && d.doc.file ? d.doc.file.id : ""; }
+
 function docFiles(d) {
   return new Map((d.attachments || []).filter((a) => a.doc).map((a) => [a.id, a]));
 }
@@ -160,7 +163,14 @@ export async function openDoc(item, edit) {
   const d0 = C.dialog(t("Documentation: %s", item.data.name || ""), body);
   d0.classList.add("docdlg");
   let html = "";
+  // the page file html was read from: a save checks that it is still the item's
+  let htmlDoc = docID(item.data);
+  let saving = false, closed = false;
   try { html = await loadHTML(item.data); } catch (e) { body.replaceChildren(el("p", { class: "err", text: e.message })); return; }
+  // no closing while a save runs (its pictures would be removed under it)
+  d0.addEventListener("cancel", (ev) => { if (saving) ev.preventDefault(); });
+  d0.addEventListener("close", () => { closed = true; });
+  const closeBtn = d0.querySelector(".row.spread .iconbtn");
   const read = () => {
     const it = C.S.items.get(item.id) || item;
     const can = !it.deleted_at && C.canEditItem(it);
@@ -181,6 +191,8 @@ export async function openDoc(item, edit) {
       if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) { toast(t("Choose a PNG, JPEG, GIF or WebP picture."), true); return; }
       const bytes = new Uint8Array(await file.arrayBuffer());
       const f = await putFile(it, bytes);
+      // the dialog closed during the upload: nobody uses the picture
+      if (closed) { await api("DELETE", "/api/files/" + f.id).catch(() => {}); return; }
       const meta = { id: f.id, name: (file.name || "picture").slice(0, 200), size: f.size, type: file.type, key: f.key, doc: true };
       files.set(f.id, meta);
       added.push(meta);
@@ -245,8 +257,19 @@ export async function openDoc(item, edit) {
       tb(icon("upload"), t("Picture"), () => picIn.click()), tb("⨯", t("Clear the formatting"), cmd("removeFormat")),
       tb("↶", t("Undo"), cmd("undo")), tb("↷", t("Redo"), cmd("redo")), picIn);
     const save = button(t("Save"), { class: "primary", onclick: async () => {
-      save.disabled = true;
-      try { await store(it, page, files); added.length = 0; read(); } catch (e) { toast(e.message, true); } finally { save.disabled = false; }
+      save.disabled = cancel.disabled = true;
+      saving = true;
+      if (closeBtn) closeBtn.disabled = true;
+      try {
+        const used = await store(it, page, files);
+        // what the saved page shows is no longer removed on closing
+        for (let i = added.length - 1; i >= 0; i--) if (used.has(added[i].id)) added.splice(i, 1);
+        read();
+      } catch (e) { toast(e.message, true); } finally {
+        saving = false;
+        save.disabled = cancel.disabled = false;
+        if (closeBtn) closeBtn.disabled = false;
+      }
     } });
     const cancel = button(t("Cancel"), { class: "ghost", onclick: async () => {
       for (const f of added) await api("DELETE", "/api/files/" + f.id).catch(() => {});
@@ -259,12 +282,17 @@ export async function openDoc(item, edit) {
     page.focus();
   };
   // store seals the page as a file, points the item at it and removes the
-  // former page and the pictures it no longer shows
+  // former page and the pictures it no longer shows. When someone else saved
+  // the page meanwhile, nothing is saved or removed: the text stays in the
+  // editor. Returns the pictures the saved page uses.
   const store = async (it, page, files) => {
     const stored = cleanHTML(page.innerHTML, files);
     if (stored.length > MAX_HTML) throw new Error(t("The documentation is too long (at most 2 MB of text)."));
     const used = new Set([...parse(stored).querySelectorAll("img[data-att]")].map((i) => i.getAttribute("data-att")));
     const cur = C.S.items.get(it.id) || it;
+    if (!cur.data || docID(cur.data) !== htmlDoc) {
+      throw new Error(t("Someone else changed this documentation while you were editing it. Your text is still here: copy what you need, then cancel and open the documentation again."));
+    }
     const old = cur.data.doc && cur.data.doc.file;
     const empty = !plainText(stored) && !used.size;
     let doc = null;
@@ -273,9 +301,11 @@ export async function openDoc(item, edit) {
       const text = plainText(stored);
       doc = { file: { id: f.id, key: f.key, size: f.size }, preview: text.length > 200 ? text.slice(0, 200) + "…" : text, updated: new Date().toISOString(), by: C.S.acct.email };
     }
-    const keep = (cur.data.attachments || []).filter((a) => !a.doc || used.has(a.id));
+    // pictures this editor did not know (files: the page it opened and the
+    // uploads) are kept, never removed
+    const keep = (cur.data.attachments || []).filter((a) => !a.doc || used.has(a.id) || !files.has(a.id));
     for (const f of files.values()) if (used.has(f.id) && !keep.some((a) => a.id === f.id)) keep.push(f);
-    const gone = (cur.data.attachments || []).filter((a) => a.doc && !used.has(a.id));
+    const gone = (cur.data.attachments || []).filter((a) => a.doc && !used.has(a.id) && files.has(a.id));
     const data = Object.assign({}, cur.data, { attachments: keep });
     if (doc) data.doc = doc; else delete data.doc;
     try {
@@ -288,8 +318,10 @@ export async function openDoc(item, edit) {
     for (const f of gone) await api("DELETE", "/api/files/" + f.id).catch(() => {});
     for (const f of files.values()) if (!used.has(f.id)) await api("DELETE", "/api/files/" + f.id).catch(() => {});
     html = stored;
+    htmlDoc = doc ? doc.file.id : "";
     toast(empty ? t("The documentation was removed.") : t("Saved."));
     C.render();
+    return used;
   };
   if (edit && !C.canEditItem(item)) edit = false;
   if (edit) editor(); else read();

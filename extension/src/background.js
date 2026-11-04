@@ -4,7 +4,7 @@
 // fills them into the page when the user asks.
 import * as pz from "./pz/crypto.js";
 import { api, settings, saveSettings, call, loadTexts, t, sameServer, deviceName, consoleSecure } from "./ext.js";
-import { match, parse } from "./domain.js";
+import { match, exact, parse } from "./domain.js";
 import { newPasskey, sign as passkeySign, rpCheck } from "./passkeys.js";
 import { parse as totpParse, code as totpCode } from "./pz/totp.js";
 
@@ -16,6 +16,7 @@ const S = {
   lockMinutes: 0,
   clipSeconds: 30,
   pending: [],       // save offers: { url, site, username, password, update: id|"" }
+  personal: "",      // id of the own vault (new items go there)
   loaded: false,
 };
 
@@ -27,12 +28,19 @@ async function persist() {
   await api.storage.session.set({ pz: {
     keys: { a: pz.b64u(S.keys.accountKey), p: pz.b64u(S.keys.privateKey), u: pz.b64u(S.keys.publicKey) },
     vaults: [...S.vaultKeys.entries()].map(([id, k]) => [id, pz.b64u(k)]),
-    items, revision: S.revision, lock: S.lockMinutes, clip: S.clipSeconds, pending: S.pending,
+    items, revision: S.revision, lock: S.lockMinutes, clip: S.clipSeconds, pending: S.pending, personal: S.personal,
   } });
 }
 
-async function restore() {
-  if (S.loaded) return;
+// restore runs once per service worker start; every caller waits for the
+// same run (events arrive while it decrypts).
+let restoring = null;
+function restore() {
+  if (!restoring) restoring = restoreOnce();
+  return restoring;
+}
+
+async function restoreOnce() {
   S.loaded = true;
   await loadTexts();
   const { pz: st } = await api.storage.session.get("pz");
@@ -43,8 +51,13 @@ async function restore() {
   S.lockMinutes = st.lock;
   S.clipSeconds = st.clip;
   S.pending = st.pending || [];
+  S.personal = st.personal || "";
   S.items.clear();
-  for (const it of st.items) S.items.set(it.id, await decryptItem(it));
+  for (const it of st.items) {
+    const d = await decryptItem(it);
+    if (!S.keys) return; // locked meanwhile
+    S.items.set(it.id, d);
+  }
 }
 
 // The browser may offer storage.session to content scripts; keep it to
@@ -68,12 +81,14 @@ async function sync(full) {
   // A full sync follows vaults gained, lost or with a new key: open all again.
   if (d.full) { S.items.clear(); S.vaultKeys.clear(); }
   for (const v of d.vaults) {
+    if (v.kind === "personal") S.personal = v.id;
     if (S.vaultKeys.has(v.id)) continue;
     try {
       const k = v.kind === "personal"
         ? await pz.open(S.keys.accountKey, v.wrapped_key, pz.AAD.vaultKey(v.id))
         : await pz.openSealed(S.keys.privateKey, S.keys.publicKey, v.wrapped_key, pz.AAD.vaultKey(v.id));
       S.vaultKeys.set(v.id, k);
+      if (v.kind === "personal") S.personal = v.id;
     } catch (e) { /* not ours to open */ }
   }
   for (const id of d.removed) S.items.delete(id);
@@ -102,14 +117,15 @@ async function maybeSync() {
   }
 }
 
+// personalVault: new items go into the own vault, never a team vault.
 function personalVault() {
-  for (const it of S.items.values()) if (S.vaultKeys.has(it.vault_id)) return it.vault_id;
-  return S.vaultKeys.keys().next().value || "";
+  if (!S.personal || !S.vaultKeys.has(S.personal)) throw new Error(t("Your own vault is not loaded yet. Try again in a moment."));
+  return S.personal;
 }
 
 async function saveItem(item, data) {
   const s = await server();
-  const vaultID = item.vault_id || S.personal || personalVault();
+  const vaultID = item.vault_id || personalVault();
   const key = S.vaultKeys.get(vaultID);
   if (!key) throw new Error(t("This vault cannot be opened."));
   const id = item.id || pz.uuid();
@@ -131,6 +147,7 @@ function armLock() {
 
 async function lock() {
   S.keys = null;
+  S.personal = "";
   S.vaultKeys.clear();
   S.items.clear();
   S.revision = 0;
@@ -141,6 +158,7 @@ async function lock() {
 }
 
 async function signedOut() {
+  S.pending = []; // captured passwords do not outlive the account
   await lock();
   await saveSettings({ token: "" });
 }
@@ -228,13 +246,17 @@ function matchesFor(url) {
   for (const it of S.items.values()) {
     const d = it.data;
     if (!d || it.deleted_at || d.type !== "login" || !d.login) continue;
-    let best = "";
+    let best = "", same = false, saved = "";
     for (const u of d.login.urls || []) {
       const m = match(u, url);
-      if (m === "host") { best = "host"; break; }
-      if (m === "site") best = "site";
+      if (m === "host" && best !== "host") { best = "host"; saved = (parse(u) || {}).host || ""; }
+      if (m === "site" && !best) { best = "site"; saved = (parse(u) || {}).host || ""; }
+      if (m === "host" && exact(u, url)) { same = true; break; }
     }
-    if (best) out.push(summary(it, best));
+    // exact: this very host and port (filled without asking); other hosts
+    // of the site and other ports are listed, but filling them asks first
+    // (savedHost: the address it was saved for)
+    if (best) out.push(Object.assign(summary(it, best), { exact: same, savedHost: saved }));
   }
   return out.sort((a, b) => (a.match === b.match ? 0 : a.match === "host" ? -1 : 1) || a.name.localeCompare(b.name));
 }
@@ -278,7 +300,9 @@ async function tabURL(tab) {
 // only visible, editable fields, and reports what it did.
 
 function pzFill(expectedOrigin, username, password, code) {
-  if (location.origin !== expectedOrigin) return { ok: false, reason: "origin" };
+  // location.origin comes from the address; self.origin is the document's
+  // real origin ("null" for a sandboxed page, which gets nothing)
+  if (location.origin !== expectedOrigin || self.origin !== expectedOrigin) return { ok: false, reason: "origin" };
   const visible = (el) => {
     const r = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
@@ -335,15 +359,20 @@ async function currentCode(it) {
   } catch (e) { return ""; }
 }
 
-async function fill(id, tabId) {
+// fill puts a login into the page. Without "anyHost" (the user confirmed
+// in the popup that this login of another host or port of the site goes
+// here) only a login saved for this very host and port is filled.
+async function fill(id, tabId, anyHost) {
+  if (!S.keys) throw new Error(t("Not found."));
   const it = S.items.get(id);
   if (!it || !it.data || !it.data.login) throw new Error(t("Not found."));
   const tab = tabId ? await api.tabs.get(tabId) : await activeTab();
   const url = await tabURL(tab);
   const page = parse(url);
   if (!page) throw new Error(t("This page cannot be filled."));
-  const fits = (it.data.login.urls || []).some((u) => match(u, url));
-  if (!fits) throw new Error(t("This login does not belong to this website."));
+  const urls = it.data.login.urls || [];
+  if (!urls.some((u) => match(u, url))) throw new Error(t("This login does not belong to this website."));
+  if (!anyHost && !urls.some((u) => exact(u, url))) throw new Error(t("This login was saved for another address of this website. Fill it from the PassZit window."));
   const [res] = await api.scripting.executeScript({
     target: { tabId: tab.id, frameIds: [0] },
     func: pzFill,
@@ -358,24 +387,30 @@ async function fill(id, tabId) {
   return r;
 }
 
-// ---- clipboard clearing (an offscreen document on Chromium, the
-// background page itself on Firefox)
+// ---- clipboard from the background (an offscreen document on Chromium,
+// the background page itself on Firefox): clearing after a copied
+// password, and the password of a connection opened from a MaxZit console
 
-async function clearClipboard() {
+async function writeClipboard(text) {
   if (api.offscreen) {
     try {
       const has = await api.offscreen.hasDocument();
-      if (!has) await api.offscreen.createDocument({ url: "offscreen.html", reasons: ["CLIPBOARD"], justification: "Clear a copied password" });
-      await api.runtime.sendMessage({ type: "offscreen-clear" });
+      if (!has) await api.offscreen.createDocument({ url: "offscreen.html", reasons: ["CLIPBOARD"], justification: text ? "Copy the password of a connection" : "Clear a copied password" });
+      await api.runtime.sendMessage(text ? { type: "offscreen-copy", text } : { type: "offscreen-clear" });
       await api.offscreen.closeDocument();
-    } catch (e) { /* nothing to do */ }
+      return true;
+    } catch (e) { return false; }
   } else if (typeof document !== "undefined") {
-    const h = (e) => { e.clipboardData.setData("text/plain", ""); e.preventDefault(); };
+    const h = (e) => { e.clipboardData.setData("text/plain", text); e.preventDefault(); };
     document.addEventListener("copy", h);
-    document.execCommand("copy");
+    const ok = document.execCommand("copy");
     document.removeEventListener("copy", h);
+    return ok;
   }
+  return false;
 }
+
+function clearClipboard() { return writeClipboard(""); }
 
 // ---- save offers (only with the optional permission for all sites)
 
@@ -384,14 +419,24 @@ async function clearClipboard() {
 
 const PAIR = "pz-bridge";
 
+// senderPage is the address of the page a content script runs in, or null.
+// The browser's sender.origin (where it gives one) must agree with the
+// address: a sandboxed page (origin "null") or anything odd gets nothing.
+function senderPage(sender) {
+  let page = null;
+  try { page = new URL(sender.url); } catch (e) { return null; }
+  if (page.protocol !== "https:" && page.protocol !== "http:") return null;
+  if (sender.origin !== undefined && sender.origin !== page.origin) return null;
+  return page;
+}
+
 // launcherPairURL opens the launcher's pairing for this extension; the
 // launcher asks the user before it registers the extension.
 // ownPage checks that a request comes from the top frame of a page of the
 // server this extension is signed in to.
 async function ownPage(sender, path) {
   const s = await settings();
-  let page = null;
-  try { page = new URL(sender.url); } catch (e) { page = null; }
+  const page = senderPage(sender);
   if (!page || !s.server || !sameServer(s.server).includes(page.origin) || !page.pathname.startsWith(path) || sender.frameId !== 0) {
     throw new Error("not allowed");
   }
@@ -446,7 +491,8 @@ async function syncConsoleScript() {
 let pendingConsole = "";
 
 // pendingOpen is an "Open with" that came while PassZit was locked; it runs
-// after the unlock (within two minutes).
+// only when the user unlocks in the window it opened (within two minutes),
+// and only while that tab still shows the console.
 let pendingOpen = null;
 let unlockWindow = 0;
 
@@ -459,14 +505,42 @@ async function openUnlockWindow() {
   unlockWindow = w ? w.id : 0;
 }
 
+function pendingOpenLive() {
+  if (pendingOpen && Date.now() - pendingOpen.at > 2 * 60 * 1000) pendingOpen = null;
+  return pendingOpen;
+}
+
+// consoleConnect opens the connection of a console's "Open with"; a
+// password the launcher cannot pass on goes to the clipboard (cleared by
+// pz-clip, which connectItem arms).
+async function consoleConnect(itemId, tabId) {
+  const tell = (msg) => { if (tabId) api.tabs.sendMessage(tabId, msg, { frameId: 0 }).catch(() => {}); };
+  try {
+    const r = await connectItem(itemId, "console");
+    if (r && r.copy) {
+      const ok = await writeClipboard(r.value || "");
+      const secs = Math.max(S.clipSeconds, 30);
+      tell(ok ? { type: "consoleOpenInfo", text: r.copy === "password" ? t("The password is on the clipboard for the login prompt (cleared in %d seconds).", secs) : t("The key's passphrase is on the clipboard (cleared in %d seconds).", secs) }
+        : { type: "consoleOpenFailed", error: t("The password could not be put on the clipboard. Copy it in the PassZit window.") });
+    }
+  } catch (e) {
+    tell({ type: "consoleOpenFailed", error: e.message || String(e) });
+  }
+}
+
 async function runPendingOpen() {
-  const p = pendingOpen;
+  const p = pendingOpenLive();
   pendingOpen = null;
-  if (!p || Date.now() - p.at > 2 * 60 * 1000 || !S.keys) return;
-  const it = consoleLogin(p.req);
+  if (!p || !S.keys) return { ok: false };
   const fail = (error) => { if (p.tabId) api.tabs.sendMessage(p.tabId, { type: "consoleOpenFailed", error }, { frameId: 0 }).catch(() => {}); };
-  if (!it) { fail(t("PassZit has no saved login for this device. Click \"Open with\" again to open it without a password.")); return; }
-  connectItem(it.id, "console").catch((e) => fail(e.message || String(e)));
+  // the tab must still show that console
+  const tab = p.tabId ? await api.tabs.get(p.tabId).catch(() => null) : null;
+  const cur = tab ? parse(await tabURL(tab)) : null;
+  if (!cur || cur.origin !== p.origin) return { ok: false };
+  const it = consoleLogin(p.req);
+  if (!it) { fail(t("PassZit has no saved login for this device. Click \"Open with\" again to open it without a password.")); return { ok: false }; }
+  consoleConnect(it.id, p.tabId);
+  return { ok: true };
 }
 
 api.permissions.onAdded.addListener(async (p) => {
@@ -485,13 +559,14 @@ api.permissions.onAdded.addListener(async (p) => {
 // "Use PassZit for passkeys" on); the user decides in PassZit's own window
 
 const PK_PAGE = "pz-pk-page", PK_BRIDGE = "pz-pk";
-const PK_MATCHES = ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"];
+const PK_MATCHES = ["https://*/*", "http://localhost/*"];
 
 async function syncPasskeyScripts() {
   const s = await settings();
   const has = await api.permissions.contains({ origins: ["https://*/*"] }).catch(() => false);
   const regs = await api.scripting.getRegisteredContentScripts({ ids: [PK_PAGE, PK_BRIDGE] }).catch(() => []);
-  if (s.passkeys && has && regs.length < 2) {
+  const same = regs.length === 2 && regs.every((r) => JSON.stringify(r.matches) === JSON.stringify(PK_MATCHES));
+  if (s.passkeys && has && !same) {
     if (regs.length) await api.scripting.unregisterContentScripts({ ids: regs.map((r) => r.id) });
     await api.scripting.registerContentScripts([
       { id: PK_PAGE, js: ["passkey-page.js"], matches: PK_MATCHES, runAt: "document_start", world: "MAIN", allFrames: false },
@@ -511,9 +586,18 @@ function unplain(v) {
 }
 
 const pkPending = new Map(); // id → { op, rpId, origin, opts, tab, resolve, window }
+const pkLockedAsk = new Map(); // tab id → when a locked PassZit last asked to unlock for it
+
+api.tabs.onRemoved.addListener((tab) => { pkLockedAsk.delete(tab); });
+
+// excluded: PassZit holds a passkey the site lists in excludeCredentials.
+function excluded(req) {
+  const ex = Array.isArray(req.opts.excludeCredentials) ? req.opts.excludeCredentials : [];
+  return ex.length > 0 && passkeysFor(req.rpId, ex).length > 0;
+}
 
 function passkeysFor(rpId, allow) {
-  const ids = (allow || []).map((c) => c && c.id).filter(Boolean);
+  const ids = (Array.isArray(allow) ? allow : []).map((c) => c && c.id).filter((x) => typeof x === "string" && x);
   const out = [];
   for (const it of S.items.values()) {
     const pk = it.data && !it.deleted_at && it.data.passkey;
@@ -580,13 +664,17 @@ async function syncCapture() {
 
 async function capture(msg, sender) {
   if (!sender.tab || sender.frameId !== 0 || !msg.password || msg.password.length > 1000) return;
-  const pageURL = sender.url || sender.tab.url || "";
+  const sp = senderPage(sender);
+  const pageURL = sp ? sp.href : "";
   const page = parse(pageURL);
   if (!page) return;
   const username = String(msg.username || "").slice(0, 500);
   let update = "";
   if (S.keys) {
+    // only a login of this very host is offered for an update (another
+    // host of the same site must not change it)
     for (const m of matchesFor(pageURL)) {
+      if (m.match !== "host") continue;
       const it = S.items.get(m.id);
       if ((it.data.login.username || "") === username) {
         if (it.data.login.password === msg.password) return; // already saved
@@ -594,17 +682,30 @@ async function capture(msg, sender) {
       }
     }
   }
-  S.pending = S.pending.filter((p) => !(p.site === page.site && p.username === username)).slice(-4);
-  S.pending.push({ url: page.origin, site: page.site, host: page.hostname, username, password: msg.password, update, at: Date.now() });
+  S.pending = livePending().filter((p) => !(p.site === page.site && p.username === username)).slice(-4);
+  S.pending.push({ id: pz.b64u(pz.random(9)), url: page.origin, site: page.site, host: page.hostname, username, password: msg.password, update, at: Date.now() });
   if (S.keys) await persist();
   await badge();
+}
+
+// livePending drops save offers older than ten minutes (captured
+// passwords do not stay in memory longer).
+const PENDING_MS = 10 * 60 * 1000;
+function livePending() {
+  const now = Date.now();
+  const keep = S.pending.filter((p) => p && p.at && now - p.at < PENDING_MS);
+  if (keep.length !== S.pending.length) {
+    S.pending = keep;
+    if (S.keys) persist().catch(() => {});
+  }
+  return S.pending;
 }
 
 // The icon shows waiting save offers, otherwise (when switched on in the
 // settings, with the permission for all websites) how many logins the
 // website of a tab has: the count is set per tab.
 async function badge() {
-  const n = S.pending.length;
+  const n = livePending().length;
   await api.action.setBadgeText({ text: n ? String(n) : "" });
   await api.action.setBadgeBackgroundColor({ color: "#4f46e5" });
   const s = await settings();
@@ -615,7 +716,7 @@ async function badge() {
 
 async function tabBadge(tab, s) {
   if (!tab || tab.id === undefined || tab.id < 0) return;
-  const n = S.pending.length;
+  const n = livePending().length;
   let text = n ? String(n) : "", color = "#4f46e5";
   if (!n && (s || await settings()).siteBadge && S.keys && tab.url && parse(tab.url)) {
     const m = matchesFor(tab.url).length;
@@ -638,10 +739,12 @@ async function historyCount(s) {
   try { return Math.max(1, Math.min(100, (await call(s.server, s.token, "GET", "/api/account")).history_count || 10)); } catch (e) { return 10; }
 }
 
-async function savePending(index, action) {
-  const p = S.pending[index];
-  if (!p) return;
-  S.pending.splice(index, 1);
+async function savePending(index, action, id) {
+  livePending();
+  const at = id ? S.pending.findIndex((x) => x.id === id) : index;
+  const p = S.pending[at];
+  if (!p) throw new Error(t("This offer is no longer open."));
+  S.pending.splice(at, 1);
   if (action === "save" || action === "update") {
     const now = new Date().toISOString();
     if (p.update && S.items.get(p.update)) {
@@ -669,7 +772,7 @@ async function savePending(index, action) {
 const handlers = {
   async status() {
     const s = await settings();
-    return { server: s.server, email: s.email, signedIn: !!s.token, unlocked: !!S.keys, pending: S.pending.length, offerSave: s.offerSave };
+    return { server: s.server, email: s.email, signedIn: !!s.token, unlocked: !!S.keys, pending: livePending().length, offerSave: s.offerSave };
   },
   async unlocked(msg) {
     syncPairScript().catch(() => {});
@@ -682,7 +785,7 @@ const handlers = {
     armLock();
     api.alarms.create("pz-sync", { periodInMinutes: 5 });
     await badge();
-    runPendingOpen();
+    // a waiting "Open with" runs only from its own unlock window (openPending)
     return { ok: true };
   },
   async lock() { await lock(); return { ok: true }; },
@@ -709,7 +812,7 @@ const handlers = {
     const consoleInfo = origin && (active || (tab && await consoleHint(tab))) ? { origin, active } : null;
     return { url, console: consoleInfo, host: p ? p.hostname : "", secure: p ? p.protocol === "https:" : false, matches: p ? matchesFor(url) : [],
       device, deviceMatches: device ? devicesFor(device) : [], helper: await helperAllowed(),
-      pending: S.pending.map((x, i) => ({ i, host: x.host, username: x.username, update: !!x.update })) };
+      pending: livePending().map((x, i) => ({ i, id: x.id || "", host: x.host, username: x.username, update: !!x.update })) };
   },
   async connect(msg) { return await connectItem(msg.id); },
   // the popup allows the console of the current tab (after the browser's
@@ -740,7 +843,9 @@ const handlers = {
     try { return await api.runtime.sendNativeMessage(HELPER, { v: 1, ping: true }); } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
   },
   async search(msg) { if (!S.keys) return { locked: true }; armLock(); return { items: search(msg.q) }; },
-  async fill(msg) { return await fill(msg.id, msg.tabId); },
+  // anyHost: the user confirmed in the popup a login of another host or
+  // port of this site
+  async fill(msg) { return await fill(msg.id, msg.tabId, msg.anyHost === true); },
   async secret(msg) {
     const it = S.items.get(msg.id);
     if (!S.keys || !it || !it.data) throw new Error(t("Not found."));
@@ -782,7 +887,17 @@ const handlers = {
       login: { username: label.trim(), password: "", urls: [page.origin], totp: msg.uri } });
     return { ok: true };
   },
-  async pending(msg) { await savePending(msg.index, msg.action); return { ok: true }; },
+  async pending(msg) { await savePending(msg.index, msg.action, msg.id ? String(msg.id) : ""); return { ok: true }; },
+  // the unlock window of a console's "Open with": what waits, and running it
+  // once the user unlocked there
+  async openPendingInfo() {
+    const p = pendingOpenLive();
+    return p ? { origin: p.origin, device: p.device, host: p.req.host, tool: p.req.tool } : null;
+  },
+  async openPending() {
+    if (!S.keys) throw new Error(t("Unlock the PassZit extension first."));
+    return await runPendingOpen();
+  },
   async capture(msg, sender) { await capture(msg, sender); return { ok: true }; },
   async settingsChanged() { await syncCapture(); await syncPairScript().catch(() => {}); await syncConsoleScript().catch(() => {}); await syncPasskeyScripts().catch(() => {}); await badge(); return { ok: true }; },
   // the Launcher page of the own server asks to pair this browser
@@ -849,8 +964,7 @@ const handlers = {
   // whether PassZit takes "Open with" right now (only to allowed consoles)
   async consoleState(msg, sender) {
     const s = await settings();
-    let page = null;
-    try { page = new URL(sender.url); } catch (e) { page = null; }
+    const page = senderPage(sender);
     if (!page || !consoleSecure(page) || sender.frameId !== 0 || !s.consoles.includes(page.origin)) throw new Error("not allowed");
     return { unlocked: !!S.keys };
   },
@@ -858,32 +972,64 @@ const handlers = {
   // own window; { ok: false } lets the browser answer as without PassZit
   async passkeyRequest(msg, sender) {
     const s = await settings();
-    if (!s.passkeys || !sender.tab || sender.frameId !== 0) return { ok: false };
+    // signed out: nothing to offer, the browser answers at once
+    if (!s.passkeys || !s.token || !sender.tab || sender.frameId !== 0) return { ok: false };
+    const page = senderPage(sender);
     const opts = unplain(msg.options || {});
+    if (!page || !opts || typeof opts !== "object") return { ok: false };
     const op = msg.op === "create" ? "create" : "get";
-    const rpId = rpCheck(sender.url, op === "create" ? opts.rp && opts.rp.id : opts.rpId);
+    const rpId = rpCheck(page.href, op === "create" ? opts.rp && opts.rp.id : opts.rpId);
     if (!rpId || typeof opts.challenge !== "string" || opts.challenge.length > 1024) return { ok: false };
+    // PassZit confirms with a click, it does not verify the user (no PIN
+    // or biometric then): a site that requires that gets the browser's own
+    const uv = op === "create" ? opts.authenticatorSelection && opts.authenticatorSelection.userVerification : opts.userVerification;
+    if (uv === "required") return { ok: false };
     // one open question per tab (a page cannot pile up windows)
-    for (const p of pkPending.values()) if (p.tab === sender.tab.id) return { ok: false };
-    const origin = new URL(sender.url).origin;
+    const tab = sender.tab.id;
+    for (const p of pkPending.values()) if (p.tab === tab) return { ok: false };
     if (op === "create") {
       const algs = (opts.pubKeyCredParams || []).map((p) => p && p.alg);
       if (algs.length && !algs.includes(-7)) return { ok: false };
       if (!opts.user || typeof opts.user.id !== "string") return { ok: false };
-      if (S.keys && (opts.excludeCredentials || []).length && passkeysFor(rpId, opts.excludeCredentials).length) return { ok: true, data: { error: "This passkey is saved in PassZit already." } };
     } else if (S.keys && !passkeysFor(rpId, opts.allowCredentials).length) {
+      // no fitting passkey: the browser answers, as without PassZit. What
+      // is left: with a fitting one PassZit's window opens (and takes the
+      // focus), so the page can tell by timing or focus that PassZit holds
+      // one of the listed credentials of its own site.
       return { ok: false };
     }
-    const r = await askPasskey({ op, rpId, origin, opts, tab: sender.tab.id });
+    if (!S.keys) {
+      // locked: whether a passkey fits is not known; ask to unlock, but at
+      // most once per tab in 30 seconds (later requests: the browser)
+      const last = pkLockedAsk.get(tab) || 0;
+      if (Date.now() - last < 30 * 1000) return { ok: false };
+      pkLockedAsk.set(tab, Date.now());
+    }
+    // a passkey listed in excludeCredentials: never answered silently; the
+    // user sees it in PassZit's window first (op "exists")
+    const req = { op, rpId, origin: page.origin, opts, tab };
+    if (op === "create" && S.keys && excluded(req)) req.op = "exists";
+    const r = await askPasskey(req);
     return r.ok ? { ok: true, data: Object.assign({ ok: true }, r.answer) } : { ok: false };
   },
   // the PassZit window: what the request is and which passkeys fit
   async passkeyPending(msg) {
-    const req = pkPending.get(String(msg.id || ""));
+    const id = String(msg.id || "");
+    const req = pkPending.get(id);
     if (!req) throw new Error(t("This request is no longer open."));
     if (!S.keys) return { locked: true };
+    // asked while locked: now it is known what PassZit holds
+    if (req.op === "create" && excluded(req)) req.op = "exists";
     const list = req.op === "get" ? passkeysFor(req.rpId, req.opts.allowCredentials).map((it) => ({ id: it.id, name: it.data.name, user: it.data.passkey.userName })) : [];
-    return { op: req.op, rpId: req.rpId, origin: req.origin, rpName: (req.opts.rp && req.opts.rp.name) || req.rpId, userName: req.opts.user ? req.opts.user.name : "", list };
+    if (req.op === "get" && !list.length) {
+      // no fitting passkey after the unlock: the browser answers
+      pkPending.delete(id);
+      req.resolve({ ok: false });
+      return { none: true };
+    }
+    const userName = req.opts.user && typeof req.opts.user.name === "string" ? req.opts.user.name : "";
+    const rpName = req.opts.rp && typeof req.opts.rp.name === "string" && req.opts.rp.name ? req.opts.rp.name : req.rpId;
+    return { op: req.op, rpId: req.rpId, origin: req.origin, rpName, userName, list };
   },
   async passkeyDecide(msg) {
     const id = String(msg.id || "");
@@ -891,6 +1037,12 @@ const handlers = {
     if (!req || !S.keys) throw new Error(t("This request is no longer open."));
     pkPending.delete(id);
     if (msg.choice === "other") { req.resolve({ ok: false }); return { ok: true }; }
+    // the user saw that PassZit has this passkey: the site gets the
+    // standard answer for an excluded credential
+    if (req.op === "exists" || (req.op === "create" && excluded(req))) {
+      req.resolve({ ok: true, answer: { error: "The authenticator already contains one of the excluded credentials.", name: "InvalidStateError" } });
+      return { ok: true };
+    }
     try {
       if (req.op === "create") {
         const made = await newPasskey({ rpId: req.rpId, origin: req.origin, challenge: req.opts.challenge, user: req.opts.user });
@@ -919,30 +1071,32 @@ const handlers = {
   },
   async consoleOpen(msg, sender) {
     const s = await settings();
-    let page = null;
-    try { page = new URL(sender.url); } catch (e) { page = null; }
+    const page = senderPage(sender);
     if (!page || !consoleSecure(page) || sender.frameId !== 0 || !s.consoles.includes(page.origin)) throw new Error("not allowed");
     const req = { tool: String(msg.tool), host: String(msg.host).slice(0, 255), port: Number(msg.port) || 0, user: String(msg.user || "").slice(0, 255) };
     if (!OPEN_TOOLS.includes(req.tool) || !/^[A-Za-z0-9.:\-\[\]]{1,255}$/.test(req.host) || req.port < 0 || req.port > 65535) return { taken: false };
     if (!S.keys) {
-      // locked: ask to unlock in a small PassZit window, then open it
-      pendingOpen = { req, tabId: sender.tab ? sender.tab.id : 0, at: Date.now() };
+      // locked: ask to unlock in a small PassZit window (which names the
+      // console and the device), then open it from there
+      const device = String(msg.device || "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 100);
+      pendingOpen = { req, origin: page.origin, device, tabId: sender.tab ? sender.tab.id : 0, at: Date.now() };
       openUnlockWindow();
       return { taken: true };
     }
     const it = consoleLogin(req);
     if (!it) return { taken: false };
-    connectItem(it.id, "console").catch((e) => {
-      if (sender.tab) api.tabs.sendMessage(sender.tab.id, { type: "consoleOpenFailed", error: e.message || String(e) }, { frameId: 0 }).catch(() => {});
-    });
+    consoleConnect(it.id, sender.tab ? sender.tab.id : 0);
     return { taken: true };
   },
 };
 
 api.runtime.onMessage.addListener((msg, sender, reply) => {
-  if (!msg || msg.type === "offscreen-clear") return false;
-  // Content scripts may only report captured logins.
-  const fromPage = !!sender.tab && sender.id === api.runtime.id && sender.url && !sender.url.startsWith(api.runtime.getURL(""));
+  if (!msg || msg.type === "offscreen-clear" || msg.type === "offscreen-copy") return false;
+  // Content scripts (any sender in a tab that is not an extension page,
+  // also one without an address) may only send the page messages below.
+  const ext = api.runtime.getURL("");
+  const extPage = sender.origin !== undefined ? sender.origin + "/" === ext && (sender.url || "").startsWith(ext) : (sender.url || "").startsWith(ext);
+  const fromPage = !!sender.tab && !extPage;
   if (sender.id !== api.runtime.id || (fromPage && !["capture", "launcherPair", "pageConnect", "pageKeys", "pageUnlocked", "pageLock", "consoleOpen", "consoleState", "pageLinkInfo", "pageLink", "passkeyRequest"].includes(msg.type))) return false;
   const h = handlers[msg.type];
   if (!h) return false;
@@ -963,7 +1117,9 @@ api.commands.onCommand.addListener(async (cmd) => {
   if (!S.keys) { await api.action.openPopup().catch(() => {}); return; }
   const tab = await activeTab();
   const url = await tabURL(tab);
-  const m = url ? matchesFor(url) : [];
+  // filled without asking only when exactly one login is saved for this
+  // very host and port; anything else opens the popup
+  const m = (url ? matchesFor(url) : []).filter((x) => x.exact);
   if (m.length === 1) await fill(m[0].id, tab.id).catch(() => {});
   else await api.action.openPopup().catch(() => {});
 });
@@ -972,6 +1128,8 @@ api.tabs.onUpdated.addListener((id, info, tab) => {
   if (info.url || info.status === "complete") restore().then(() => tabBadge(tab)).catch(() => {});
 });
 
-api.runtime.onInstalled.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); syncConsoleScript().catch(() => {}); syncPasskeyScripts().catch(() => {}); });
-api.runtime.onStartup.addListener(() => { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); syncConsoleScript().catch(() => {}); syncPasskeyScripts().catch(() => {}); });
-api.permissions.onRemoved.addListener(() => { syncCapture().catch(() => {}); });
+function syncAll() { syncCapture().catch(() => {}); syncPairScript().catch(() => {}); syncConsoleScript().catch(() => {}); syncPasskeyScripts().catch(() => {}); }
+api.runtime.onInstalled.addListener(syncAll);
+api.runtime.onStartup.addListener(syncAll);
+// a permission taken back in the browser: every registered script follows
+api.permissions.onRemoved.addListener(syncAll);

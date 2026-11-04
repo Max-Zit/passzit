@@ -4,7 +4,7 @@
 // happens here in the extension. Origin and relying party come from the
 // page's real address, never from the page.
 import * as pz from "./pz/crypto.js";
-import { siteOf } from "./domain.js";
+import { siteOf, isIPHost } from "./domain.js";
 
 const subtle = globalThis.crypto.subtle;
 const enc = new TextEncoder();
@@ -61,22 +61,27 @@ export function rawToDer(raw) {
 
 // rpCheck returns the relying party id for a page, or "" when the page may
 // not use it: the id must be the page's host or a parent domain that is
-// not a public suffix.
+// not a public suffix. As in browsers, IP addresses are no relying party
+// ids, and plain HTTP is allowed only for localhost.
 export function rpCheck(pageURL, wanted) {
   let u;
   try { u = new URL(pageURL); } catch (e) { return ""; }
   const host = u.hostname.toLowerCase();
-  const secure = u.protocol === "https:" || (u.protocol === "http:" && (host === "localhost" || host === "127.0.0.1"));
+  if (!host || isIPHost(host)) return "";
+  const secure = u.protocol === "https:" || (u.protocol === "http:" && host === "localhost");
   if (!secure) return "";
   const rp = String(wanted || host).toLowerCase();
+  if (isIPHost(rp)) return "";
   if (host !== rp && !host.endsWith("." + rp)) return "";
   const site = siteOf(host) || host;
   if (rp !== site && !rp.endsWith("." + site)) return "";
   return rp;
 }
 
-const FLAGS_GET = 0x1d; // user present, user verified, backup eligible, backed up
-const FLAGS_CREATE = 0x5d; // … and attested credential data
+// No "user verified" flag: a click in PassZit's window is user presence,
+// not verification (no PIN, password or biometric at that moment).
+const FLAGS_GET = 0x19; // user present, backup eligible, backed up
+const FLAGS_CREATE = 0x59; // … and attested credential data
 
 // newPasskey makes a key pair and the answer to navigator.credentials.create.
 export async function newPasskey({ rpId, origin, challenge, user }) {

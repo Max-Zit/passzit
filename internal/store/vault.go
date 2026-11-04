@@ -100,7 +100,10 @@ func (s *Store) SyncData(ctx context.Context, userID, since int64) (*Sync, error
 		}
 	}
 	out.Full = since == 0
-	rows, err := tx.Query(ctx, `SELECT v.id::text, v.kind, m.wrapped_key, m.rights, v.data, v.key_version, v.needs_rotation, m.expires_at FROM vault_members m JOIN vaults v ON v.id=m.vault_id WHERE m.user_id=$1 ORDER BY v.created_at`, userID)
+	now := s.now()
+	rows, err := tx.Query(ctx, `SELECT v.id::text, v.kind, m.wrapped_key, (CASE WHEN m.rights_until <= $2 THEN COALESCE(m.base_rights, m.rights) ELSE m.rights END),
+		v.data, v.key_version, v.needs_rotation, m.expires_at
+		FROM vault_members m JOIN vaults v ON v.id=m.vault_id WHERE m.user_id=$1 AND (m.expires_at IS NULL OR m.expires_at > $2) ORDER BY v.created_at`, userID, now)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +120,8 @@ func (s *Store) SyncData(ctx context.Context, userID, since int64) (*Sync, error
 		return nil, err
 	}
 	rows, err = tx.Query(ctx, `SELECT i.id::text, i.vault_id::text, i.data, i.revision, i.created_at, i.updated_at, i.deleted_at
-		FROM items i JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$1 WHERE i.revision>$2 ORDER BY i.revision`, userID, since)
+		FROM items i JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$1 AND (m.expires_at IS NULL OR m.expires_at > $3)
+		WHERE i.revision>$2 ORDER BY i.revision`, userID, since, now)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +154,7 @@ func (s *Store) SyncData(ctx context.Context, userID, since int64) (*Sync, error
 		return nil, err
 	}
 	if since > 0 {
-		rows, err = tx.Query(ctx, `SELECT id::text FROM tombstones WHERE revision>$2 AND (user_id=$1 OR vault_id IN (SELECT vault_id FROM vault_members WHERE user_id=$1))`, userID, since)
+		rows, err = tx.Query(ctx, `SELECT id::text FROM tombstones WHERE revision>$2 AND (user_id=$1 OR vault_id IN (SELECT vault_id FROM vault_members WHERE user_id=$1 AND (expires_at IS NULL OR expires_at > $3)))`, userID, since, now)
 		if err != nil {
 			return nil, err
 		}
@@ -183,15 +187,42 @@ func (s *Store) GetSettingTx(ctx context.Context, tx pgx.Tx, key string, v any) 
 	return json.Unmarshal(raw, v)
 }
 
-// memberRights returns the rights of a user in a vault (ErrForbidden if none).
-func memberRights(ctx context.Context, tx pgx.Tx, vaultID string, userID int64) (string, error) {
+// memberRights returns the rights of a user in a vault at the time now
+// (ErrForbidden if none). Time-limited access and temporary rights end at
+// their time exactly, not only when the housekeeping removes them.
+func memberRights(ctx context.Context, tx pgx.Tx, vaultID string, userID int64, now time.Time) (string, error) {
 	var r string
-	err := tx.QueryRow(ctx, `SELECT rights FROM vault_members WHERE vault_id=$1 AND user_id=$2`, vaultID, userID).Scan(&r)
+	var base *string
+	var until, expires *time.Time
+	err := tx.QueryRow(ctx, `SELECT rights, base_rights, rights_until, expires_at FROM vault_members WHERE vault_id=$1 AND user_id=$2`, vaultID, userID).Scan(&r, &base, &until, &expires)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrForbidden
 	}
-	return r, err
+	if err != nil {
+		return "", err
+	}
+	return effectiveRights(r, base, until, expires, now)
 }
+
+// effectiveRights applies the end of a membership and of temporary rights.
+func effectiveRights(rights string, base *string, until, expires *time.Time, now time.Time) (string, error) {
+	if expires != nil && !expires.After(now) {
+		return "", ErrForbidden
+	}
+	if until != nil && !until.After(now) && base != nil {
+		return *base, nil
+	}
+	return rights, nil
+}
+
+// The same in SQL, for a membership m and the time in $T (queries spell
+// them out with their own parameter number):
+//
+//	valid:  (m.expires_at IS NULL OR m.expires_at > $T)
+//	rights: (CASE WHEN m.rights_until <= $T THEN COALESCE(m.base_rights, m.rights) ELSE m.rights END)
+//
+// A permanent manager has rights 'manage' with neither rights_until nor
+// expires_at (and is not disabled); every shared vault keeps one.
 
 func canEdit(rights string) bool { return rights == "edit" || rights == "manage" }
 
@@ -209,7 +240,7 @@ func (s *Store) PutItem(ctx context.Context, userID int64, id, vaultID, data str
 		return 0, err
 	}
 	defer tx.Rollback(ctx)
-	r, err := memberRights(ctx, tx, vaultID, userID)
+	r, err := memberRights(ctx, tx, vaultID, userID, s.now())
 	if err != nil {
 		return 0, err
 	}
@@ -259,7 +290,7 @@ func (s *Store) itemAction(ctx context.Context, userID int64, id, q string, args
 	if err := tx.QueryRow(ctx, `SELECT vault_id::text FROM items WHERE id=$1 FOR UPDATE`, id).Scan(&vaultID); err != nil {
 		return 0, notFound(err)
 	}
-	r, err := memberRights(ctx, tx, vaultID, userID)
+	r, err := memberRights(ctx, tx, vaultID, userID, s.now())
 	if errors.Is(err, ErrForbidden) {
 		return 0, ErrNotFound // do not tell that the item exists
 	}
@@ -354,9 +385,9 @@ func (s *Store) CurrentRevision(ctx context.Context, userID int64) (int64, error
 	var rev int64
 	err := s.db.QueryRow(ctx, `SELECT GREATEST(
 		(SELECT revision FROM users WHERE id=$1),
-		COALESCE((SELECT max(i.revision) FROM items i JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$1), 0),
+		COALESCE((SELECT max(i.revision) FROM items i JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$1 AND (m.expires_at IS NULL OR m.expires_at > $2)), 0),
 		COALESCE((SELECT max(revision) FROM folders WHERE user_id=$1), 0),
-		COALESCE((SELECT max(revision) FROM tombstones WHERE user_id=$1 OR vault_id IN (SELECT vault_id FROM vault_members WHERE user_id=$1)), 0))`, userID).Scan(&rev)
+		COALESCE((SELECT max(revision) FROM tombstones WHERE user_id=$1 OR vault_id IN (SELECT vault_id FROM vault_members WHERE user_id=$1 AND (expires_at IS NULL OR expires_at > $2))), 0))`, userID, s.now()).Scan(&rev)
 	return rev, err
 }
 
@@ -431,7 +462,7 @@ func (s *Store) PutItems(ctx context.Context, userID int64, items []NewItem) (in
 			return 0, errors.New("invalid or too large item")
 		}
 		if !checked[it.VaultID] {
-			r, err := memberRights(ctx, tx, it.VaultID, userID)
+			r, err := memberRights(ctx, tx, it.VaultID, userID, now)
 			if err != nil {
 				return 0, err
 			}

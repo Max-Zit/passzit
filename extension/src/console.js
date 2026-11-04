@@ -24,7 +24,7 @@
     if (e.source !== window || e.origin !== location.origin || !e.data || e.data.type !== "maxzit-open") return;
     const m = e.data;
     if (typeof m.nonce !== "string" || !/^[0-9a-f]{16,64}$/i.test(m.nonce)) return;
-    const req = { type: "consoleOpen", tool: String(m.tool || ""), host: String(m.host || ""), port: Number(m.port) || 0, user: String(m.user || "") };
+    const req = { type: "consoleOpen", tool: String(m.tool || ""), host: String(m.host || ""), port: Number(m.port) || 0, user: String(m.user || ""), device: String(m.device || "").slice(0, 100) };
     api.runtime.sendMessage(req).then((r) => {
       if (!r || !r.ok || !r.data || !r.data.taken) return;
       window.postMessage({ type: "maxzit-open-taken", nonce: m.nonce }, location.origin);
@@ -33,5 +33,7 @@
   // the connection itself may still fail after the console was told
   api.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === "consoleOpenFailed" && typeof msg.error === "string") window.alert("PassZit: " + msg.error);
+    // the launcher could not take the password: it is on the clipboard
+    if (msg && msg.type === "consoleOpenInfo" && typeof msg.text === "string") window.alert("PassZit: " + msg.text);
   });
 })();

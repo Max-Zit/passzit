@@ -73,9 +73,9 @@ func TestSharedVaults(t *testing.T) {
 	admin.must("PUT", "/api/vaults/"+vid+"/members", store.MemberChange{UserID: bobID, Rights: "edit"}, nil)
 	bitem := newUUID()
 	bob.must("PUT", "/api/items/"+bitem, putItemReq{VaultID: vid, Data: bob.sealItem(vid, bitem, map[string]any{"name": "from bob"})}, nil)
-	// the last manager cannot step down
+	// the last manager cannot step down (nobody changes their own access)
 	adminID, _ := admin.directoryKey("admin@example.com")
-	if code, _ := admin.do("PUT", "/api/vaults/"+vid+"/members", store.MemberChange{UserID: adminID, Rights: "edit"}, nil); code != http.StatusConflict {
+	if code, _ := admin.do("PUT", "/api/vaults/"+vid+"/members", store.MemberChange{UserID: adminID, Rights: "edit"}, nil); code != http.StatusForbidden {
 		t.Fatalf("last manager stepped down: %d", code)
 	}
 	// moving a personal item into the shared vault

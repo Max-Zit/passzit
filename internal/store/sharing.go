@@ -66,8 +66,18 @@ func vaultMemberIDs(ctx context.Context, tx pgx.Tx, vaultID string) ([]int64, er
 	return pgx.CollectRows(rows, pgx.RowTo[int64])
 }
 
-// requireManage checks that a user manages a shared vault.
-func requireManage(ctx context.Context, tx pgx.Tx, vaultID string, userID int64) error {
+// ErrOwnMembership is returned when a manager changes their own membership
+// (or the rights of their own group while their rights are temporary):
+// another manager must do it, so temporary rights cannot be made permanent
+// by the one who holds them. Leaving a vault is RemoveMember.
+var ErrOwnMembership = errors.New("you cannot change your own access; ask another manager of the vault")
+
+// ErrLastManagerOfVault is returned when deleting or disabling a user would
+// leave a shared vault without a permanent manager.
+var ErrLastManagerOfVault = errors.New("this user is the last manager of a shared vault; make another member a manager of it first")
+
+// requireManage checks that a user manages a shared vault (at the time now).
+func requireManage(ctx context.Context, tx pgx.Tx, vaultID string, userID int64, now time.Time) error {
 	if !ValidID(vaultID) {
 		return ErrNotFound
 	}
@@ -75,7 +85,7 @@ func requireManage(ctx context.Context, tx pgx.Tx, vaultID string, userID int64)
 	if err := tx.QueryRow(ctx, `SELECT kind FROM vaults WHERE id=$1 FOR UPDATE`, vaultID).Scan(&kind); err != nil {
 		return notFound(err)
 	}
-	r, err := memberRights(ctx, tx, vaultID, userID)
+	r, err := memberRights(ctx, tx, vaultID, userID, now)
 	if errors.Is(err, ErrForbidden) {
 		return ErrNotFound
 	}
@@ -88,11 +98,51 @@ func requireManage(ctx context.Context, tx pgx.Tx, vaultID string, userID int64)
 	return nil
 }
 
-// managersLeft counts the managers of a vault.
-func managersLeft(ctx context.Context, tx pgx.Tx, vaultID string) (int, error) {
+// permanentManagers counts the managers of a vault whose rights are
+// neither temporary nor time-limited (and who are not disabled).
+func permanentManagers(ctx context.Context, tx pgx.Tx, vaultID string) (int, error) {
 	var n int
-	err := tx.QueryRow(ctx, `SELECT count(*) FROM vault_members m JOIN users u ON u.id=m.user_id AND NOT u.disabled WHERE m.vault_id=$1 AND m.rights='manage'`, vaultID).Scan(&n)
+	err := tx.QueryRow(ctx, `SELECT count(*) FROM vault_members m JOIN users u ON u.id=m.user_id AND NOT u.disabled
+		WHERE m.vault_id=$1 AND m.rights='manage' AND m.rights_until IS NULL AND m.expires_at IS NULL`, vaultID).Scan(&n)
 	return n, err
+}
+
+// keepManager refuses a change that took away the last permanent manager
+// (before: their number before the change). A vault that had none already
+// (from an older version) does not block changes that do not add one.
+func keepManager(ctx context.Context, tx pgx.Tx, vaultID string, before int) error {
+	if before == 0 {
+		return nil
+	}
+	n, err := permanentManagers(ctx, tx, vaultID)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrLastManager
+	}
+	return nil
+}
+
+// lastManagerOf counts the shared vaults with other members in which the
+// user is the only permanent manager.
+func lastManagerOf(ctx context.Context, tx pgx.Tx, userID int64) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx, `SELECT count(*) FROM vault_members m JOIN vaults v ON v.id=m.vault_id AND v.kind='shared'
+		WHERE m.user_id=$1 AND m.rights='manage' AND m.rights_until IS NULL AND m.expires_at IS NULL
+		AND EXISTS (SELECT 1 FROM vault_members o WHERE o.vault_id=m.vault_id AND o.user_id<>$1)
+		AND NOT EXISTS (SELECT 1 FROM vault_members o JOIN users ou ON ou.id=o.user_id AND NOT ou.disabled
+			WHERE o.vault_id=m.vault_id AND o.user_id<>$1 AND o.rights='manage' AND o.rights_until IS NULL AND o.expires_at IS NULL)`, userID).Scan(&n)
+	return n, err
+}
+
+// ManagesSharedVault reports whether a user manages at least one shared vault.
+func (s *Store) ManagesSharedVault(ctx context.Context, userID int64) (bool, error) {
+	var ok bool
+	err := s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vault_members m JOIN vaults v ON v.id=m.vault_id AND v.kind='shared'
+		WHERE m.user_id=$1 AND (m.expires_at IS NULL OR m.expires_at > $2)
+		AND (CASE WHEN m.rights_until <= $2 THEN COALESCE(m.base_rights, m.rights) ELSE m.rights END)='manage')`, userID, s.now()).Scan(&ok)
+	return ok, err
 }
 
 // CreateVault makes a shared vault with its creator as manager.
@@ -141,7 +191,7 @@ func (s *Store) RenameVault(ctx context.Context, userID int64, id, data string) 
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if err := requireManage(ctx, tx, id, userID); err != nil {
+	if err := requireManage(ctx, tx, id, userID, s.now()); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE vaults SET data=$2, revision=nextval('revisions') WHERE id=$1`, id, data); err != nil {
@@ -164,7 +214,7 @@ func (s *Store) DeleteVault(ctx context.Context, userID int64, id string) error 
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if err := requireManage(ctx, tx, id, userID); err != nil {
+	if err := requireManage(ctx, tx, id, userID, s.now()); err != nil {
 		return err
 	}
 	ids, err := vaultMemberIDs(ctx, tx, id)
@@ -203,15 +253,20 @@ func (s *Store) VaultMembers(ctx context.Context, userID int64, vaultID string) 
 		return nil, ErrNotFound
 	}
 	var ok bool
-	if err := s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vault_members WHERE vault_id=$1 AND user_id=$2)`, vaultID, userID).Scan(&ok); err != nil {
+	now := s.now()
+	if err := s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vault_members WHERE vault_id=$1 AND user_id=$2 AND (expires_at IS NULL OR expires_at > $3))`, vaultID, userID, now).Scan(&ok); err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, ErrNotFound
 	}
-	rows, err := s.db.Query(ctx, `SELECT u.id, u.email, u.display_name, m.rights, m.group_id, COALESCE(g.name, ''), m.expires_at, u.public_key, u.disabled, COALESCE(m.base_rights, ''), m.rights_until
+	// rights in effect now; ended temporary rights and memberships are
+	// shown as the housekeeping will leave them
+	rows, err := s.db.Query(ctx, `SELECT u.id, u.email, u.display_name, (CASE WHEN m.rights_until <= $2 THEN COALESCE(m.base_rights, m.rights) ELSE m.rights END),
+		m.group_id, COALESCE(g.name, ''), m.expires_at, u.public_key, u.disabled,
+		(CASE WHEN m.rights_until <= $2 THEN '' ELSE COALESCE(m.base_rights, '') END), (CASE WHEN m.rights_until <= $2 THEN NULL ELSE m.rights_until END)
 		FROM vault_members m JOIN users u ON u.id=m.user_id LEFT JOIN groups g ON g.id=m.group_id
-		WHERE m.vault_id=$1 ORDER BY lower(u.email)`, vaultID)
+		WHERE m.vault_id=$1 AND (m.expires_at IS NULL OR m.expires_at > $2) ORDER BY lower(u.email)`, vaultID, now)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +295,14 @@ func (s *Store) PutMember(ctx context.Context, actor int64, actorName, vaultID s
 		return false, err
 	}
 	defer tx.Rollback(ctx)
-	if err := requireManage(ctx, tx, vaultID, actor); err != nil {
+	if err := requireManage(ctx, tx, vaultID, actor, s.now()); err != nil {
+		return false, err
+	}
+	if c.UserID == actor {
+		return false, ErrOwnMembership
+	}
+	before, err := permanentManagers(ctx, tx, vaultID)
+	if err != nil {
 		return false, err
 	}
 	var disabled bool
@@ -286,12 +348,9 @@ func (s *Store) PutMember(ctx context.Context, actor int64, actorName, vaultID s
 	if err != nil {
 		return false, err
 	}
-	if cur == "manage" && c.Rights != "manage" {
-		if n, err := managersLeft(ctx, tx, vaultID); err != nil {
-			return false, err
-		} else if n == 0 {
-			return false, ErrLastManager
-		}
+	// fewer rights or an end for the last permanent manager
+	if err := keepManager(ctx, tx, vaultID, before); err != nil {
+		return false, err
 	}
 	if err := touchUsers(ctx, tx, []int64{c.UserID}); err != nil {
 		return false, err
@@ -308,7 +367,7 @@ func (s *Store) RemoveMember(ctx context.Context, actor int64, vaultID string, u
 	}
 	defer tx.Rollback(ctx)
 	if actor != userID {
-		if err := requireManage(ctx, tx, vaultID, actor); err != nil {
+		if err := requireManage(ctx, tx, vaultID, actor, s.now()); err != nil {
 			return err
 		}
 	} else if !ValidID(vaultID) {
@@ -320,6 +379,10 @@ func (s *Store) RemoveMember(ctx context.Context, actor int64, vaultID string, u
 	}
 	if kind != "shared" {
 		return ErrForbidden
+	}
+	before, err := permanentManagers(ctx, tx, vaultID)
+	if err != nil {
+		return err
 	}
 	tag, err := tx.Exec(ctx, `DELETE FROM vault_members WHERE vault_id=$1 AND user_id=$2`, vaultID, userID)
 	if err != nil {
@@ -333,10 +396,9 @@ func (s *Store) RemoveMember(ctx context.Context, actor int64, vaultID string, u
 		return err
 	}
 	if left > 0 {
-		if n, err := managersLeft(ctx, tx, vaultID); err != nil {
+		// only the last permanent manager cannot go (others may leave)
+		if err := keepManager(ctx, tx, vaultID, before); err != nil {
 			return err
-		} else if n == 0 {
-			return ErrLastManager
 		}
 		if _, err := tx.Exec(ctx, `UPDATE vaults SET needs_rotation=true, revision=nextval('revisions') WHERE id=$1`, vaultID); err != nil {
 			return err
@@ -383,7 +445,7 @@ func (s *Store) RotateVault(ctx context.Context, actor int64, vaultID string, r 
 		return 0, err
 	}
 	defer tx.Rollback(ctx)
-	if err := requireManage(ctx, tx, vaultID, actor); err != nil {
+	if err := requireManage(ctx, tx, vaultID, actor, s.now()); err != nil {
 		return 0, err
 	}
 	var ver int
@@ -392,6 +454,19 @@ func (s *Store) RotateVault(ctx context.Context, actor int64, vaultID string, r 
 	}
 	if ver != r.KeyVersion {
 		return 0, ErrStale
+	}
+	// memberships that ended are not in the list the manager saw: they end
+	// now (the new key is not sealed to them)
+	rows, err := tx.Query(ctx, `DELETE FROM vault_members WHERE vault_id=$1 AND expires_at <= $2 RETURNING user_id`, vaultID, s.now())
+	if err != nil {
+		return 0, err
+	}
+	ended, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return 0, err
+	}
+	if err := touchUsers(ctx, tx, ended); err != nil {
+		return 0, err
 	}
 	members, err := vaultMemberIDs(ctx, tx, vaultID)
 	if err != nil {
@@ -457,11 +532,12 @@ type Pending struct {
 func (s *Store) PendingAccess(ctx context.Context, userID int64) ([]Pending, error) {
 	rows, err := s.db.Query(ctx, `SELECT DISTINCT ON (vg.vault_id, gm.user_id) vg.vault_id::text, u.id, u.email, u.public_key, vg.rights, vg.group_id
 		FROM vault_groups vg
-		JOIN vault_members me ON me.vault_id=vg.vault_id AND me.user_id=$1 AND me.rights='manage'
+		JOIN vault_members me ON me.vault_id=vg.vault_id AND me.user_id=$1 AND (me.expires_at IS NULL OR me.expires_at > $2)
+			AND (CASE WHEN me.rights_until <= $2 THEN COALESCE(me.base_rights, me.rights) ELSE me.rights END)='manage'
 		JOIN group_members gm ON gm.group_id=vg.group_id
 		JOIN users u ON u.id=gm.user_id AND NOT u.disabled
 		WHERE NOT EXISTS (SELECT 1 FROM vault_members x WHERE x.vault_id=vg.vault_id AND x.user_id=gm.user_id)
-		ORDER BY vg.vault_id, gm.user_id, array_position(ARRAY['manage','edit','view','use'], vg.rights)`, userID)
+		ORDER BY vg.vault_id, gm.user_id, array_position(ARRAY['manage','edit','view','use'], vg.rights)`, userID, s.now())
 	if err != nil {
 		return nil, err
 	}
@@ -711,7 +787,20 @@ func (s *Store) PutVaultGroup(ctx context.Context, actor int64, vaultID string, 
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if err := requireManage(ctx, tx, vaultID, actor); err != nil {
+	if err := requireManage(ctx, tx, vaultID, actor, s.now()); err != nil {
+		return err
+	}
+	// with temporary rights, the rights of the own group would become the
+	// rights that come back at their end
+	var own bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM vault_members WHERE vault_id=$1 AND user_id=$2 AND group_id=$3 AND rights_until IS NOT NULL)`, vaultID, actor, groupID).Scan(&own); err != nil {
+		return err
+	}
+	if own {
+		return ErrOwnMembership
+	}
+	before, err := permanentManagers(ctx, tx, vaultID)
+	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO vault_groups(vault_id, group_id, rights) VALUES($1,$2,$3) ON CONFLICT (vault_id, group_id) DO UPDATE SET rights=EXCLUDED.rights`, vaultID, groupID, rights)
@@ -729,10 +818,8 @@ func (s *Store) PutVaultGroup(ctx context.Context, actor int64, vaultID string, 
 	if err != nil {
 		return err
 	}
-	if n, err := managersLeft(ctx, tx, vaultID); err != nil {
+	if err := keepManager(ctx, tx, vaultID, before); err != nil {
 		return err
-	} else if n == 0 {
-		return ErrLastManager
 	}
 	if err := touchUsers(ctx, tx, ids); err != nil {
 		return err
@@ -747,7 +834,11 @@ func (s *Store) RemoveVaultGroup(ctx context.Context, actor int64, vaultID strin
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if err := requireManage(ctx, tx, vaultID, actor); err != nil {
+	if err := requireManage(ctx, tx, vaultID, actor, s.now()); err != nil {
+		return err
+	}
+	before, err := permanentManagers(ctx, tx, vaultID)
+	if err != nil {
 		return err
 	}
 	tag, err := tx.Exec(ctx, `DELETE FROM vault_groups WHERE vault_id=$1 AND group_id=$2`, vaultID, groupID)
@@ -760,10 +851,8 @@ func (s *Store) RemoveVaultGroup(ctx context.Context, actor int64, vaultID strin
 	if err := dropGroupAccess(ctx, tx, groupID, nil, vaultID); err != nil {
 		return err
 	}
-	if n, err := managersLeft(ctx, tx, vaultID); err != nil {
+	if err := keepManager(ctx, tx, vaultID, before); err != nil {
 		return err
-	} else if n == 0 {
-		return ErrLastManager
 	}
 	return tx.Commit(ctx)
 }
@@ -787,7 +876,7 @@ func (s *Store) MoveItem(ctx context.Context, userID int64, id, toVault, data st
 		return 0, notFound(err)
 	}
 	for _, v := range []string{from, toVault} {
-		r, err := memberRights(ctx, tx, v, userID)
+		r, err := memberRights(ctx, tx, v, userID, s.now())
 		if errors.Is(err, ErrForbidden) && v == from {
 			return 0, ErrNotFound
 		}

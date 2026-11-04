@@ -22,10 +22,13 @@
 </table>
 <p>Logins, secure notes, websites, own fields, folders (also nested folders of KeePass), favourites and TOTP secrets are taken over; from Bitwarden also cards, identities and SSH keys. Attached files are not part of these export files: attach them again in PassZit.</p>
 
+<p>Files and documentation of items are not imported from a PassZit file: they stay with the original items.</p>
+
 <h2 id="export">Exporting</h2>
 <p><b>Tools → Export</b> asks for your master password and offers two formats:</p>
 <ul>
   <li><b>Encrypted PassZit file (recommended)</b> — protected with a password you choose (Argon2id and AES-256-GCM, like the vault). Use it as a backup copy of your own; it can be imported into PassZit again. Without its password the file cannot be opened.</li>
   <li><b>CSV, unencrypted</b> — for moving to another program. Anyone who gets this file can read every password: delete it right after the move.</li>
 </ul>
+<p>Items of team vaults where you may only connect and fill are not exported. CSV keeps logins and secure notes; of cards, identities and SSH keys only the name, notes and fields; it leaves out password history, files and documentation. Cells that start like a spreadsheet formula get an apostrophe in front, so a spreadsheet does not run them.</p>
 <p>Imports and exports are recorded in the audit log (the number of items, never their contents); an unencrypted export is marked as such.</p>

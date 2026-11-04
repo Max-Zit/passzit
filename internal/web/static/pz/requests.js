@@ -91,11 +91,22 @@ export async function openRequests(vaultID) {
       button(t("Give access"), { class: "primary sm", onclick: guard(async () => {
         if (!pick.value) { toast(t("Choose a vault."), true); return; }
         const members = (await api("GET", "/api/vaults/" + pick.value + "/members")).members || [];
+        let added = false;
         if (!members.some((m) => m.user_id === q.user_id)) {
           const until = new Date(Date.now() + q.hours * 3600e3).toISOString();
           if (!(await grantMember(pick.value, { user_id: q.user_id, email: q.email, public_key: q.public_key }, q.rights, until))) return;
+          added = true;
         }
-        await api("POST", "/api/requests/" + q.id + "/decide", { approve: true, vault_id: pick.value });
+        try {
+          await api("POST", "/api/requests/" + q.id + "/decide", { approve: true, vault_id: pick.value });
+        } catch (e) {
+          // not approved (withdrawn or ended meanwhile?): the access given for it goes again
+          if (!added) throw e;
+          let undone = true;
+          await api("DELETE", "/api/vaults/" + pick.value + "/members/" + q.user_id).catch(() => { undone = false; });
+          await C.sync(0); C.render(); await fill().catch(() => {});
+          throw new Error(e.message + " " + (undone ? t("The person was removed from the vault again.") : t("The person could not be removed from the vault again: remove them under Members and settings.")));
+        }
         toast(t("Approved; the access ends by itself after %s.", hoursText(q.hours)));
         await C.sync(0); C.render(); await fill();
       }) }), reject),

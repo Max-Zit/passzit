@@ -28,6 +28,8 @@
 </ul>
 <p>PassZit offers a login only on its own website: <code>shop.example.co.uk</code> gets the logins of <code>example.co.uk</code>, but a login for one <code>github.io</code> page is never offered on another, and a login saved for HTTPS is not offered on plain HTTP. It fills only visible fields of the top page, never into frames of other sites, and checks again right before filling that the page has not changed.</p>
 
+<p>Without asking, PassZit fills only a login saved for exactly this address (the same host and port) — also with Ctrl+Shift+L. A login of the same website saved for another address (for example <code>accounts.example.com</code> on <code>shop.example.com</code>) is listed too, but <b>Fill</b> first asks whether it may go there.</p>
+
 <h2 id="save">Offering to save</h2>
 <p>In the menu (≡) switch on <i>Offer to save new and changed logins</i>. The browser then asks for access to all websites — needed to notice when you sign in or change a password. When you do, the PassZit icon shows a number; open it and choose <b>Save</b> or <b>Update</b>. PassZit never shows anything inside the web page itself, so a page cannot imitate or click the offer.</p>
 
@@ -39,6 +41,8 @@
 <p>In the menu (≡) switch on <i>Use PassZit for passkeys</i>; the browser asks for access to all websites. When a website then offers to make a passkey, a PassZit window opens with the website's name and address: <b>Save in PassZit</b> keeps the passkey in your vault — in the login with the same user name for that site, or in a new login. When you sign in with a passkey later, the PassZit window lists the passkeys of that site; choose <b>Sign in as …</b>. Because the passkey is a vault item, it works in all browsers where you use the PassZit extension.</p>
 <p>The private key of a passkey is encrypted like every other item and is used only inside the extension; the website receives just the signature. PassZit takes the website's address from the browser, never from the page, and you confirm each passkey in the PassZit window, which the page cannot see or click. <i>Use another device or the browser</i> hands the request to the browser's own passkeys (for example Windows Hello or a phone). The vault shows the passkey in the item; to remove it, edit the item and tick <i>Remove the passkey for …</i>.</p>
 
+<p>PassZit does not claim that you verified yourself (it sends no "user verified" flag): a website that requires verification gets the browser's own passkeys. When a website wants to make a passkey that PassZit already has, the PassZit window says so and the website learns it only after you click <b>OK</b>. While the extension is signed out, websites get the browser's own passkeys at once.</p>
+
 <h2 id="totp">One-time codes</h2>
 <p>Logins with an authenticator key get a clock button that copies the current one-time code. After <b>Fill</b> such a login, PassZit also puts the code on the clipboard, because most sign-ins ask for it on the next page. On the page that asks for the code, <b>Fill</b> (or Ctrl+Shift+L) puts the code straight into the field — also into one box per digit. The code is cleared from the clipboard like a password.</p>
 <p>When you switch on two-factor sign-in at a website and it shows a QR code, open PassZit and click <i>Read an authenticator QR code on this page</i>. The browser gives PassZit a picture of the visible tab (only after this click); PassZit reads the code in your browser and saves the key in a login of the site you choose, or in a new login. Then enter the code PassZit shows to finish the setup at the website.</p>
@@ -48,3 +52,5 @@
 
 <h2 id="connections">Remote connections</h2>
 <p>With the MaxZit Launcher the extension also opens RDP, SSH, WinBox and other connections of your logins — see <a href="/docs/connections">Remote connections</a>.</p>
+
+<p>When PassZit is locked and a MaxZit console asks to open a device, a small PassZit window names the console and the device; after you unlock there, the connection opens. If you unlock somewhere else (for example in the web vault), click <i>Open with</i> in the console again.</p>

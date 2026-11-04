@@ -28,6 +28,8 @@
 </ul>
 <p>PassZit nudi prijavu samo na njenom sajtu: <code>shop.example.co.uk</code> dobija prijave za <code>example.co.uk</code>, ali prijava za jednu <code>github.io</code> stranicu nikada se ne nudi na drugoj, a prijava sačuvana za HTTPS ne nudi se na običnom HTTP-u. Popunjava samo vidljiva polja glavne stranice, nikada u okvire drugih sajtova, i neposredno pre popunjavanja ponovo proverava da se stranica nije promenila.</p>
 
+<p>Bez pitanja PassZit popunjava samo prijavu sačuvanu za tačno ovu adresu (isti host i port) — i sa Ctrl+Shift+L. Prijava istog sajta sačuvana za drugu adresu (na primer <code>accounts.example.com</code> na <code>shop.example.com</code>) se takođe prikazuje, ali <b>Popuni</b> prvo pita da li sme tamo.</p>
+
 <h2 id="save">Ponuda za čuvanje</h2>
 <p>U meniju (≡) uključite <i>Nudi čuvanje novih i izmenjenih prijava</i>. Pregledač tada traži pristup svim sajtovima — potreban da bi se primetilo kada se prijavite ili promenite lozinku. Kada to uradite, PassZit ikona prikazuje broj; otvorite je i izaberite <b>Sačuvaj</b> ili <b>Ažuriraj</b>. PassZit nikada ništa ne prikazuje unutar same web stranice, pa stranica ne može da imitira ili klikne ponudu.</p>
 
@@ -39,6 +41,8 @@
 <p>U meniju (≡) uključite <i>Koristi PassZit za passkey ključeve</i>; pregledač traži pristup svim sajtovima. Kada vam sajt zatim ponudi da napravite passkey, otvara se PassZit prozor sa imenom i adresom sajta: <b>Sačuvaj u PassZit</b> čuva passkey u vašem trezoru — u prijavi sa istim korisničkim imenom za taj sajt, ili u novoj prijavi. Kada se kasnije prijavljujete pomoću passkey ključa, PassZit prozor prikazuje passkey ključeve tog sajta; izaberite <b>Prijavi se kao …</b>. Pošto je passkey stavka trezora, radi u svim pregledačima u kojima koristite PassZit ekstenziju.</p>
 <p>Privatni ključ passkey-ja šifrovan je kao i svaka druga stavka i koristi se samo unutar ekstenzije; sajt dobija samo potpis. PassZit uzima adresu sajta od pregledača, nikada od stranice, a svaki passkey potvrđujete u PassZit prozoru koji stranica ne može da vidi ni da klikne. <i>Koristi drugi uređaj ili pregledač</i> prepušta zahtev passkey ključevima samog pregledača (na primer Windows Hello ili telefon). Trezor prikazuje passkey u stavci; da biste ga uklonili, izmenite stavku i označite <i>Ukloni passkey za …</i>.</p>
 
+<p>PassZit ne tvrdi da ste potvrdili identitet (ne šalje oznaku „korisnik potvrđen“): sajt koji traži potvrdu dobija passkey ključeve samog pregledača. Kada sajt hoće da napravi passkey koji PassZit već ima, PassZit prozor to kaže, a sajt to saznaje tek kada kliknete <b>OK</b>. Dok je ekstenzija odjavljena, sajtovi odmah dobijaju passkey ključeve pregledača.</p>
+
 <h2 id="totp">Jednokratni kodovi</h2>
 <p>Prijave sa ključem autentifikatora dobijaju dugme sa satom koje kopira trenutni jednokratni kod. Posle <b>Popuni</b> za takvu prijavu PassZit stavlja i kod u klipbord, jer ga većina prijava traži na sledećoj stranici. Na stranici koja traži kod, <b>Popuni</b> (ili Ctrl+Shift+L) upisuje kod direktno u polje — i u polja sa po jednom cifrom. Kod se briše iz klipborda kao i lozinka.</p>
 <p>Kada na sajtu uključite prijavu u dva koraka i on prikaže QR kod, otvorite PassZit i kliknite <i>Pročitaj QR kod autentifikatora sa ove stranice</i>. Pregledač daje PassZit-u sliku vidljive kartice (tek posle tog klika); PassZit čita kod u vašem pregledaču i čuva ključ u prijavi sajta koju izaberete, ili u novoj prijavi. Zatim unesite kod koji PassZit prikazuje da biste završili podešavanje na sajtu.</p>
@@ -48,3 +52,5 @@
 
 <h2 id="connections">Udaljene veze</h2>
 <p>Uz MaxZit Launcher ekstenzija otvara i RDP, SSH, WinBox i druge veze vaših prijava — pogledajte <a href="/docs/connections">Udaljene veze</a>.</p>
+
+<p>Kada je PassZit zaključan, a MaxZit konzola traži da otvori uređaj, mali PassZit prozor navodi konzolu i uređaj; kada tamo otključate, veza se otvara. Ako otključate negde drugde (na primer u web trezoru), ponovo kliknite <i>Otvori preko</i> u konzoli.</p>

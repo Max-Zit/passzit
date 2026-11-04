@@ -387,6 +387,11 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		s.ssoFailed(w, r, err)
 		return
 	}
+	// an address the provider says it has not checked does not sign anyone in
+	if v, ok := claims["email_verified"]; ok && (v == false || v == "false") {
+		s.ssoFailed(w, r, uiMsg("The identity provider has not confirmed this e-mail address."))
+		return
+	}
 	email := claimString(claims, orDefault(c.EmailClaim, "email"), "email", "preferred_username", "upn")
 	s.ssoDone(w, r, c, email, claimStrings(claims[orDefault(c.GroupsClaim, "groups")]))
 }

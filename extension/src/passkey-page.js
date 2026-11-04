@@ -64,14 +64,14 @@
   navigator.credentials.create = async function (opts) {
     if (!opts || !opts.publicKey) return native.create(opts);
     const r = await ask("create", opts.publicKey);
-    if (r.error) throw new DOMException(r.error, "NotAllowedError");
+    if (r.error) throw new DOMException(r.error, r.name === "InvalidStateError" ? "InvalidStateError" : "NotAllowedError");
     if (!r.ok) return native.create(opts);
     return credential(r);
   };
   navigator.credentials.get = async function (opts) {
     if (!opts || !opts.publicKey || opts.mediation === "conditional") return native.get(opts);
     const r = await ask("get", opts.publicKey, opts.mediation);
-    if (r.error) throw new DOMException(r.error, "NotAllowedError");
+    if (r.error) throw new DOMException(r.error, r.name === "InvalidStateError" ? "InvalidStateError" : "NotAllowedError");
     if (!r.ok) return native.get(opts);
     return credential(r);
   };

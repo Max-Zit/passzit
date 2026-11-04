@@ -407,6 +407,20 @@ func (s *Store) UpdateUser(ctx context.Context, id int64, displayName, role stri
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if disabled {
+		// disabled users do not count as managers
+		var was bool
+		if err := tx.QueryRow(ctx, `SELECT disabled FROM users WHERE id=$1 FOR UPDATE`, id).Scan(&was); err != nil {
+			return notFound(err)
+		}
+		if !was {
+			if n, err := lastManagerOf(ctx, tx, id); err != nil {
+				return err
+			} else if n > 0 {
+				return ErrLastManagerOfVault
+			}
+		}
+	}
 	tag, err := tx.Exec(ctx, `UPDATE users SET display_name=$2, role=$3, disabled=$4 WHERE id=$1`,
 		id, strings.TrimSpace(displayName), role, disabled)
 	if err != nil {
@@ -446,6 +460,11 @@ func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if n, err := lastManagerOf(ctx, tx, id); err != nil {
+		return err
+	} else if n > 0 {
+		return ErrLastManagerOfVault
+	}
 	// Shared vaults the user was in need a new key; those only the user
 	// was in go away.
 	if _, err := tx.Exec(ctx, `DELETE FROM vaults v WHERE v.kind='shared' AND EXISTS(SELECT 1 FROM vault_members m WHERE m.vault_id=v.id AND m.user_id=$1)

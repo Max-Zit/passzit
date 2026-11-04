@@ -17,6 +17,8 @@
 <p>For example: the group <i>Support</i> gets <i>Connect and fill</i> and <i>See passwords</i>, the group <i>Administrators</i> also <i>Add and change</i>.</p>
 <p>The server refuses changes without the right. <i>Connect and fill</i> without <i>See passwords</i> is a convenience, not a lock: whoever can fill a password into a page can find it out with some effort. A vault always keeps at least one manager.</p>
 
+<p>Nobody can change their own access — another manager does it — so temporary rights from a request cannot be made permanent by their holder. A vault always keeps at least one permanent manager (not one with an end date or temporary rights); removing, disabling or deleting the last one is refused.</p>
+
 <h2 id="members">Adding people</h2>
 <p>Under <i>Add a person</i> choose the user and the right, optionally an end date. Your browser seals the vault key to the person's <b>public key</b>; the server only stores the sealed key.</p>
 <p>The first time, PassZit shows the <b>fingerprint</b> of that key. The person sees the same fingerprint under <i>My account → Your key for sharing</i>; comparing it once (in person or by phone) makes sure nobody put another key in between. PassZit remembers confirmed keys (sealed with your account key) and warns when a person's key changes.</p>

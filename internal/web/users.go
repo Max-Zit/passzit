@@ -154,11 +154,26 @@ func (s *Server) handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role, disabled := r.FormValue("role"), r.FormValue("disabled") == "1"
-	if role == store.RoleAdmin && u.Role != store.RoleAdmin && s.holdForApproval(w, r, "user.admin", "make "+u.Email+" an administrator", fmt.Sprintf("/users/%d", u.ID)) {
+	if u.ID == userFrom(r).ID {
+		// nobody disables themselves, not even through a held request that
+		// another administrator approves (the replay runs as that one)
+		disabled = false
+		r.PostForm.Del("disabled")
+		r.Form.Del("disabled")
+	}
+	back := fmt.Sprintf("/users/%d", u.ID)
+	if role == store.RoleAdmin && u.Role != store.RoleAdmin && s.holdForApproval(w, r, "user.admin", "make "+u.Email+" an administrator", back) {
 		return
 	}
-	if u.ID == userFrom(r).ID {
-		disabled = false
+	// Fewer administrators would switch the four-eyes rule off: taking the
+	// role away or disabling an administrator waits for a second one too.
+	if u.Role == store.RoleAdmin && !u.Disabled {
+		if role != store.RoleAdmin && s.holdForApproval(w, r, "user.demote", "take the administrator role from "+u.Email, back) {
+			return
+		}
+		if role == store.RoleAdmin && disabled && s.holdForApproval(w, r, "user.disable-admin", "disable the administrator "+u.Email, back) {
+			return
+		}
 	}
 	if err := s.store.UpdateUser(r.Context(), u.ID, r.FormValue("display_name"), role, disabled); err != nil {
 		s.showUser(w, r, http.StatusBadRequest, u, storeErr(err))
