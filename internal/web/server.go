@@ -62,6 +62,8 @@ type Server struct {
 	HelperAvailable func() bool
 	upd             updateState
 	backups         backupRunner
+	// accessReports limits the item uses a user reports per hour.
+	accessReports rateCounter
 }
 
 // New creates the server; settings are loaded from the database.

@@ -16,17 +16,19 @@ import (
 // lives for ExtDays and ends earlier after ExtIdleDays without use; users
 // see their extensions under My account and can sign them out.
 
-// extRequest reports a request of an extension: its sign-in, or an API
-// call with a device token and no cookie.
+// extRequest reports a request of an extension or the command line, which
+// carries no session cookie: an API call with a device token, or the
+// sign-in itself (prelogin and login answer with a token in the body and
+// set no cookie). Anything with the session cookie is checked for CSRF,
+// /api/ext/link of the web vault too.
 func extRequest(r *http.Request) bool {
-	if strings.HasPrefix(r.URL.Path, "/api/ext/") {
-		return true
-	}
-	if bearerToken(r) == "" {
+	if _, err := r.Cookie(cookieName(r)); err == nil {
 		return false
 	}
-	_, err := r.Cookie(cookieName(r))
-	return err != nil
+	if bearerToken(r) != "" {
+		return true
+	}
+	return r.URL.Path == "/api/ext/login" || r.URL.Path == "/api/ext/prelogin"
 }
 
 type extLoginReq struct {

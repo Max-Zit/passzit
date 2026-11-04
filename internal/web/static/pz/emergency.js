@@ -4,6 +4,7 @@
 // person then reads the user's personal vault here, in the browser.
 import * as pz from "./crypto.js";
 import { t, api, el, icon, button, toast, confirmBox, copy, loadKeys } from "./common.js";
+import { loadKnown, keyCheck, remember } from "./sharing.js";
 
 const aad = (grantor, grantee) => "passzit/emergency/v1|" + grantor.toLowerCase() + "|" + grantee.toLowerCase();
 const fmt = (s) => s ? new Date(s).toLocaleString() : "";
@@ -66,10 +67,16 @@ export async function initEmergency(box, myEmail) {
         button(t("Add"), { class: "primary sm", icon: "plus", onclick: guard(async () => {
           const u = dir.find((x) => String(x.id) === pick.value);
           if (!u) return;
-          const fp = await pz.fingerprint(pz.unb64u(u.public_key));
-          if (!(await confirmBox(t("%s can ask for access to your personal vault; after %d days without your answer it opens. Fingerprint of the person's key: %s. Add?", u.email, +wait.value, fp), t("Add"), false))) return;
+          // the account key goes to this key: checked like the keys of vault members
+          if (!(await loadKnown(keys))) throw new Error(t("The list of confirmed keys could not be loaded, so no key is sealed now. Reload the page and try again."));
+          const k = await keyCheck(u.id, u.public_key, u.email);
+          const q = k.status === "changed"
+            ? t("Warning: the key of %s is not the one you confirmed before. Fingerprint now: %s. Add the person anyway?", u.email, k.fp)
+            : t("%s can ask for access to your personal vault; after %d days without your answer it opens. Fingerprint of the person's key: %s. Add?", u.email, +wait.value, k.fp);
+          if (!(await confirmBox(q, t("Add"), k.status === "changed"))) return;
           const sealed = await pz.sealTo(pz.unb64u(u.public_key), keys.accountKey, aad(myEmail, u.email));
           await api("POST", "/api/emergency", { grantee_id: u.id, sealed_key: sealed, wait_days: +wait.value });
+          await remember(u.id, u.email, k.fp, keys);
           toast(t("Added.")); await refresh();
         }) })));
     } else {

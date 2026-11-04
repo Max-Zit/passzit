@@ -205,6 +205,28 @@ export function nextFrame() {
 // ---- clipboard: copied secrets are cleared again
 
 let clipTimer = 0;
+let clipSecret = null; // the copied secret until it is cleared
+
+// clearClip empties the clipboard if it still holds the copied secret (when
+// the browser lets this page read it; otherwise it empties it anyway). A
+// page without focus may not write: then it tries again when it gets focus.
+async function clearClip() {
+  if (clipSecret === null) return;
+  if (document.hasFocus && !document.hasFocus()) return; // the focus event retries
+  try {
+    let now = null;
+    // read only with a permission given before (no prompt for it now)
+    try {
+      const p = navigator.permissions ? await navigator.permissions.query({ name: "clipboard-read" }) : null;
+      if (p && p.state === "granted") now = await navigator.clipboard.readText();
+    } catch (e) { /* reading not allowed: clear anyway */ }
+    if (now === null || now === clipSecret) await navigator.clipboard.writeText("");
+    clipSecret = null;
+  } catch (e) { /* not focused after all: the next focus tries again */ }
+}
+
+window.addEventListener("focus", () => { if (clipSecret !== null && !clipTimer) clearClip(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && clipSecret !== null && !clipTimer) clearClip(); });
 
 export async function copy(text, secret) {
   try {
@@ -213,10 +235,14 @@ export async function copy(text, secret) {
     toast(t("The browser did not allow copying."), true);
     return;
   }
+  clearTimeout(clipTimer);
+  clipTimer = 0;
+  // a new copy replaces the secret on the clipboard: nothing to clear then
+  clipSecret = null;
   if (secret) {
     const secs = +document.body.dataset.clip || 30;
-    clearTimeout(clipTimer);
-    clipTimer = setTimeout(() => { navigator.clipboard.writeText("").catch(() => {}); }, secs * 1000);
+    clipSecret = text;
+    clipTimer = setTimeout(() => { clipTimer = 0; clearClip(); }, secs * 1000);
     toast(t("Copied. The clipboard is cleared in %d seconds.", secs));
   } else {
     toast(t("Copied."));
@@ -306,6 +332,19 @@ export function clearKeys() {
 export async function lockNow() {
   clearKeys();
   try { await api("POST", "/api/session/lock"); } catch (e) { /* signed out anyway */ }
+}
+
+// tabs connects the pages of this server in the same browser: a lock in one
+// tab locks the others, and activity in one keeps the others open.
+export const tabs = typeof BroadcastChannel === "function" ? new BroadcastChannel("pz-tabs") : null;
+
+export function tellTabs(type) {
+  try { if (tabs) tabs.postMessage({ type }); } catch (e) { /* closed */ }
+}
+
+// onTabs calls fn with the type of every message from another tab.
+export function onTabs(fn) {
+  if (tabs) tabs.addEventListener("message", (ev) => { if (ev.data && typeof ev.data.type === "string") fn(ev.data.type); });
 }
 
 // The sign-out button also forgets the keys of this tab.

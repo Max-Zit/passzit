@@ -162,6 +162,8 @@ try {
   const wins = await api.windows.getAll({ populate: true });
   const uw = wins.find((w) => (w.tabs || []).some((tb) => (tb.url || "").includes("popup.html?unlock=open")));
   step("console: an unlock window opens", !!uw, wins.length);
+  const po = await bg("openPendingInfo").catch((e) => ({ error: e.message }));
+  step("console: the unlock window names the console and the device", po && po.origin === new URL(consoleSite).origin && po.host === "10.20.30.40" && po.device === "probe", JSON.stringify(po));
   await unlock(pw);
   if (uw) await api.windows.remove(uw.id).catch(() => {});
   await api.tabs.remove(cp2.id).catch(() => {});
@@ -231,7 +233,9 @@ try {
   // answer must verify with the public key the website got
   await saveSettings({ passkeys: true });
   await bg("settingsChanged");
-  const pkTab = await openTab(server + "/passkey-probe");
+  // (on localhost: as in browsers, an IP address such as 127.0.0.1 is no
+  // relying party, so PassZit's page script does not run there)
+  const pkTab = await openTab(server.replace("127.0.0.1", "localhost") + "/passkey-probe");
   const inPk = async (func, args) => {
     for (let i = 0; ; i++) {
       try { return (await api.scripting.executeScript({ target: { tabId: pkTab.id }, world: "MAIN", func, args: args || [] }))[0].result; } catch (e) { if (i >= 30) throw e; await sleep(200); }
@@ -259,13 +263,15 @@ try {
     window.__pkChallenge = rnd(32);
     window.__pkCreate = navigator.credentials.create({ publicKey: { challenge: window.__pkChallenge, rp: { name: "Passkey Probe" },
       user: { id: rnd(16), name: "alice@probe", displayName: "Alice" }, pubKeyCredParams: [{ type: "public-key", alg: -7 }] } })
-      .then((c) => ({ id: c.id, json: c.toJSON(), pub: c.toJSON().response.publicKey }), (e) => ({ error: String(e) }));
+      .then((c) => ({ id: c.id, json: c.toJSON(), pub: c.toJSON().response.publicKey, flags: new Uint8Array(c.response.getAuthenticatorData())[32] }), (e) => ({ error: String(e) }));
     return true;
   });
   const cInfo = await decide("save");
   step("passkeys: PassZit asks before saving", cInfo && cInfo.op === "create", JSON.stringify(cInfo));
   const created = await inPk(() => Promise.race([window.__pkCreate, new Promise((r) => setTimeout(() => r({ error: "no answer" }), 15000))]));
   step("passkeys: the website gets a new passkey", created && created.id && created.json && created.json.response.attestationObject, JSON.stringify(created).slice(0, 200));
+  // user present, backup eligible and backed up, attested data; no "user verified"
+  step("passkeys: new passkey does not claim user verification", created && created.flags === 0x59, created && created.flags);
   await inPk(() => {
     const der2raw = (d) => {
       let o = 2;
@@ -283,7 +289,7 @@ try {
       const signed = new Uint8Array([...new Uint8Array(a.response.authenticatorData), ...new Uint8Array(await crypto.subtle.digest("SHA-256", cd))]);
       const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, der2raw(new Uint8Array(a.response.signature)), signed);
       const client = JSON.parse(new TextDecoder().decode(cd));
-      return { ok, same: a.id === created.id, origin: client.origin === location.origin, type: client.type };
+      return { ok, same: a.id === created.id, origin: client.origin === location.origin, type: client.type, flags: new Uint8Array(a.response.authenticatorData)[32] };
     })().catch((e) => ({ error: String(e) }));
     return true;
   });
@@ -291,8 +297,34 @@ try {
   step("passkeys: PassZit offers the saved passkey", gInfo && gInfo.op === "get" && gInfo.list.length === 1, JSON.stringify(gInfo));
   const got = await inPk(() => Promise.race([window.__pkGet, new Promise((r) => setTimeout(() => r({ error: "no answer" }), 15000))]));
   step("passkeys: the sign-in verifies with the website's public key", got && got.ok && got.same && got.origin && got.type === "webauthn.get", JSON.stringify(got));
+  step("passkeys: the sign-in does not claim user verification", got && got.flags === 0x19, got && got.flags);
   step("passkeys: kept in the vault", (await bg("search", { q: "Passkey Probe" })).items.length === 1);
+  // the site lists the saved passkey in excludeCredentials: PassZit shows it
+  // in its window first; after OK the site gets InvalidStateError
+  await inPk(() => {
+    const rnd = (n) => crypto.getRandomValues(new Uint8Array(n));
+    window.__pkExists = window.__pkCreate.then((c) => navigator.credentials.create({ publicKey: { challenge: rnd(32), rp: { name: "Passkey Probe" },
+      user: { id: rnd(16), name: "alice@probe", displayName: "Alice" }, pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+      excludeCredentials: [{ type: "public-key", id: c.json.rawId ? Uint8Array.from(atob(c.json.rawId.replace(/-/g, "+").replace(/_/g, "/")), (ch) => ch.charCodeAt(0)) : rnd(16) }] } }))
+      .then(() => ({ name: "created" }), (e) => ({ name: e && e.name }));
+    return true;
+  });
+  const xInfo = await decide("ok");
+  step("passkeys: an excluded passkey is shown in PassZit's window first", xInfo && xInfo.op === "exists", JSON.stringify(xInfo));
+  const xRes = await inPk(() => Promise.race([window.__pkExists, new Promise((r) => setTimeout(() => r({ name: "no answer" }), 15000))]));
+  step("passkeys: the site then gets InvalidStateError", xRes && xRes.name === "InvalidStateError", JSON.stringify(xRes));
+  // a site that requires user verification: PassZit leaves it to the browser
+  await inPk(() => { navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), userVerification: "required" } }).catch(() => {}); return true; });
+  await sleep(1000);
+  const uvWin = (await api.windows.getAll({ populate: true })).some((w) => (w.tabs || []).some((tb) => /[?&]passkey=/.test(tb.url || "")));
+  step("passkeys: user verification required is left to the browser", !uvWin);
   await api.tabs.remove(pkTab.id).catch(() => {});
+  // no page script on an IP address
+  const ipTab = await openTab(server + "/passkey-probe");
+  await sleep(300);
+  const ipScript = (await api.scripting.executeScript({ target: { tabId: ipTab.id }, world: "MAIN", func: () => !!window.__pzPasskeys }).catch(() => [{ result: "error" }]))[0].result;
+  step("passkeys: not on an IP address", ipScript === false, ipScript);
+  await api.tabs.remove(ipTab.id).catch(() => {});
   await saveSettings({ passkeys: false });
   await bg("settingsChanged");
   if (q.get("stay")) {

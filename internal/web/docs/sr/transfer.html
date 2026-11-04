@@ -22,10 +22,13 @@
 </table>
 <p>Preuzimaju se prijave, bezbedne beleške, sajtovi, sopstvena polja, fascikle (i ugnežđene fascikle KeePass-a), omiljene stavke i TOTP tajne; iz Bitwardena i kartice, identiteti i SSH ključevi. Priloženi fajlovi nisu deo ovih izvoza: priložite ih ponovo u PassZit-u.</p>
 
+<p>Fajlovi i dokumentacija stavki ne uvoze se iz PassZit fajla: ostaju uz originalne stavke.</p>
+
 <h2 id="export">Izvoz</h2>
 <p><b>Alati → Izvoz</b> traži vašu glavnu lozinku i nudi dva formata:</p>
 <ul>
   <li><b>Šifrovana PassZit datoteka (preporučeno)</b> — zaštićena lozinkom koju sami birate (Argon2id i AES-256-GCM, kao trezor). Koristite je kao sopstvenu rezervnu kopiju; može se ponovo uvesti u PassZit. Bez njene lozinke fajl se ne može otvoriti.</li>
   <li><b>CSV, nešifrovano</b> — za prelazak na drugi program. Svako ko dobije ovaj fajl može da pročita sve lozinke: obrišite ga odmah posle prelaska.</li>
 </ul>
+<p>Stavke timskih trezora u kojima smete samo da se povezujete i popunjavate ne izvoze se. CSV čuva prijave i bezbedne beleške; od kartica, identiteta i SSH ključeva samo naziv, beleške i polja; izostavlja istoriju lozinki, fajlove i dokumentaciju. Ćelije koje počinju kao formula tabele dobijaju apostrof ispred, pa ih program za tabele ne izvršava.</p>
 <p>Uvozi i izvozi se beleže u dnevniku revizije (broj stavki, nikada njihov sadržaj); nešifrovani izvoz je posebno označen.</p>

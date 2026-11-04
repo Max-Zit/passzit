@@ -2,7 +2,7 @@
 // key. Both need the current master password; the keys are re-wrapped
 // here in the browser.
 import * as pz from "./crypto.js";
-import { api, t, loadTexts, showError, nextFrame, confirmBox, unlockWithPassword, authFor, saveKeys, loadKeys, wireStrength, wireReveal, wireLogout, copy } from "./common.js";
+import { api, t, loadTexts, showError, nextFrame, confirmBox, unlockWithPassword, authFor, saveKeys, loadKeys, wireStrength, wireReveal, wireLogout, copy, onTabs } from "./common.js";
 
 await loadTexts();
 const errBox = document.getElementById("pz-error");
@@ -91,6 +91,8 @@ if (pb) pb.addEventListener("click", () => {
 wireStrength();
 wireReveal();
 wireLogout();
+// a lock in a vault tab: this page forgets the keys it read too
+onTabs((type) => { if (type === "lock") location.reload(); });
 
 // The fingerprint of the own public key, computed here from the unlocked
 // keys (not taken from the server, which could show a different one).

@@ -29,33 +29,46 @@ export function vaultLabel(id) {
 
 // ---- confirmed public keys
 
+// known is null until the list loaded: then nothing is sealed or
+// remembered, so a failed load never replaces the list with an empty one.
 let known = null; // user id → { fp, email }
 
-export async function loadKnown() {
-  known = {};
+export async function loadKnown(keys) {
+  known = null;
   try {
     const r = await api("GET", "/api/account/known-keys");
-    if (r.data) known = await pz.openJSON(C.S.keys.accountKey, r.data, pz.AAD.knownKeys());
+    known = r.data ? await pz.openJSON((keys || C.S.keys).accountKey, r.data, pz.AAD.knownKeys()) : {};
   } catch (e) { console.warn("known keys", e); }
+  return !!known;
 }
 
-async function saveKnown() {
-  await api("PUT", "/api/account/known-keys", { data: await pz.sealJSON(C.S.keys.accountKey, known, pz.AAD.knownKeys()) });
+function needKnown() {
+  if (!known) throw new Error(t("The list of confirmed keys could not be loaded, so no key is sealed now. Reload the page and try again."));
+}
+
+async function saveKnown(keys) {
+  await api("PUT", "/api/account/known-keys", { data: await pz.sealJSON((keys || C.S.keys).accountKey, known, pz.AAD.knownKeys()) });
 }
 
 // keyCheck tells whether a person's public key is new, the confirmed one,
-// or a different one than confirmed before.
-async function keyCheck(userID, pubB64) {
+// or a different one than confirmed before (also when the same e-mail
+// address comes back with another user id).
+export async function keyCheck(userID, pubB64, email) {
+  needKnown();
   const fp = await pz.fingerprint(pz.unb64u(pubB64));
-  const k = known && known[userID];
+  let k = known[userID];
+  if (!k && email) {
+    const e = String(email).toLowerCase();
+    k = Object.values(known).find((x) => x && String(x.email || "").toLowerCase() === e);
+  }
   return { fp, status: !k ? "new" : k.fp === fp ? "same" : "changed" };
 }
 
-async function remember(userID, email, fp) {
-  if (!known) known = {};
-  if (known[userID] && known[userID].fp === fp) return;
+export async function remember(userID, email, fp, keys) {
+  needKnown();
+  if (known[userID] && known[userID].fp === fp && known[userID].email === email) return;
   known[userID] = { fp, email };
-  await saveKnown();
+  await saveKnown(keys);
 }
 
 function sealFor(pubB64, key, vaultID) {
@@ -68,7 +81,7 @@ function sealFor(pubB64, key, vaultID) {
 export async function grantMember(vaultID, user, rights, expiresAt) {
   const v = C.S.vaults.get(vaultID);
   if (!v || !v.key) throw new Error(t("This vault cannot be opened."));
-  const k = await keyCheck(user.user_id, user.public_key);
+  const k = await keyCheck(user.user_id, user.public_key, user.email);
   const q = k.status === "changed"
     ? t("Warning: the key of %s is not the one you confirmed before. Fingerprint now: %s. Add the person anyway?", user.email, k.fp)
     : t("Fingerprint of %s: %s. The person sees it under My account. Add?", user.email, k.fp);
@@ -106,7 +119,7 @@ export const warnings = new Map(); // user id → email, for changed keys
 
 export async function completePending(force) {
   const managed = [...C.S.vaults.values()].some((v) => v.kind === "shared" && v.rights === "manage" && v.key);
-  if (!managed || (!force && Date.now() - pendingAt < 60000)) return 0;
+  if (!managed || !known || (!force && Date.now() - pendingAt < 60000)) return 0; // no list: nothing is sealed
   pendingAt = Date.now();
   let done = 0;
   let list = [];
@@ -114,7 +127,7 @@ export async function completePending(force) {
   for (const p of list) {
     const v = C.S.vaults.get(p.vault_id);
     if (!v || !v.key || v.needsRotation) continue; // a new key first
-    const k = await keyCheck(p.user_id, p.public_key);
+    const k = await keyCheck(p.user_id, p.public_key, p.email);
     if (k.status === "changed") { warnings.set(p.user_id, p.email); continue; }
     try {
       await api("PUT", "/api/vaults/" + p.vault_id + "/members", { user_id: p.user_id, wrapped_key: await sealFor(p.public_key, v.key, p.vault_id), rights: p.rights, group_id: p.group_id });
@@ -132,11 +145,14 @@ export async function rotate(vaultID) {
   if (!v || !v.key) throw new Error(t("This vault cannot be opened."));
   const items = [...C.S.items.values()].filter((i) => i.vault_id === vaultID);
   if (items.some((i) => !i.data)) throw new Error(t("Some items of this vault cannot be decrypted; the key cannot be replaced."));
+  // the name is sealed again with the new key: a name that did not open would be lost
+  if (v.nameBad) throw new Error(t("The name of this vault cannot be decrypted; the key cannot be replaced."));
+  needKnown();
   const { members } = await api("GET", "/api/vaults/" + vaultID + "/members");
   const key = pz.random(32);
   const sealed = {};
   for (const m of members) {
-    const k = await keyCheck(m.user_id, m.public_key);
+    const k = await keyCheck(m.user_id, m.public_key, m.email);
     if (k.status === "changed" && !(await confirmBox(t("The key of %s has changed since you confirmed it. Seal the vault to the new key anyway?", m.email), t("Continue"), true))) {
       throw new Error(t("Stopped."));
     }
@@ -293,7 +309,7 @@ async function vaultBody(vaultID, v, manage, data, dir, groups, refresh, dlg) {
       button(t("Add"), { class: "primary sm", icon: "plus", onclick: guard(async () => {
         const u = dir.find((x) => String(x.id) === pick.value);
         if (!u) return;
-        const k = await keyCheck(u.id, u.public_key);
+        const k = await keyCheck(u.id, u.public_key, u.email);
         const q = k.status === "changed"
           ? t("Warning: the key of %s is not the one you confirmed before. Fingerprint now: %s. Add the person anyway?", u.email, k.fp)
           : t("Fingerprint of %s: %s. The person sees it under My account. Add?", u.email, k.fp);
@@ -326,6 +342,7 @@ async function vaultBody(vaultID, v, manage, data, dir, groups, refresh, dlg) {
       grows.length ? el("div", { class: "table-wrap" }, el("table", null, el("tbody", null, ...grows))) : el("p", { class: "small muted", text: groups.length ? t("No group has access.") : t("There are no groups yet; administrators make them under Groups.") }),
       groups.length ? el("div", { class: "row wrap" }, gpick, gr, button(t("Give access"), { class: "secondary sm", icon: "plus", onclick: guard(async () => {
         if (!gpick.value) return;
+        needKnown();
         await api("PUT", "/api/vaults/" + vaultID + "/groups", { group_id: Number(gpick.value), rights: gr.value });
         await C.sync(0);
         const n = await completePending(true);
@@ -338,6 +355,7 @@ async function vaultBody(vaultID, v, manage, data, dir, groups, refresh, dlg) {
   foot.append(button(t("Leave the vault"), { class: "ghost", icon: "back", onclick: guard(async () => {
     if (!(await confirmBox(t("Leave the vault %s? You lose access to its items.", vaultLabel(vaultID)), t("Leave"), true))) return;
     const myID = (data.members.find((m) => m.email === me) || {}).user_id;
+    if (myID == null) throw new Error(t("Your membership was not found in this vault. Reload the page and try again."));
     await api("DELETE", "/api/vaults/" + vaultID + "/members/" + myID);
     dlg.close(); C.S.view = "all"; C.S.vault = ""; await C.sync(0); C.render();
   }) }));

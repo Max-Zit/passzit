@@ -51,7 +51,11 @@ var (
 	ErrRequestOpen   = errors.New("a request of yours for this is open already")
 	ErrRightsHeld    = errors.New("you have these rights already")
 	ErrRequestClosed = errors.New("the request is not open any more")
+	ErrTooManyOpen   = errors.New("you have 10 open requests already; wait for an answer or withdraw one")
 )
+
+// MaxOpenRequests is how many requests of one user may wait at a time.
+const MaxOpenRequests = 10
 
 func rightsRank(r string) int {
 	for i, x := range Rights {
@@ -85,10 +89,16 @@ func (s *Store) CreateAccessRequest(ctx context.Context, userID int64, n NewAcce
 		if !ValidID(n.VaultID) {
 			return 0, ErrNotFound
 		}
-		var cur string
-		err := tx.QueryRow(ctx, `SELECT m.rights FROM vault_members m JOIN vaults v ON v.id=m.vault_id AND v.kind='shared' WHERE m.vault_id=$1 AND m.user_id=$2`, n.VaultID, userID).Scan(&cur)
+		var kind string
+		if err := tx.QueryRow(ctx, `SELECT kind FROM vaults WHERE id=$1`, n.VaultID).Scan(&kind); err != nil || kind != "shared" {
+			return 0, ErrNotFound
+		}
+		cur, err := memberRights(ctx, tx, n.VaultID, userID, s.now())
+		if errors.Is(err, ErrForbidden) {
+			return 0, ErrNotFound
+		}
 		if err != nil {
-			return 0, notFound(err)
+			return 0, err
 		}
 		if rightsRank(n.Rights) <= rightsRank(cur) {
 			return 0, ErrRightsHeld
@@ -110,6 +120,12 @@ func (s *Store) CreateAccessRequest(ctx context.Context, userID int64, n NewAcce
 	if open > 0 {
 		return 0, ErrRequestOpen
 	}
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM access_requests WHERE user_id=$1 AND status='pending'`, userID).Scan(&open); err != nil {
+		return 0, err
+	}
+	if open >= MaxOpenRequests {
+		return 0, ErrTooManyOpen
+	}
 	var id int64
 	err = tx.QueryRow(ctx, `INSERT INTO access_requests(user_id, vault_id, asked_id, rights, hours, reason, created_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
 		userID, vault, asked, n.Rights, n.Hours, n.Reason, s.now()).Scan(&id)
@@ -119,7 +135,18 @@ func (s *Store) CreateAccessRequest(ctx context.Context, userID int64, n NewAcce
 	return id, tx.Commit(ctx)
 }
 
-const requestCols = `r.id, r.user_id, u.email, u.public_key, COALESCE(r.vault_id::text, ''), COALESCE(a.email, ''), r.rights, COALESCE(m.rights, ''), r.hours, r.reason, r.status, r.decided_by, r.created_at, r.decided_at`
+// requestCols lists a request; $2 is the time the current rights are taken at.
+const requestCols = `r.id, r.user_id, u.email, u.public_key, COALESCE(r.vault_id::text, ''), COALESCE(a.email, ''), r.rights,
+	COALESCE(CASE WHEN m.rights_until <= $2 THEN COALESCE(m.base_rights, m.rights) ELSE m.rights END, ''), r.hours, r.reason, r.status, r.decided_by, r.created_at, r.decided_at`
+
+// requestJoins: the requester, the person asked and the requester's
+// membership valid at $2.
+const requestJoins = ` FROM access_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users a ON a.id=r.asked_id
+	LEFT JOIN vault_members m ON m.vault_id=r.vault_id AND m.user_id=r.user_id AND (m.expires_at IS NULL OR m.expires_at > $2)`
+
+// managesAt: user $1 manages the vault of request r at $2.
+const managesAt = `EXISTS (SELECT 1 FROM vault_members x WHERE x.vault_id=r.vault_id AND x.user_id=$1 AND (x.expires_at IS NULL OR x.expires_at > $2)
+	AND (CASE WHEN x.rights_until <= $2 THEN COALESCE(x.base_rights, x.rights) ELSE x.rights END)='manage')`
 
 func scanRequest(row pgx.Row) (AccessRequest, error) {
 	var q AccessRequest
@@ -131,13 +158,12 @@ func scanRequest(row pgx.Row) (AccessRequest, error) {
 // open requests the user may decide (managers of the vault, the person
 // asked).
 func (s *Store) AccessRequests(ctx context.Context, userID int64) ([]AccessRequest, error) {
+	now := s.now()
 	rows, err := s.db.Query(ctx, `SELECT `+requestCols+`, r.user_id=$1,
-		r.status='pending' AND r.user_id<>$1 AND (r.asked_id=$1 OR EXISTS (SELECT 1 FROM vault_members x WHERE x.vault_id=r.vault_id AND x.user_id=$1 AND x.rights='manage'))
-		FROM access_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users a ON a.id=r.asked_id
-		LEFT JOIN vault_members m ON m.vault_id=r.vault_id AND m.user_id=r.user_id
-		WHERE (r.user_id=$1 AND r.created_at > $2)
-		   OR (r.status='pending' AND r.user_id<>$1 AND (r.asked_id=$1 OR EXISTS (SELECT 1 FROM vault_members x WHERE x.vault_id=r.vault_id AND x.user_id=$1 AND x.rights='manage')))
-		ORDER BY r.created_at DESC LIMIT 200`, userID, s.now().AddDate(0, 0, -30))
+		r.status='pending' AND r.user_id<>$1 AND (r.asked_id=$1 OR `+managesAt+`)`+requestJoins+`
+		WHERE (r.user_id=$1 AND r.created_at > $3)
+		   OR (r.status='pending' AND r.user_id<>$1 AND (r.asked_id=$1 OR `+managesAt+`))
+		ORDER BY r.created_at DESC LIMIT 200`, userID, now, now.AddDate(0, 0, -30))
 	if err != nil {
 		return nil, err
 	}
@@ -153,8 +179,7 @@ func (s *Store) AccessRequests(ctx context.Context, userID int64) ([]AccessReque
 
 // AccessRequest returns one request.
 func (s *Store) AccessRequest(ctx context.Context, id int64) (AccessRequest, error) {
-	q, err := scanRequest(s.db.QueryRow(ctx, `SELECT `+requestCols+` FROM access_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users a ON a.id=r.asked_id
-		LEFT JOIN vault_members m ON m.vault_id=r.vault_id AND m.user_id=r.user_id WHERE r.id=$1`, id))
+	q, err := scanRequest(s.db.QueryRow(ctx, `SELECT `+requestCols+requestJoins+` WHERE r.id=$1`, id, s.now()))
 	return q, notFound(err)
 }
 
@@ -162,7 +187,9 @@ func (s *Store) AccessRequest(ctx context.Context, id int64) (AccessRequest, err
 func (s *Store) RequestDeciders(ctx context.Context, id int64) ([]User, error) {
 	rows, err := s.db.Query(ctx, `SELECT `+userCols+` FROM users WHERE NOT disabled AND id IN (
 		SELECT r.asked_id FROM access_requests r WHERE r.id=$1 AND r.asked_id IS NOT NULL
-		UNION SELECT x.user_id FROM access_requests r JOIN vault_members x ON x.vault_id=r.vault_id AND x.rights='manage' WHERE r.id=$1 AND x.user_id<>r.user_id)`, id)
+		UNION SELECT x.user_id FROM access_requests r JOIN vault_members x ON x.vault_id=r.vault_id AND (x.expires_at IS NULL OR x.expires_at > $2)
+			AND (CASE WHEN x.rights_until <= $2 THEN COALESCE(x.base_rights, x.rights) ELSE x.rights END)='manage'
+		WHERE r.id=$1 AND x.user_id<>r.user_id)`, id, s.now())
 	if err != nil {
 		return nil, err
 	}
@@ -206,31 +233,42 @@ func (s *Store) DecideAccessRequest(ctx context.Context, actor *User, id int64, 
 	if q.user == actor.ID {
 		return AccessRequest{}, ErrForbidden
 	}
-	until := s.now().Add(time.Duration(q.hours) * time.Hour)
+	now := s.now()
+	until := now.Add(time.Duration(q.hours) * time.Hour)
 	switch {
 	case q.vault != nil:
-		if err := requireManage(ctx, tx, *q.vault, actor.ID); err != nil {
+		if err := requireManage(ctx, tx, *q.vault, actor.ID, now); err != nil {
 			return AccessRequest{}, err
 		}
 		if approve {
-			tag, err := tx.Exec(ctx, `UPDATE vault_members SET base_rights=COALESCE(base_rights, rights), rights=$3, rights_until=$4, revision=nextval('revisions') WHERE vault_id=$1 AND user_id=$2`,
-				*q.vault, q.user, q.rights, until)
+			cur, err := memberRights(ctx, tx, *q.vault, q.user, now)
+			if errors.Is(err, ErrForbidden) {
+				return AccessRequest{}, ErrNotFound // not a member any more
+			}
 			if err != nil {
 				return AccessRequest{}, err
 			}
-			if tag.RowsAffected() == 0 {
-				return AccessRequest{}, ErrNotFound
+			// Only ever up: a requester who has the asked rights (or more)
+			// by now keeps them as they are, and the request is closed as
+			// approved, since they have what they asked for.
+			if rightsRank(q.rights) > rightsRank(cur) {
+				if _, err := tx.Exec(ctx, `UPDATE vault_members SET base_rights=COALESCE(base_rights, rights), rights=$3, rights_until=$4, revision=nextval('revisions') WHERE vault_id=$1 AND user_id=$2`,
+					*q.vault, q.user, q.rights, until); err != nil {
+					return AccessRequest{}, err
+				}
 			}
 		}
 	case q.asked != nil && *q.asked == actor.ID:
 		if approve {
-			if err := requireManage(ctx, tx, vaultID, actor.ID); err != nil {
+			if err := requireManage(ctx, tx, vaultID, actor.ID, now); err != nil {
 				return AccessRequest{}, err
 			}
-			var cur string
 			var ends *time.Time
-			err := tx.QueryRow(ctx, `SELECT rights, expires_at FROM vault_members WHERE vault_id=$1 AND user_id=$2`, vaultID, q.user).Scan(&cur, &ends)
-			if errors.Is(err, pgx.ErrNoRows) {
+			if err := tx.QueryRow(ctx, `SELECT expires_at FROM vault_members WHERE vault_id=$1 AND user_id=$2`, vaultID, q.user).Scan(&ends); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return AccessRequest{}, err
+			}
+			cur, err := memberRights(ctx, tx, vaultID, q.user, now)
+			if errors.Is(err, ErrForbidden) {
 				return AccessRequest{}, errors.New("give the access in the vault first")
 			} else if err != nil {
 				return AccessRequest{}, err

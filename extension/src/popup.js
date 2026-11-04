@@ -79,7 +79,7 @@ async function start() {
   if (passkeyRequest) return showPasskey(passkeyRequest);
   // the window that opened for "Open with" of a MaxZit console closes after
   // the unlock; the connection opens by itself
-  if (openRequest) { window.close(); return; }
+  if (openRequest) { await bg("openPending").catch(() => {}); window.close(); return; }
   return showMain(st);
 }
 
@@ -93,9 +93,19 @@ async function showPasskey(id) {
   let info;
   try { info = await bg("passkeyPending", { id }); } catch (e) { app.replaceChildren(el("div", { class: "err", text: e.message })); return; }
   if (info.locked) return start();
+  if (info.none) { window.close(); return; } // no passkey of this site: the browser answers
   const decide = async (choice, itemId) => {
     try { await bg("passkeyDecide", { id, choice, itemId }); window.close(); } catch (e) { showErr(err, e); }
   };
+  if (info.op === "exists") {
+    // the site wants a new passkey, but PassZit has one of its account
+    // already: the site is told only after this OK
+    app.replaceChildren(el("div", { class: "menu" }, el("h1", { text: t("Save a passkey") }),
+      el("p", { class: "small" }, el("b", { text: info.rpName }), " ", el("span", { class: "muted", text: info.origin })), err,
+      el("p", { class: "small", text: t("PassZit already has a passkey for %s.", info.rpId) }),
+      el("button", { type: "button", class: "primary", onclick: () => decide("ok") }, t("OK"))));
+    return;
+  }
   const other = el("button", { type: "button", class: "ghost", onclick: () => decide("other") }, t("Use another device or the browser"));
   const head = [el("h1", { text: info.op === "create" ? t("Save a passkey") : t("Sign in with a passkey") }),
     el("p", { class: "small" }, el("b", { text: info.rpName }), " ", el("span", { class: "muted", text: info.origin }))];
@@ -192,8 +202,16 @@ function showUnlock(st) {
   const err = errBox();
   const pw = el("input", { type: "password", required: true, autocomplete: "current-password" });
   const go = el("button", { class: "primary", type: "submit" }, icon("lock"), t("Unlock"));
-  const form = el("form", {}, el("h1", { text: t("The vault is locked") }),
-    openRequest ? el("p", { class: "small", text: t("A MaxZit console wants to open a connection with a saved login. Unlock PassZit and it opens.") }) : "",
+  // "Open with" of a MaxZit console: which console and which device
+  const why = openRequest ? el("p", { class: "small", text: t("A MaxZit console wants to open a connection with a saved login. Unlock PassZit and it opens.") }) : "";
+  if (why) {
+    bg("openPendingInfo").then((o) => {
+      if (!o) return;
+      const dev = o.device && o.device !== o.host ? o.device + " (" + o.host + ")" : o.host;
+      why.textContent = t("The MaxZit console %s wants to open %s with a saved login. Unlock PassZit and it opens.", o.origin, dev);
+    }).catch(() => {});
+  }
+  const form = el("form", {}, el("h1", { text: t("The vault is locked") }), why,
     el("p", { class: "small muted", text: t("Enter your master password to unlock %s.", st.email) }), err,
     el("label", {}, t("Master password"), pw), go,
     // the web vault can unlock with Windows Hello; one unlock opens this too
@@ -227,6 +245,7 @@ async function showMain() {
   if (tab === "all") return body.append(searchPane());
   const p = await bg("page");
   if (p.locked) return start();
+  pageHost = p.host || "";
   for (const o of p.pending) body.append(offer(o));
   if (p.console && !p.console.active) body.append(consoleOffer(p.console.origin));
   body.append(el("div", { class: "site" }, icon("globe"), p.host || t("No website")));
@@ -301,9 +320,13 @@ async function doConnect(m) {
   } catch (e) { toast(e.message); }
 }
 
+let pageHost = ""; // the host of the tab the popup shows logins for
+
 async function doFill(m) {
+  // a login of another host or port of this site: the user confirms first
+  if (!m.exact && !window.confirm(t("This login was saved for %s. Fill it into %s?", m.savedHost || m.site || m.name, pageHost))) return;
   try {
-    const filled = await bg("fill", { id: m.id });
+    const filled = await bg("fill", { id: m.id, anyHost: !m.exact });
     // The one-time code went into the page, or there is none.
     if (filled.code || !m.hasTotp) return window.close();
     // The sign-in usually asks for the one-time code next.
@@ -362,8 +385,8 @@ async function copySecret(id, field) {
 
 function offer(o) {
   const btns = el("div", { class: "btns" },
-    el("button", { type: "button", class: "primary", onclick: async () => { await bg("pending", { index: o.i, action: o.update ? "update" : "save" }); toast(t("Saved.")); showMain(); } }, o.update ? t("Update") : t("Save")),
-    el("button", { type: "button", class: "secondary", onclick: async () => { await bg("pending", { index: o.i, action: "dismiss" }); showMain(); } }, t("Not now")));
+    el("button", { type: "button", class: "primary", onclick: async () => { await bg("pending", { index: o.i, id: o.id, action: o.update ? "update" : "save" }); toast(t("Saved.")); showMain(); } }, o.update ? t("Update") : t("Save")),
+    el("button", { type: "button", class: "secondary", onclick: async () => { await bg("pending", { index: o.i, id: o.id, action: "dismiss" }); showMain(); } }, t("Not now")));
   return el("div", { class: "offer" }, el("b", { text: o.update ? t("Update the password for %s?", o.host) : t("Save the login for %s?", o.host) }),
     el("div", { class: "small muted", text: o.username || t("(no user name)") }), btns);
 }

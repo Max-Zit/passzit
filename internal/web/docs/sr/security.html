@@ -23,6 +23,7 @@
 
 <h2 id="browser">U pregledaču</h2>
 <ul>
+  <li>Zaključavanje u jednoj kartici zaključava i ostale kartice trezora istog servera; rad u jednoj kartici sprečava da se ostale same zaključaju.</li>
   <li>Otključani ključevi se čuvaju samo u memoriji i, šifrovani ključem koji zna samo sesija na serveru, u memoriji sesije ove kartice. Zaključavanje, odjava ili kraj sesije ih čine neupotrebljivim.</li>
   <li>Trezor se zaključava kada se pregledač zatvori, dugmetom za zaključavanje ili posle vremena neaktivnosti ako ga pravila ili korisnik odrede; kopirane lozinke se brišu iz klipborda posle 30 sekundi (podrazumevano). Web trezor i ekstenzija dele otključane ključeve samo na stranici trezora istog servera, posle provere u odnosu na nalog.</li>
   <li>Otključavanje pomoću Windows Hello (ili drugog passkey-a uređaja) koristi WebAuthn PRF proširenje: tajna ostaje u autentifikatoru, server čuva samo ključ naloga zapečaćen ključem izvedenim iz nje, a svaki passkey radi samo na adresi na kojoj je podešen.</li>
@@ -32,6 +33,8 @@
 
 <h2 id="limits">Iskrene granice</h2>
 <ul>
+  <li>Deljenje se oslanja na server za spisak osoba: PassZit prikazuje otisak ključa osobe kada je dodajete i upozorava kada se potvrđeni ključ promeni, ali osobe koje stižu preko grupe dobijaju pristup bez potvrde upravnika.</li>
+  <li>Druge ekstenzije pregledača koje smeju da čitaju stranicu trezora vide ono što vidi i stranica, uključujući ključeve koje deli sa PassZit ekstenzijom. Instalirajte samo ekstenzije kojima verujete.</li>
   <li>JavaScript web trezora dolazi sa vašeg servera. Neko ko potpuno kontroliše server mogao bi da pošalje izmenjen kod i uhvati glavne lozinke koje se posle toga unesu. Štitite server kao svaki drugi kritičan sistem; ekstenzije pregledača donose sopstveni kod koji server ne može da menja.</li>
   <li>Zlonamerni softver na vašem računaru može da pročita šta kucate i šta pregledač prikazuje. Održavajte uređaje ažurnim.</li>
   <li>Slaba glavna lozinka može da se pogodi iz ukradene baze — sporo, ali može. Koristite dugu frazu.</li>

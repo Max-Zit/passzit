@@ -31,8 +31,14 @@ export function parseCSV(text) {
   return rows;
 }
 
+// A cell that starts like a formula (= + - @, tab, CR) gets an apostrophe,
+// so a spreadsheet shows it as text instead of running it; the import
+// takes the apostrophe away again.
+const FORMULA = /^[=+\-@\t\r]/;
+
 function csvField(v) {
-  const s = v === undefined || v === null ? "" : String(v);
+  let s = v === undefined || v === null ? "" : String(v);
+  if (FORMULA.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) || /^\s|\s$/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
@@ -86,7 +92,10 @@ export function fromCSV(text) {
   if (rows.length < 1) throw new Error("empty");
   const col = columns(rows[0]);
   if (col.password === undefined && col.notes === undefined) throw new Error("unknown");
-  const get = (r, k) => (col[k] !== undefined ? r[col[k]] || "" : "");
+  const get = (r, k) => {
+    const v = col[k] !== undefined ? r[col[k]] || "" : "";
+    return v[0] === "'" && FORMULA.test(v.slice(1)) ? v.slice(1) : v;
+  };
   const items = [];
   for (const r of rows.slice(1)) {
     if (r.every((x) => !x)) continue;

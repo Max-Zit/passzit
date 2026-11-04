@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/max-zit/passzit/internal/auth"
@@ -60,7 +61,11 @@ func (s *Server) apiCreateSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	u := userFrom(r)
-	if err := s.store.CreateSend(r.Context(), u.ID, q.ID, data, hash, q.MaxViews, s.now().Add(time.Duration(q.Hours)*time.Hour)); err != nil {
+	if err := s.store.CreateSend(r.Context(), u.ID, q.ID, data, hash, q.MaxViews, s.now().Add(time.Duration(q.Hours)*time.Hour), int64(p.StorageMB)<<20); err != nil {
+		if errors.Is(err, store.ErrQuota) {
+			apiError(w, http.StatusRequestEntityTooLarge, "quota", s.msg(r, "Your storage is full (%d MB). Delete files or secret links you no longer need.", p.StorageMB))
+			return
+		}
 		s.vaultErr(w, r, err)
 		return
 	}
@@ -264,8 +269,50 @@ func (s *Server) apiItemAccess(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Items of personal vaults are not logged; the answer does not tell.
-	_ = s.store.LogItemAccess(r.Context(), u.ID, u.Email, r.PathValue("id"), q.Action, clientIP(r), device, via)
+	// Beyond the limit per user and hour, reports are dropped silently.
+	if s.accessReports.allow(u.ID, s.now()) {
+		_ = s.store.LogItemAccess(r.Context(), u.ID, u.Email, r.PathValue("id"), q.Action, clientIP(r), device, via)
+	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxAccessReports is how many uses of items one user may report per hour.
+const maxAccessReports = 600
+
+// rateCounter counts events per user in fixed windows of an hour.
+type rateCounter struct {
+	mu sync.Mutex
+	m  map[int64]rateWindow
+}
+
+type rateWindow struct {
+	start time.Time
+	n     int
+}
+
+func (c *rateCounter) allow(user int64, now time.Time) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil {
+		c.m = map[int64]rateWindow{}
+	}
+	w := c.m[user]
+	if now.Sub(w.start) >= time.Hour || now.Before(w.start) {
+		if len(c.m) > 10000 {
+			for k, x := range c.m { // forget old windows now and then
+				if now.Sub(x.start) >= time.Hour {
+					delete(c.m, k)
+				}
+			}
+		}
+		w = rateWindow{start: now}
+	}
+	if w.n >= maxAccessReports {
+		return false
+	}
+	w.n++
+	c.m[user] = w
+	return true
 }
 
 // browserOf names a browser and system from a User-Agent ("Edge · Windows").
@@ -372,17 +419,6 @@ func (s *Server) handleApprovalDecide(w http.ResponseWriter, r *http.Request) {
 	const back = "/approvals"
 	me := userFrom(r).Email
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	list, err := s.store.Approvals(r.Context())
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	for _, a := range list {
-		if a.ID == id && strings.EqualFold(a.RequestedBy, me) && r.PathValue("decision") == "approve" {
-			s.redirectErr(w, r, back, "You cannot approve your own request.")
-			return
-		}
-	}
 	if r.PathValue("decision") == "reject" {
 		a, err := s.store.TakeApproval(r.Context(), id, me, "rejected")
 		if err != nil {
@@ -393,7 +429,16 @@ func (s *Server) handleApprovalDecide(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, back, "Rejected.")
 		return
 	}
+	if r.PathValue("decision") != "approve" {
+		s.notFound(w, r)
+		return
+	}
+	// the store refuses the requester's own approval (whatever the list shows)
 	a, err := s.store.TakeApproval(r.Context(), id, me, "approved")
+	if errors.Is(err, store.ErrOwnApproval) {
+		s.redirectErr(w, r, back, "You cannot approve your own request.")
+		return
+	}
 	if err != nil {
 		s.redirectErr(w, r, back, "This request is no longer waiting.")
 		return

@@ -67,7 +67,7 @@
 <p>U delu <b>Grupe</b> administratori prave grupe i biraju njihove članove; upravnici trezora zatim daju grupi pristup deljenom trezoru. Vidi <a href="/docs/sharing#groups">Deljeni trezori i grupe</a>.</p>
 
 <h2 id="company">Prijava preko kompanije</h2>
-<p><b>Podešavanja → Prijava preko kompanije</b> povezuje PassZit sa nalozima kompanije. Glavna lozinka uvek ostaje — ona je ključ trezora; ovo dodaje ko sme da se prijavi:</p>
+<p><b>Podešavanja → Prijava preko kompanije</b> povezuje PassZit sa nalozima kompanije. Glavna lozinka uvek ostaje — ona je ključ trezora; ovo dodaje ko sme da se prijavi: Adresa e-pošte koju provajder identiteta označi kao nepotvrđenu se odbija. <i>Obavezna jedinstvena prijava</i> važi za web trezor; da biste zaustavili prijave osobe iz ekstenzije i komandne linije, isključite korisnika u PassZit-u ili koristite direktorijum (LDAP).</p>
 <ul>
   <li><b>Jedinstvena prijava</b> sa OpenID Connect (Microsoft Entra ID, Google, Okta, Keycloak …) ili SAML 2.0 (ADFS, Entra ID, Okta …). Stranica za prijavu prikazuje <i>Prijava preko …</i>; provajder identiteta potvrđuje adresu, zatim korisnik unosi glavnu lozinku. Bez <i>Posle provajdera identiteta traži i PassZit-ov drugi faktor</i> prijava kod provajdera zamenjuje kod autentifikatora. <i>Korisnici moraju da se prijave preko provajdera identiteta</i> zaustavlja osobe koje su tamo onemogućene (administratori uvek mogu da se prijave, pa pokvaren provajder ne zaključava sve). Nalozi se i dalje prave samo uz pozivnicu.</li>
   <li><b>Active Directory / LDAP</b>: pri svakoj prijavi (i ekstenzija) PassZit servisnim nalogom traži adresu; nalozi koji ne postoje ili su onemogućeni ne mogu da se prijave. <i>Potraži</i> testira podešavanja na nekoj adresi.</li>
@@ -77,3 +77,5 @@
 
 <h2 id="four-eyes">Princip četiri oka</h2>
 <p>Sa <i>Podešavanja → Pravila trezora → Princip četiri oka</i>, osetljive radnje administratora čekaju u delu <b>Odobrenja</b> dok ih <b>drugi administrator</b> ne odobri: brisanje korisnika, resetovanje drugog faktora, postavljanje ili pozivanje administratora i izmena pravila trezora, prijave i bezbednosti, mreže i prijave preko kompanije. Zahtevi ističu posle 24 sata; niko ne odobrava svoj zahtev. Sačuvani zahtev je zapečaćen ključem servera (može da sadrži tajne) i izvršava se u ime administratora koji odobrava; oba su u dnevniku revizije. Važi kada postoje bar dva aktivna administratora — i isključivanje traži odobrenje.</p>
+
+<p>Oduzimanje uloge administratora ili isključivanje administratora takođe čeka odobrenje, pa se pravilo ne može isključiti svođenjem administratora na jednog. Niko ne odobrava sopstveni zahtev.</p>

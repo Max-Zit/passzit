@@ -67,7 +67,7 @@
 <p>Under <b>Groups</b> administrators make groups and choose their members; vault managers then give a group access to a shared vault. See <a href="/docs/sharing#groups">Shared vaults and groups</a>.</p>
 
 <h2 id="company">Company sign-in</h2>
-<p><b>Settings → Company sign-in</b> connects PassZit with the company's accounts. The master password always stays — it is the key to the vault; these add who may sign in:</p>
+<p><b>Settings → Company sign-in</b> connects PassZit with the company's accounts. The master password always stays — it is the key to the vault; these add who may sign in: An e-mail address that the identity provider marks as not confirmed is refused. <i>Single sign-on required</i> applies to the web vault; to stop extension and command-line sign-ins of a person, disable the user in PassZit or use the directory (LDAP).</p>
 <ul>
   <li><b>Single sign-on</b> with OpenID Connect (Microsoft Entra ID, Google, Okta, Keycloak …) or SAML 2.0 (ADFS, Entra ID, Okta …). The sign-in page shows <i>Sign in with …</i>; the identity provider confirms the address, then the user enters the master password. Without <i>Also ask for PassZit's own second factor</i> the identity provider's sign-in replaces the authenticator code. <i>Users must sign in through the identity provider</i> stops people who were disabled there (administrators can always sign in, so a broken provider does not lock everyone out). Accounts still come only by invitation.</li>
   <li><b>Active Directory / LDAP</b>: at every sign-in (also of extensions) PassZit looks the address up with a service account; missing or disabled accounts cannot sign in. <i>Look up</i> tests the settings with an address.</li>
@@ -77,3 +77,5 @@
 
 <h2 id="four-eyes">Four-eyes principle</h2>
 <p>With <i>Settings → Vault policy → Four-eyes principle</i>, sensitive actions of an administrator wait under <b>Approvals</b> until a <b>second administrator</b> approves them: deleting a user, resetting a second factor, making or inviting an administrator, and changing the vault policy, sign-in and security, network and company sign-in settings. Requests end after 24 hours; nobody approves their own. The stored request is sealed with the server key (it can contain secrets) and runs as the approving administrator; both are in the audit log. It takes effect with at least two active administrators — turning it off needs an approval too.</p>
+
+<p>Taking the administrator role from an administrator or disabling one waits for approval too, so the rule cannot be switched off by reducing the administrators to one. Nobody approves their own request.</p>

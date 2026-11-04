@@ -32,27 +32,43 @@ type Send struct {
 	LastViewed *time.Time `json:"last_viewed,omitempty"`
 }
 
-// CreateSend stores a sealed secret.
-func (s *Store) CreateSend(ctx context.Context, owner int64, id string, data []byte, authHash string, maxViews int, expires time.Time) error {
+// CreateSend stores a sealed secret. Its data counts toward the owner's
+// storage (quota, shared with the files of items).
+func (s *Store) CreateSend(ctx context.Context, owner int64, id string, data []byte, authHash string, maxViews int, expires time.Time, quota int64) error {
 	if !ValidSendID(id) || len(data) < 1+12+16 || data[0] != 1 {
 		return errors.New("invalid link")
 	}
 	if maxViews < 1 || maxViews > 100 || !expires.After(s.now()) {
 		return errors.New("a link opens 1–100 times and ends in the future")
 	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	used, err := lockStorage(ctx, tx, owner)
+	if err != nil {
+		return err
+	}
+	if used+int64(len(data)) > quota {
+		return ErrQuota
+	}
 	var n int
-	if err := s.db.QueryRow(ctx, `SELECT count(*) FROM sends WHERE owner_id=$1`, owner).Scan(&n); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM sends WHERE owner_id=$1`, owner).Scan(&n); err != nil {
 		return err
 	}
 	if n >= 200 {
 		return errors.New("too many links; delete old ones")
 	}
-	_, err := s.db.Exec(ctx, `INSERT INTO sends(id, owner_id, data, auth_hash, max_views, expires_at, created_at) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+	_, err = tx.Exec(ctx, `INSERT INTO sends(id, owner_id, data, auth_hash, max_views, expires_at, created_at) VALUES($1,$2,$3,$4,$5,$6,$7)`,
 		id, owner, data, authHash, maxViews, expires, s.now())
 	if isUnique(err) {
 		return ErrConflict
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // Sends lists the links of a user, newest first.
@@ -323,7 +339,7 @@ func (s *Store) LogItemAccess(ctx context.Context, userID int64, email, itemID, 
 	}
 	tag, err := s.db.Exec(ctx, `INSERT INTO item_access(item_id, vault_id, user_id, email, action, ip, device, via, at)
 		SELECT i.id, i.vault_id, $2, $3, $4, $5, $7, $8, $6 FROM items i JOIN vaults v ON v.id=i.vault_id AND v.kind='shared'
-		JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$2 WHERE i.id=$1`, itemID, userID, email, action, ip, s.now(), device, via)
+		JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$2 AND (m.expires_at IS NULL OR m.expires_at > $6) WHERE i.id=$1`, itemID, userID, email, action, ip, s.now(), device, via)
 	if err == nil && tag.RowsAffected() == 0 {
 		err = ErrNotFound
 	}
@@ -331,19 +347,26 @@ func (s *Store) LogItemAccess(ctx context.Context, userID int64, email, itemID, 
 }
 
 // ItemAccessLog returns the last uses of an item (for the vault's managers).
+// Only uses in vaults the user manages are listed: an item moved to another
+// vault does not take its log to the managers there.
 func (s *Store) ItemAccessLog(ctx context.Context, userID int64, itemID string) ([]AccessEntry, error) {
 	if !ValidID(itemID) {
 		return nil, ErrNotFound
 	}
+	now := s.now()
 	var rights string
-	err := s.db.QueryRow(ctx, `SELECT m.rights FROM items i JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$2 WHERE i.id=$1`, itemID, userID).Scan(&rights)
+	err := s.db.QueryRow(ctx, `SELECT (CASE WHEN m.rights_until <= $3 THEN COALESCE(m.base_rights, m.rights) ELSE m.rights END)
+		FROM items i JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$2 AND (m.expires_at IS NULL OR m.expires_at > $3) WHERE i.id=$1`, itemID, userID, now).Scan(&rights)
 	if err != nil {
 		return nil, notFound(err)
 	}
 	if rights != "manage" {
 		return nil, ErrForbidden
 	}
-	rows, err := s.db.Query(ctx, `SELECT email, action, ip, device, via, at FROM item_access WHERE item_id=$1 ORDER BY at DESC LIMIT 200`, itemID)
+	rows, err := s.db.Query(ctx, `SELECT a.email, a.action, a.ip, a.device, a.via, a.at FROM item_access a
+		JOIN vault_members m ON m.vault_id=a.vault_id AND m.user_id=$2 AND (m.expires_at IS NULL OR m.expires_at > $3)
+			AND (CASE WHEN m.rights_until <= $3 THEN COALESCE(m.base_rights, m.rights) ELSE m.rights END)='manage'
+		WHERE a.item_id=$1 ORDER BY a.at DESC LIMIT 200`, itemID, userID, now)
 	if err != nil {
 		return nil, err
 	}
@@ -407,13 +430,25 @@ func (s *Store) Approvals(ctx context.Context) ([]Approval, error) {
 	})
 }
 
+// ErrOwnApproval is returned when an administrator approves their own request.
+var ErrOwnApproval = errors.New("you cannot approve your own request")
+
 // TakeApproval marks a pending request as decided (once) and returns it.
+// Nobody approves their own request (the requester may reject it, which
+// withdraws it); ErrNotFound means it is not waiting any more.
 func (s *Store) TakeApproval(ctx context.Context, id int64, by, status string) (*Approval, error) {
 	var a Approval
 	var raw []byte
 	err := s.db.QueryRow(ctx, `UPDATE approvals SET status=$3, decided_by=$2, decided_at=$4 WHERE id=$1 AND status='pending' AND requested_at > $5
+		AND ($3 <> 'approved' OR lower(requested_by) <> lower($2))
 		RETURNING id, action, summary, path, form, requested_by, requested_at, status`, id, by, status, s.now(), s.now().Add(-24*time.Hour)).
 		Scan(&a.ID, &a.Action, &a.Summary, &a.Path, &raw, &a.RequestedBy, &a.RequestedAt, &a.Status)
+	if errors.Is(err, pgx.ErrNoRows) && status == "approved" {
+		var own bool
+		if s.db.QueryRow(ctx, `SELECT lower(requested_by)=lower($2) FROM approvals WHERE id=$1 AND status='pending' AND requested_at > $3`, id, by, s.now().Add(-24*time.Hour)).Scan(&own) == nil && own {
+			return nil, ErrOwnApproval
+		}
+	}
 	if err != nil {
 		return nil, notFound(err)
 	}

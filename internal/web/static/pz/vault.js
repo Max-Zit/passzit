@@ -4,7 +4,7 @@
 import * as pz from "./crypto.js";
 import {
   api, ApiError, t, el, icon, button, loadTexts, toast, confirmBox, copy, nextFrame,
-  loadKeys, saveKeys, lockNow, clearKeys, unlockWithPassword, kdfWeaker, wireLogout,
+  loadKeys, saveKeys, lockNow, clearKeys, unlockWithPassword, kdfWeaker, wireLogout, tellTabs, onTabs,
 } from "./common.js";
 import { generatorPanel } from "./genui.js";
 import { detect, importEncrypted, exportEncrypted, exportCSV, dedupeKey } from "./transfer.js";
@@ -59,7 +59,10 @@ async function start() {
   try { keys = await loadKeys(); } catch (e) { showFatal(e.message); return; }
   // one unlock: the PassZit extension of this browser may already be open
   if (!keys && (keys = await keysFromExtension())) await saveKeys(keys);
-  if (!keys) { showUnlock(); return; }
+  // after a lock (the page loaded again) Windows Hello is offered, not asked
+  let locked = false;
+  try { locked = !!sessionStorage.getItem(LOCKED); sessionStorage.removeItem(LOCKED); } catch (e) { /* no storage */ }
+  if (!keys) { showUnlock("", locked); return; }
   S.keys = keys;
   await openVault();
 }
@@ -203,21 +206,46 @@ async function upgradeKDF(acct, password, currentAuth) {
   }
 }
 
-async function lock() {
-  if (extHere) window.postMessage({ type: "pz-lock" }, location.origin);
-  S.keys = null;
-  S.vaults.clear(); S.items.clear(); S.folders.clear();
-  S.editing = null;
-  await lockNow();
-  showUnlock("", true);
+// lock forgets everything decrypted: the dialogs (details, editor,
+// documentation, …) close, and the page loads again, so nothing of the
+// vault stays on the screen or in the memory of this tab. other: another
+// tab locked already (the server knows).
+const LOCKED = "pz.locked";
+let locking = false;
+async function lock(other) {
+  if (locking) return;
+  locking = true;
+  wipeScreen();
+  if (!other && extHere) window.postMessage({ type: "pz-lock" }, location.origin);
+  if (other) clearKeys(); else { await lockNow(); tellTabs("lock"); }
+  try { sessionStorage.setItem(LOCKED, "1"); } catch (e) { /* the unlock then offers Windows Hello at once */ }
+  location.reload();
 }
 
-let lockTimer = 0, pollTimer = 0;
-const activity = () => {
+function wipeScreen() {
+  stopTimers();
+  clearInterval(totpTimer); totpTimer = 0;
+  S.keys = null;
+  S.vaults.clear(); S.items.clear(); S.folders.clear();
+  S.editing = null; S.showing = false; S.selected = "";
+  curItem = null; detailDlg = null; editDlg = null;
+  for (const d of document.querySelectorAll("dialog")) d.remove();
+  root.replaceChildren();
+}
+
+onTabs((type) => {
+  if (type === "lock" && S.keys) lock(true);
+  if (type === "activity" && S.keys) activity(true);
+});
+
+let lockTimer = 0, pollTimer = 0, toldTabs = 0;
+const activity = (fromTab) => {
   clearTimeout(lockTimer);
   // 0: no automatic lock (until the browser closes or the user locks)
   const mins = +document.body.dataset.lock || 0;
   if (mins > 0) lockTimer = setTimeout(() => { if (S.keys) lock(); }, mins * 60 * 1000);
+  // the other vault tabs stay open while this one is used (at most every 15 s)
+  if (fromTab !== true && Date.now() - toldTabs > 15000) { toldTabs = Date.now(); tellTabs("activity"); }
 };
 
 function startTimers() {
@@ -261,7 +289,7 @@ async function openVault() {
   render();
   shareKeys();
   // Shared vaults: confirmed keys, then access that groups give.
-  await loadKnown();
+  if (!(await loadKnown())) toast(t("The list of confirmed keys could not be loaded, so no key is sealed now. Reload the page and try again."), true);
   if (await completePending(true)) { await sync(S.revision); render(); }
   // folders of earlier versions move into the vaults
   await migrateFolders();
@@ -334,11 +362,11 @@ async function sync(since) {
           : await pz.openSealed(S.keys.privateKey, S.keys.publicKey, v.wrapped_key, pz.AAD.vaultKey(v.id));
       }
     } catch (e) { console.warn("vault key", v.id, e); }
-    let name = "";
+    let name = "", nameBad = false;
     if (v.kind === "shared" && key && v.data) {
-      try { name = pz.fromUtf8(await pz.open(key, v.data, pz.AAD.vaultName(v.id))); } catch (e) { name = "?"; }
+      try { name = pz.fromUtf8(await pz.open(key, v.data, pz.AAD.vaultName(v.id))); } catch (e) { name = "?"; nameBad = true; }
     }
-    vaults.set(v.id, { key, rights: v.rights, kind: v.kind, wrapped: v.wrapped_key, name, keyVersion: v.key_version, needsRotation: !!v.needs_rotation, expiresAt: v.expires_at || null });
+    vaults.set(v.id, { key, rights: v.rights, kind: v.kind, wrapped: v.wrapped_key, name, nameBad, keyVersion: v.key_version, needsRotation: !!v.needs_rotation, expiresAt: v.expires_at || null });
   }
   S.vaults = vaults;
   if (S.view === "vault" && !S.vaults.has(S.vault)) S.vault = personalVault();
@@ -1003,8 +1031,12 @@ function renderDetail() {
   const hist = !noShow && (d.history || []).length ? el("details", { class: "vhist" }, el("summary", { text: t("Password history (%d)", d.history.length) }),
     el("ul", null, ...d.history.slice().reverse().map((h) => el("li", null, el("code", { class: "mono", text: "••••••••" }),
       el("small", { class: "muted", text: " " + t("until %s", fmtDate(h.changed)) + (h.by ? " · " + t("changed by %s", h.by) : "") + " " }),
-      button("", { class: "ghost sm", icon: "eye", aria: t("Show"), onclick: (ev) => { const c = ev.currentTarget.parentElement.querySelector("code"); c.textContent = c.textContent === "••••••••" ? h.password : "••••••••"; } }),
-      button("", { class: "ghost sm", icon: "copy", aria: t("Copy"), onclick: () => copy(h.password, true) }),
+      button("", { class: "ghost sm", icon: "eye", aria: t("Show"), onclick: (ev) => {
+        const c = ev.currentTarget.parentElement.querySelector("code");
+        if (c.textContent === "••••••••") reportUse(it, "show");
+        c.textContent = c.textContent === "••••••••" ? h.password : "••••••••";
+      } }),
+      button("", { class: "ghost sm", icon: "copy", aria: t("Copy"), onclick: () => { reportUse(it, "copy"); copy(h.password, true); } }),
       !it.deleted_at && canEditItem(it) ? button("", { class: "ghost sm", icon: "restore", aria: t("Restore"), title: t("Make it the current password again"), onclick: () => restorePassword(it, h) }) : null)))) : null;
   return el("div", { class: "vview" }, back,
     el("div", { class: "vview-head" },
@@ -1101,12 +1133,13 @@ function urlField(u) {
 // totpField shows the current one-time code; one timer refreshes all shown codes.
 let totpTimer = 0;
 function totpField(secret) {
+  const item = curItem;
   let cfg = null;
   try { cfg = totpParse(secret); } catch (e) { /* shown as invalid */ }
   const v = el("code", { class: "vvalue mono totp", text: cfg ? "······" : t("Invalid authenticator key") });
   const left = el("small", { class: "muted" });
   const box = el("div", { class: "vfield" }, el("label", { text: t("One-time code") }), el("div", { class: "vline" }, v, left,
-    el("span", { class: "vtools" }, el("button", { type: "button", class: "iconbtn sm", title: t("Copy"), "aria-label": t("Copy"), onclick: async () => { if (cfg) copy((await totpCode(cfg)).value, false); } }, icon("copy")))));
+    el("span", { class: "vtools" }, el("button", { type: "button", class: "iconbtn sm", title: t("Copy"), "aria-label": t("Copy"), onclick: async () => { if (cfg) { reportUse(item, "copy"); copy((await totpCode(cfg)).value, false); } } }, icon("copy")))));
   if (cfg) {
     box.pzTotp = async () => {
       const c = await totpCode(cfg);
@@ -1342,6 +1375,11 @@ function renderEditor() {
     }
     if (out.type === "identity") out.identity = Object.assign({}, old && old.identity || {}, Object.fromEntries(Object.entries(idFields).map(([key, f]) => [key, f.value.trim()])));
     if (out.type === "sshkey") out.ssh = { privateKey: kPriv.value.trim() ? kPriv.value.trim() + "\n" : "", publicKey: kPub.value.trim(), passphrase: kPass.value, fingerprint: await sshFingerprint(kPub.value) };
+    // a new type drops the parts of the former one (no hidden password stays behind)
+    if (out.type !== "login") { delete out.login; delete out.passkey; out.history = []; delete out.passwordChanged; delete out.passwordChangedBy; }
+    if (out.type !== "card") delete out.card;
+    if (out.type !== "identity") delete out.identity;
+    if (out.type !== "sshkey") delete out.ssh;
     delete out.connect;
     if ((out.type === "login" || out.type === "sshkey") && cTool.value) {
       const host = cHost.value.trim();
@@ -1567,7 +1605,8 @@ function openImport() {
     const dup = parsed.items.filter((d) => have.has(dedupeKey(d))).length;
     const folders = new Set(parsed.items.map((d) => d.folder).filter(Boolean)).size;
     summary.replaceChildren(el("p", null, el("b", { text: parsed.format }), " · ", t("%d items", parsed.items.length), " · ", t("%d folders", folders),
-      dup ? " · " + t("%d already in the vault", dup) : ""));
+      dup ? " · " + t("%d already in the vault", dup) : ""),
+      ...(parsed.dropped ? [el("p", { class: "muted", text: t("Files and documentation are not imported (%d items have some): they stay with the original items.", parsed.dropped) })] : []));
     go.disabled = !parsed.items.length;
   };
   file.addEventListener("change", async () => {
@@ -1590,7 +1629,16 @@ function openImport() {
       if (parsed.encrypted) {
         await nextFrame();
         const payload = await importEncrypted(parsed.encrypted, pwField.value);
-        parsed = { format: "PassZit", items: (payload.items || []).map((d) => Object.assign({}, d, { folder: d.folderName || "" })) };
+        // files and documentation stay on the server they came from (the items
+        // only point to them there): they are not imported
+        let dropped = 0;
+        parsed = { format: "PassZit", items: (payload.items || []).map((d) => {
+          const x = Object.assign({}, d, { folder: d.folderName || "" });
+          if ((x.attachments || []).length || x.doc) dropped++;
+          delete x.attachments; delete x.doc;
+          return x;
+        }) };
+        parsed.dropped = dropped;
         pwField.value = "";
         pwRow.hidden = true;
         show();
@@ -1599,7 +1647,7 @@ function openImport() {
       }
       const n = await runImport(parsed.items, skip.checked, into.value, (msg) => { summary.replaceChildren(el("p", { text: msg })); });
       d.close();
-      toast(t("%d items imported.", n));
+      toast(t("%d items imported.", n) + (parsed.dropped ? " " + t("Files and documentation were not imported.") : ""));
       render();
     } catch (e) {
       fail(e);
@@ -1662,6 +1710,7 @@ function openExport() {
     el("p", { class: "small muted", text: t("Keep this password: without it the file cannot be opened. It does not have to be your master password.") }));
   const understood = el("input", { type: "checkbox" });
   const csvPart = el("div", { hidden: true }, el("div", { class: "callout warn" }, icon("alert"), el("div", { text: t("A CSV file is not encrypted: anyone who gets it can read all your passwords. Use it only to move to another program, and delete it right after.") })),
+    el("p", { class: "small muted", text: t("CSV keeps logins and secure notes. Of cards, identities and SSH keys it keeps only the name, notes and fields; password history, files and documentation are left out.") }),
     el("label", { class: "check" }, understood, " " + t("I understand that this file is not protected.")));
   const sync2 = () => { encPart.hidden = !fmtEnc.checked; csvPart.hidden = fmtEnc.checked; };
   fmtEnc.addEventListener("change", sync2);
@@ -1681,7 +1730,8 @@ function openExport() {
       } catch (e) {
         throw new Error(t("The current master password is wrong."));
       }
-      const items = [...S.items.values()].filter((i) => i.data && !i.deleted_at && !isFolder(i))
+      // items of vaults with "use" rights only are not for reading: not exported
+      const items = [...S.items.values()].filter((i) => i.data && !i.deleted_at && !isFolder(i) && !useOnly(i))
         .map((i) => Object.assign({}, i.data, { folderName: folderOf(i) ? folderPath(folderOf(i)).replace(/ \/ /g, "/") : "" }));
       if (fmtEnc.checked) {
         // The server records the export first (and refuses it when the policy forbids exports).
@@ -1704,6 +1754,8 @@ function openExport() {
   });
   const d = dialog(t("Export"), err,
     el("p", { class: "small muted", text: t("The export holds your items (not the trash). It is made in this browser.") }),
+    ...([...S.vaults.values()].some((v) => v.kind === "shared" && v.rights === "use")
+      ? [el("p", { class: "small muted", text: t("Items of team vaults where you may only use them (connect and fill) are not exported.") })] : []),
     el("label", null, t("Current master password"), master),
     el("label", { class: "check" }, fmtEnc, " " + t("Encrypted PassZit file (recommended)")),
     el("label", { class: "check" }, fmtCSV, " " + t("CSV file, unencrypted")),

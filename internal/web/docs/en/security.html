@@ -23,6 +23,7 @@
 
 <h2 id="browser">In the browser</h2>
 <ul>
+  <li>Locking in one tab locks the other vault tabs of the same server; work in one tab keeps the others from locking by themselves.</li>
   <li>Unlocked keys are kept only in memory and, encrypted with a key that only the server session knows, in the session storage of this tab. Locking, signing out or closing the session makes them useless.</li>
   <li>The vault locks when the browser closes, with the lock button, or after an inactivity time if the policy or the user sets one; copied passwords are cleared from the clipboard after 30 seconds (by default). The web vault and the extension share the unlocked keys only on the server's own vault page, after checking them against the account.</li>
   <li>Unlock with Windows Hello (or another passkey of the device) uses the WebAuthn PRF extension: the secret stays in the authenticator, the server stores only the account key sealed under a key derived from it, and each passkey works only on the address it was set up on.</li>
@@ -32,6 +33,8 @@
 
 <h2 id="limits">Honest limits</h2>
 <ul>
+  <li>Sharing trusts the server for the list of people: PassZit shows a person's key fingerprint when you add them and warns when a confirmed key changes, but people who join through a group get access without a confirmation by the manager.</li>
+  <li>Other browser extensions that may read the vault page can see what the page sees, including the keys it shares with the PassZit extension. Install only extensions you trust.</li>
   <li>The web vault's JavaScript comes from your server. Someone who fully controls the server could serve changed code and catch master passwords typed afterwards. Protect the server like any other critical system; the browser extensions bring their own code, which the server cannot change.</li>
   <li>Malware on your own computer can read what you type and what the browser shows. Keep your devices updated.</li>
   <li>A weak master password can be guessed from a stolen database — slowly, but it can. Use a long passphrase.</li>

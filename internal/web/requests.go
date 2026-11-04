@@ -25,7 +25,7 @@ func (s *Server) apiRequests(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) requestErr(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, store.ErrRequestOpen), errors.Is(err, store.ErrRightsHeld), errors.Is(err, store.ErrRequestClosed):
+	case errors.Is(err, store.ErrRequestOpen), errors.Is(err, store.ErrRightsHeld), errors.Is(err, store.ErrRequestClosed), errors.Is(err, store.ErrTooManyOpen):
 		apiError(w, http.StatusConflict, "conflict", s.msg(r, err.Error()))
 	case errors.Is(err, store.ErrForbidden):
 		apiError(w, http.StatusForbidden, "forbidden", s.msg(r, "You may not decide this request."))

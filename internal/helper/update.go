@@ -238,7 +238,7 @@ func (h *Helper) healthy(ctx context.Context, version string) error {
 		return h.Healthy(ctx)
 	}
 	deadline := time.Now().Add(2 * time.Minute)
-	hc := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} // #nosec G402 -- the local console, only checked for an answer
+	hc := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}}} // #nosec G402 -- the local console, only checked for an answer
 	var last error
 	for time.Now().Before(deadline) {
 		var info ServerInfo

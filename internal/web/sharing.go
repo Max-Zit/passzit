@@ -15,6 +15,8 @@ func (s *Server) sharingErr(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, store.ErrLastManager):
 		apiError(w, http.StatusConflict, "last_manager", s.msg(r, "A vault needs at least one manager."))
+	case errors.Is(err, store.ErrOwnMembership):
+		apiError(w, http.StatusForbidden, "own", s.msg(r, err.Error()))
 	case errors.Is(err, store.ErrConflict):
 		apiError(w, http.StatusConflict, "exists", s.msg(r, "The name is already used."))
 	default:
@@ -215,8 +217,20 @@ type groupRef struct {
 	Members int    `json:"members"`
 }
 
-// apiGroups lists the groups (names only) for vault managers.
+// apiGroups lists the groups (names only) for administrators and the
+// managers of shared vaults.
 func (s *Server) apiGroups(w http.ResponseWriter, r *http.Request) {
+	if u := userFrom(r); !u.IsAdmin() {
+		ok, err := s.store.ManagesSharedVault(r.Context(), u.ID)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if !ok {
+			apiError(w, http.StatusForbidden, "forbidden", s.msg(r, "Only administrators and managers of shared vaults see the groups."))
+			return
+		}
+	}
 	all, err := s.store.Groups(r.Context())
 	if err != nil {
 		s.serverError(w, r, err)
