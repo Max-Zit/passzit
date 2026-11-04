@@ -37,7 +37,7 @@ type extensionStore struct {
 // Brave, Opera and Vivaldi too.
 var extensionStores = []extensionStore{
 	{Browser: "chrome", Name: "Chrome Web Store"},
-	{Browser: "edge", Name: "Microsoft Edge Add-ons"},
+	{Browser: "edge", Name: "Microsoft Edge Add-ons", URL: "https://microsoftedge.microsoft.com/addons/detail/lnncodjlllmeaoebmnncjaofiaiipghe"},
 	{Browser: "firefox", Name: "Firefox Add-ons"},
 }
 
