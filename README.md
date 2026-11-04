@@ -1,10 +1,27 @@
-<p align="center"><img src="brand/passzit-logo-on-light.svg" alt="PassZit" height="64"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/passzit-logo-on-dark.svg">
+    <img src="brand/passzit-logo-on-light.svg" alt="PassZit" height="64">
+  </picture>
+</p>
 
 # PassZit
 
+[![Latest release](https://img.shields.io/github/v/release/Max-Zit/passzit?label=release)](https://github.com/Max-Zit/passzit/releases/latest)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPLv3-blue)](LICENSE)
+[![CI](https://github.com/Max-Zit/passzit/actions/workflows/ci.yml/badge.svg)](https://github.com/Max-Zit/passzit/actions/workflows/ci.yml)
+[![Security scan](https://github.com/Max-Zit/passzit/actions/workflows/security.yml/badge.svg)](https://github.com/Max-Zit/passzit/actions/workflows/security.yml)
+
 **Free, open-source, self-hosted password manager** for people and teams — your own server, end-to-end encrypted vaults, and browser extensions for Chrome, Edge, Firefox, Opera and Brave.
 
-> **Status:** first public release 0.9.0. Development continues on the `develop` branch; follow the repository or [Discussions](https://github.com/Max-Zit/passzit/discussions) for news.
+> **Status:** under active development; the first public release was 0.9.0 in November 2026 and new versions come out often. Development happens on the `develop` branch; follow the repository or [Discussions](https://github.com/Max-Zit/passzit/discussions) for news.
+
+**Browser extension:** [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/lnncodjlllmeaoebmnncjaofiaiipghe) (Firefox and Chrome Web Store are in review) · for Firefox, Chrome, Opera, Brave and Vivaldi download it from your PassZit console (*Extensions*).
+
+| | |
+|---|---|
+| [![The PassZit extension fills the login of the current site](packaging/stores/images/store-1.png)](packaging/stores/images/store-1.png) | [![All vaults in the extension: websites, RDP, SSH, WinBox](packaging/stores/images/store-2.png)](packaging/stores/images/store-2.png) |
+| Fills the login and 2FA code only on the site it belongs to | Websites, remote connections and more from your own server |
 
 ## Installation
 
@@ -38,7 +55,7 @@ The script checks the release signature, installs PostgreSQL, starts the service
 ## Planned
 
 - Opening devices from [WatchZit](https://github.com/Max-Zit/watchzit) with the stored credentials in one click.
-- A command-line client and more import formats.
+- More import formats.
 
 ## Building
 
