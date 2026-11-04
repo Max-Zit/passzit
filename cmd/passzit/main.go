@@ -234,6 +234,13 @@ type account struct {
 	WrappedPrivateKey string          `json:"wrapped_private_key"`
 	Salt              string          `json:"salt"`
 	KDF               vaultcrypto.KDF `json:"kdf"`
+	HistoryCount      int             `json:"history_count"`
+}
+
+// report tells the server about a use of an item (logged for shared
+// vaults, shown to their managers); failures do not matter.
+func report(c *config, id, action string) {
+	_ = call(c.Server, c.Token, "POST", "/api/items/"+id+"/access", map[string]string{"action": action, "via": "cli"}, nil)
 }
 
 type keys struct {
@@ -641,6 +648,7 @@ func cmdGet(args []string) error {
 			return errors.New("this item has no password")
 		}
 		fmt.Println(l.Password)
+		report(c, it.ID, "show")
 	case "username":
 		if l == nil {
 			return errors.New("this item has no user name")
@@ -655,6 +663,7 @@ func cmdGet(args []string) error {
 			return err
 		}
 		fmt.Println(code)
+		report(c, it.ID, "copy")
 	case "notes":
 		fmt.Println(it.Data.Notes)
 	case "url":

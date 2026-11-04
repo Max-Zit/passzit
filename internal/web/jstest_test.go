@@ -142,6 +142,7 @@ func TestJavaScriptCrypto(t *testing.T) {
 		FileRoundTrip                       bool   `json:"fileRoundTrip"`
 		Send1, Send2                        bool
 		QR                                  string `json:"qr"`
+		DocClean                            string `json:"docClean"`
 		Recovery, RecoveryParsed            string
 		Fingerprint                         string
 		AccountRoundTrip                    bool
@@ -206,6 +207,16 @@ func TestJavaScriptCrypto(t *testing.T) {
 	}
 	if len(got.Sites)+len(got.Matches) > 0 {
 		t.Errorf("domain matching: %v %v", got.Sites, got.Matches)
+	}
+	for _, bad := range []string{"script", "onerror", "onclick", "javascript:", "iframe", "style", "svg", "src=", "class=", "99999999"} {
+		if strings.Contains(got.DocClean, bad) {
+			t.Errorf("documentation keeps %q: %s", bad, got.DocClean)
+		}
+	}
+	for _, good := range []string{"<h2>T</h2>", "<b>there</b>", `<img data-att="11111111-2222-4333-8444-555555555555">`, `<a href="https://e.example/x">ok</a>`, "bad", `<td colspan="2">c</td>`} {
+		if !strings.Contains(got.DocClean, good) {
+			t.Errorf("documentation lacks %q: %s", good, got.DocClean)
+		}
 	}
 	if got.QR != qrText {
 		t.Errorf("QR code read as %q", got.QR)

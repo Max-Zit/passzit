@@ -110,9 +110,13 @@ try {
   out.send2 = wrongPw && (await sl.openSend(s2.id, s2.fragment, "secret pass", s2.data)).text === "pw" && s2.auth === await sl.authFor(s2.id, s2.fragment, "secret pass") && s2.auth.length === 43;
   // QR codes (authenticator keys) are read by qr.wasm
   out.qr = (await qr.readQR(await (await fetch("/qr.png")).blob())).join("|");
+  // documentation pages keep plain formatting only (docs.js)
+  const docs = await import("/static/pz/docs.js");
+  const pic = "11111111-2222-4333-8444-555555555555";
+  out.docClean = docs.cleanHTML('<h1 onclick="x">T</h1><p style="color:red">Hi <strong>there</strong><script>alert(1)</script><img src="x" onerror="alert(1)" data-att="' + pic + '"><img data-att="99999999-2222-4333-8444-555555555555"><a href="javascript:alert(1)">bad</a> <a href="https://e.example/x" onclick="1">ok</a><iframe src="https://e.example"></iframe><svg><circle/></svg></p><style>*{}</style><table><tr><td colspan="2" class="z">c</td></tr></table>', new Map([[pic, {}]]));
   // every page script and extension module must at least parse
   out.syntax = [];
-  for (const m of ["/static/pz/vault.js", "/static/pz/auth.js", "/static/pz/account.js", "/static/pz/genpage.js", "/static/pz/genui.js", "/static/pz/common.js", "/static/pz/sharing.js", "/static/pz/keys.js", "/static/pz/sends.js", "/static/pz/sendlink.js", "/static/pz/emergency.js", "/static/pz/qr.js",
+  for (const m of ["/static/pz/vault.js", "/static/pz/auth.js", "/static/pz/account.js", "/static/pz/genpage.js", "/static/pz/genui.js", "/static/pz/common.js", "/static/pz/sharing.js", "/static/pz/keys.js", "/static/pz/sends.js", "/static/pz/sendlink.js", "/static/pz/emergency.js", "/static/pz/qr.js", "/static/pz/requests.js", "/static/pz/docs.js",
     "/ext/popup.js", "/ext/background.js", "/ext/client.js", "/ext/ext.js", "/ext/domain.js"]) {
     try { await import(m); } catch (e) { if (e instanceof SyntaxError) out.syntax.push(m + ": " + e.message); }
   }

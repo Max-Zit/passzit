@@ -487,3 +487,25 @@ pre.vnotes, code.vvalue { background: none; border: 0; padding: 0; color: var(--
 .fkind:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .fkind:has(input:checked) .ic { color: var(--accent); }
 .fkind:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* rights of a member or group as check boxes (vault dialog) */
+.rightsboxes { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; vertical-align: middle; }
+.rightsboxes label.check { margin: 0; font-weight: 400; white-space: nowrap; gap: 6px; }
+
+/* documentation of an item (docs.js) */
+dialog.docdlg { width: min(980px, calc(100vw - 32px)); }
+.doctools { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: 8px 8px 0 0; background: var(--panel-2); position: sticky; top: 0; z-index: 1; }
+.doctools button { min-width: 32px; padding: 0 8px; font-weight: 600; }
+.doctools .b { font-weight: 800; } .doctools .i { font-style: italic; } .doctools .u { text-decoration: underline; } .doctools .s { text-decoration: line-through; }
+.docpage { line-height: 1.6; overflow-wrap: anywhere; }
+.docpage.docedit { min-height: 320px; max-height: 65vh; overflow: auto; padding: 14px 16px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px; background: var(--panel); outline: none; }
+.docpage.docedit:focus { border-color: var(--line-2); }
+.docpage h2 { font-size: 1.35em; margin: 1em 0 .4em; } .docpage h3 { font-size: 1.15em; margin: .9em 0 .3em; } .docpage h4 { margin: .8em 0 .3em; }
+.docpage p { margin: .5em 0; }
+.docpage img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--line); display: block; margin: .6em 0; }
+.docpage pre { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow: auto; font-family: var(--mono, ui-monospace, monospace); font-size: 13px; white-space: pre-wrap; }
+.docpage blockquote { margin: .6em 0; padding: 4px 14px; border-left: 3px solid var(--line-2); color: var(--muted); }
+.docpage table { border-collapse: collapse; margin: .6em 0; width: 100%; }
+.docpage th, .docpage td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+.docpage th { background: var(--panel-2); }
+.docpage hr { border: 0; border-top: 1px solid var(--line); margin: 1em 0; }

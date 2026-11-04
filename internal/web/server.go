@@ -272,11 +272,14 @@ type Policy struct {
 	NoSends bool `json:"no_sends,omitempty"`
 	// FourEyes: sensitive administrator actions need a second administrator.
 	FourEyes bool `json:"four_eyes,omitempty"`
+	// HistoryCount: how many former passwords an item keeps (0 in older
+	// settings: the default).
+	HistoryCount int `json:"history_count,omitempty"`
 }
 
 // DefaultPolicy: no automatic lock (until the browser closes), clear the
 // clipboard after 30 s, Argon2id with 64 MiB, 3 passes, 4 lanes.
-var DefaultPolicy = Policy{LockMinutes: 0, ClipboardSeconds: 30, KDF: vaultcrypto.DefaultKDF, MinPasswordLength: 12, TrashDays: 30, MaxFileMB: 10, StorageMB: 500}
+var DefaultPolicy = Policy{LockMinutes: 0, ClipboardSeconds: 30, KDF: vaultcrypto.DefaultKDF, MinPasswordLength: 12, TrashDays: 30, MaxFileMB: 10, StorageMB: 500, HistoryCount: 10}
 
 // Validate checks the ranges.
 func (p Policy) Validate() error {
@@ -289,6 +292,8 @@ func (p Policy) Validate() error {
 		return errors.New("the minimum master password length must be 10–64")
 	case p.TrashDays < 1 || p.TrashDays > 365:
 		return errors.New("the trash must keep items for 1–365 days")
+	case p.HistoryCount < 1 || p.HistoryCount > 100:
+		return errors.New("an item must keep 1–100 former passwords")
 	case p.MaxFileMB < 1 || p.MaxFileMB > 100 || p.StorageMB < p.MaxFileMB || p.StorageMB > 100000:
 		return errors.New("files may be 1–100 MB, the storage of a user at least one file and at most 100000 MB")
 	}
@@ -297,7 +302,11 @@ func (p Policy) Validate() error {
 
 func (s *Server) policy(ctx context.Context) Policy {
 	p := DefaultPolicy
-	if err := s.store.GetSetting(ctx, settingPolicy, &p); err != nil || p.Validate() != nil {
+	err := s.store.GetSetting(ctx, settingPolicy, &p)
+	if p.HistoryCount == 0 {
+		p.HistoryCount = DefaultPolicy.HistoryCount
+	}
+	if err != nil || p.Validate() != nil {
 		return DefaultPolicy
 	}
 	return p
@@ -430,6 +439,10 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/items/{id}/access", s.apiItemAccess)
 	api("GET /api/items/{id}/access", s.apiItemAccessLog)
 	api("GET /api/groups", s.apiGroups)
+	api("GET /api/requests", s.apiRequests)
+	api("POST /api/requests", s.apiCreateRequest)
+	api("POST /api/requests/{id}/decide", s.apiDecideRequest)
+	api("DELETE /api/requests/{id}", s.apiCancelRequest)
 	api("POST /api/vaults", s.apiCreateVault)
 	api("GET /api/vaults/pending", s.apiPendingAccess)
 	api("PUT /api/vaults/{id}", s.apiRenameVault)
@@ -655,6 +668,11 @@ func (s *Server) RunHousekeeping(ctx context.Context) {
 	// (and at the start).
 	for first := true; ; first = false {
 		s.RunBackups(ctx)
+		if n, err := s.store.ExpireRights(ctx); err != nil {
+			s.log.Warn("ending temporary rights failed", "err", err)
+		} else if n > 0 {
+			_ = s.store.Audit(ctx, "-", "local", "vault.member.rights.expire", "vaults", fmt.Sprintf("temporary rights ended for %d membership(s)", n))
+		}
 		if n, err := s.store.ExpireMemberships(ctx); err != nil {
 			s.log.Warn("ending time-limited access failed", "err", err)
 		} else if n > 0 {

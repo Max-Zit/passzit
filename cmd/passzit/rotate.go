@@ -260,12 +260,18 @@ func rotateOne(c *config, it rawItem, length int) error {
 	login, _ := d["login"].(map[string]any)
 	login["password"] = nw
 	hist, _ := d["history"].([]any)
-	hist = append(hist, map[string]any{"password": old, "changed": now})
-	if len(hist) > 10 {
-		hist = hist[len(hist)-10:]
+	hist = append(hist, map[string]any{"password": old, "changed": now, "by": c.Email})
+	keep := 10
+	var acct account
+	if call(c.Server, c.Token, "GET", "/api/account", nil, &acct) == nil && acct.HistoryCount > 0 {
+		keep = acct.HistoryCount
+	}
+	if len(hist) > keep {
+		hist = hist[len(hist)-keep:]
 	}
 	d["history"] = hist
 	d["passwordChanged"] = now
+	d["passwordChangedBy"] = c.Email
 	rm, _ := d["rotation"].(map[string]any)
 	rm["last"] = now
 	plain, _ := json.Marshal(d)
@@ -276,6 +282,7 @@ func rotateOne(c *config, it rawItem, length int) error {
 	if err != nil {
 		return fmt.Errorf("the device has the NEW password %q, but saving it failed (%v): write it down and save it in the web vault", nw, err)
 	}
+	report(c, it.ID, "rotated")
 	if verifyErr != nil {
 		return fmt.Errorf("changed and saved, but signing in with the new password failed (%v); the old one is in the item's history", verifyErr)
 	}

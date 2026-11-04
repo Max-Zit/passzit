@@ -71,6 +71,11 @@ func uiTexts(t *testing.T) map[string]bool {
 		"Website login", "User name and password of a website", "Credentials", "User name and password without a website", "WinSCP (SFTP)", "Files on servers over SFTP", "VNC", "Screens of computers with a VNC server", "Telnet", "Older switches and devices",
 		// kinds of folders (vault.js FOLDER_KINDS)
 		"Folder", "Customer", "Site", "Branch office", "Department", "Data center", "Network", "Project", "Remote Desktop (RDP)", "Windows computers and servers", "SSH with a password", "Linux servers, switches and routers",
+		// rights as check boxes (sharing.js), hours and states of requests (requests.js)
+		"Connect and fill", "See passwords", "Add and change", "4 hours", "8 hours", "1 week",
+		// requests for access (requests.go)
+		"A request for access is waiting", "%s asks for access (%s) for %d hours.", "Approve or reject it in the web vault under Tools → Access requests.",
+		"Your request for access was rejected", "%s rejected your request for access.", "Your request for access was approved", "%s approved your request for access (%s) for %d hours.", "The access ends by itself.",
 		// e-mail (notify.go: subjects and lines of mailText, settings checks)
 		"Test message", "This is a test message from PassZit. E-mail notifications work.",
 		"A change waits for a second administrator", "%s asks: %s.", "It runs only after a second administrator approves it under Approvals.",

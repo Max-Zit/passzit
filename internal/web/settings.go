@@ -178,7 +178,7 @@ func (s *Server) handlePolicySave(w http.ResponseWriter, r *http.Request) {
 		MinPasswordLength: formInt(r, "min_password_length"), TrashDays: formInt(r, "trash_days"),
 		MaxFileMB: formInt(r, "max_file_mb"), StorageMB: formInt(r, "storage_mb"), BreachCheck: r.FormValue("breach_check") == "1",
 		SharedAdminsOnly: r.FormValue("shared_admins_only") == "1", NoExport: r.FormValue("no_export") == "1",
-		NoSends: r.FormValue("no_sends") == "1", FourEyes: r.FormValue("four_eyes") == "1"}
+		NoSends: r.FormValue("no_sends") == "1", FourEyes: r.FormValue("four_eyes") == "1", HistoryCount: formInt(r, "history_count")}
 	p.KDF.Alg = "argon2id"
 	p.KDF.M, p.KDF.T, p.KDF.P = formInt(r, "kdf_m")*1024, formInt(r, "kdf_t"), formInt(r, "kdf_p")
 	if err := p.Validate(); err != nil {
@@ -189,7 +189,7 @@ func (s *Server) handlePolicySave(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	s.audit(r, "settings.policy", "settings", "lock %dmin, clipboard %ds, argon2id m=%dMiB t=%d p=%d, min length %d, trash %d days, files %dMB / %dMB per user, breach check %v, shared vaults only by admins %v, no export %v, no secret links %v, four eyes %v",
-		p.LockMinutes, p.ClipboardSeconds, p.KDF.M/1024, p.KDF.T, p.KDF.P, p.MinPasswordLength, p.TrashDays, p.MaxFileMB, p.StorageMB, p.BreachCheck, p.SharedAdminsOnly, p.NoExport, p.NoSends, p.FourEyes)
+	s.audit(r, "settings.policy", "settings", "lock %dmin, clipboard %ds, argon2id m=%dMiB t=%d p=%d, min length %d, trash %d days, files %dMB / %dMB per user, breach check %v, shared vaults only by admins %v, no export %v, no secret links %v, four eyes %v, password history %d",
+		p.LockMinutes, p.ClipboardSeconds, p.KDF.M/1024, p.KDF.T, p.KDF.P, p.MinPasswordLength, p.TrashDays, p.MaxFileMB, p.StorageMB, p.BreachCheck, p.SharedAdminsOnly, p.NoExport, p.NoSends, p.FourEyes, p.HistoryCount)
 	s.redirect(w, r, "/settings/policy", "Saved.")
 }

@@ -241,6 +241,9 @@ func (s *Server) apiEmergencyVault(w http.ResponseWriter, r *http.Request) {
 
 type accessReq struct {
 	Action string `json:"action"`
+	// Via: "extension", "console" (opened from a MaxZit console such as
+	// WatchZit) or "cli" for device tokens; web sessions are always "web".
+	Via string `json:"via"`
 }
 
 func (s *Server) apiItemAccess(w http.ResponseWriter, r *http.Request) {
@@ -249,9 +252,45 @@ func (s *Server) apiItemAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := userFrom(r)
+	device, via := "", "web"
+	if sess := sessionFrom(r); sess != nil {
+		if sess.Kind == store.KindExt {
+			device, via = sess.Device, "extension"
+			if q.Via == "console" || q.Via == "cli" {
+				via = q.Via
+			}
+		} else {
+			device = browserOf(sess.UserAgent)
+		}
+	}
 	// Items of personal vaults are not logged; the answer does not tell.
-	_ = s.store.LogItemAccess(r.Context(), u.ID, u.Email, r.PathValue("id"), q.Action, clientIP(r))
+	_ = s.store.LogItemAccess(r.Context(), u.ID, u.Email, r.PathValue("id"), q.Action, clientIP(r), device, via)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// browserOf names a browser and system from a User-Agent ("Edge · Windows").
+func browserOf(ua string) string {
+	b := ""
+	for _, c := range []struct{ mark, name string }{{"Edg/", "Edge"}, {"OPR/", "Opera"}, {"Vivaldi", "Vivaldi"}, {"Firefox/", "Firefox"}, {"Chrome/", "Chrome"}, {"Safari/", "Safari"}} {
+		if strings.Contains(ua, c.mark) {
+			b = c.name
+			break
+		}
+	}
+	os := ""
+	for _, c := range []struct{ mark, name string }{{"Windows", "Windows"}, {"Android", "Android"}, {"iPhone", "iOS"}, {"iPad", "iOS"}, {"Mac OS X", "macOS"}, {"Linux", "Linux"}} {
+		if strings.Contains(ua, c.mark) {
+			os = c.name
+			break
+		}
+	}
+	switch {
+	case b != "" && os != "":
+		return b + " · " + os
+	case b != "":
+		return b
+	}
+	return os
 }
 
 func (s *Server) apiItemAccessLog(w http.ResponseWriter, r *http.Request) {

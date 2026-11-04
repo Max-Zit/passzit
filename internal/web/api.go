@@ -28,6 +28,7 @@ type accountResp struct {
 	NoExport         bool            `json:"no_export"`
 	SharedAdminsOnly bool            `json:"shared_admins_only"`
 	NoSends          bool            `json:"no_sends"`
+	HistoryCount     int             `json:"history_count"`
 }
 
 func (s *Server) apiAccount(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +42,7 @@ func (s *Server) apiAccount(w http.ResponseWriter, r *http.Request) {
 	lock, clip := s.clientPrefs(r.Context(), u)
 	writeJSON(w, http.StatusOK, accountResp{Email: u.Email, Name: u.DisplayName, Role: u.Role, HasRecovery: u.HasRecovery, AccountKeys: k,
 		LockMinutes: lock, ClipboardSeconds: clip, PolicyKDF: p.KDF, MinLength: p.MinPasswordLength, TrashDays: p.TrashDays, BreachCheck: p.BreachCheck,
-		NoExport: p.NoExport, SharedAdminsOnly: p.SharedAdminsOnly, NoSends: p.NoSends})
+		NoExport: p.NoExport, SharedAdminsOnly: p.SharedAdminsOnly, NoSends: p.NoSends, HistoryCount: p.HistoryCount})
 }
 
 // apiSessionKey hands the browser the key it encrypts its unlocked keys

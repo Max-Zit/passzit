@@ -300,21 +300,30 @@ type AccessEntry struct {
 	Email  string    `json:"email"`
 	Action string    `json:"action"`
 	IP     string    `json:"ip"`
+	Device string    `json:"device"`
+	Via    string    `json:"via"`
 	At     time.Time `json:"at"`
 }
 
-// ItemActions are the uses clients report.
-var ItemActions = map[string]bool{"show": true, "copy": true, "fill": true, "view": true, "connect": true}
+// ItemActions are the uses clients report: shown, copied, filled, opened
+// as a connection, the password changed or a former one restored.
+var ItemActions = map[string]bool{"show": true, "copy": true, "fill": true, "view": true, "connect": true, "changed": true, "restored": true, "rotated": true}
+
+// ItemVias are where a use came from.
+var ItemVias = map[string]bool{"web": true, "extension": true, "console": true, "cli": true}
 
 // LogItemAccess records a use of an item in a shared vault (items of
 // personal vaults are not logged).
-func (s *Store) LogItemAccess(ctx context.Context, userID int64, email, itemID, action, ip string) error {
-	if !ValidID(itemID) || !ItemActions[action] {
+func (s *Store) LogItemAccess(ctx context.Context, userID int64, email, itemID, action, ip, device, via string) error {
+	if !ValidID(itemID) || !ItemActions[action] || !ItemVias[via] {
 		return ErrNotFound
 	}
-	tag, err := s.db.Exec(ctx, `INSERT INTO item_access(item_id, vault_id, user_id, email, action, ip, at)
-		SELECT i.id, i.vault_id, $2, $3, $4, $5, $6 FROM items i JOIN vaults v ON v.id=i.vault_id AND v.kind='shared'
-		JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$2 WHERE i.id=$1`, itemID, userID, email, action, ip, s.now())
+	if len(device) > 120 {
+		device = device[:120]
+	}
+	tag, err := s.db.Exec(ctx, `INSERT INTO item_access(item_id, vault_id, user_id, email, action, ip, device, via, at)
+		SELECT i.id, i.vault_id, $2, $3, $4, $5, $7, $8, $6 FROM items i JOIN vaults v ON v.id=i.vault_id AND v.kind='shared'
+		JOIN vault_members m ON m.vault_id=i.vault_id AND m.user_id=$2 WHERE i.id=$1`, itemID, userID, email, action, ip, s.now(), device, via)
 	if err == nil && tag.RowsAffected() == 0 {
 		err = ErrNotFound
 	}
@@ -334,13 +343,13 @@ func (s *Store) ItemAccessLog(ctx context.Context, userID int64, itemID string) 
 	if rights != "manage" {
 		return nil, ErrForbidden
 	}
-	rows, err := s.db.Query(ctx, `SELECT email, action, ip, at FROM item_access WHERE item_id=$1 ORDER BY at DESC LIMIT 200`, itemID)
+	rows, err := s.db.Query(ctx, `SELECT email, action, ip, device, via, at FROM item_access WHERE item_id=$1 ORDER BY at DESC LIMIT 200`, itemID)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (AccessEntry, error) {
 		var a AccessEntry
-		err := r.Scan(&a.Email, &a.Action, &a.IP, &a.At)
+		err := r.Scan(&a.Email, &a.Action, &a.IP, &a.Device, &a.Via, &a.At)
 		return a, err
 	})
 }

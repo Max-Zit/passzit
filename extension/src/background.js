@@ -200,7 +200,7 @@ async function helperAllowed() {
   try { return await api.permissions.contains({ permissions: ["nativeMessaging"] }); } catch (e) { return false; }
 }
 
-async function connectItem(id) {
+async function connectItem(id, via) {
   const it = S.items.get(id);
   if (!S.keys || !it || !it.data || !it.data.connect) throw new Error(t("Not found."));
   if (!(await helperAllowed())) throw new Error(t("Switch on \"Open connections\" in the settings first."));
@@ -215,7 +215,7 @@ async function connectItem(id) {
     throw new Error(t("The MaxZit Launcher does not answer. Install it and pair this browser (Launcher in the web vault)."));
   }
   if (!res || !res.ok) throw new Error((res && res.error) || t("The connection could not be opened."));
-  server().then((s) => call(s.server, s.token, "POST", "/api/items/" + id + "/access", { action: "connect" })).catch(() => {});
+  reportUse(id, "connect", via);
   if (res.copy === "password" || res.copy === "passphrase") {
     api.alarms.create("pz-clip", { delayInMinutes: Math.max(S.clipSeconds, 30) / 60 });
     return { copy: res.copy, value: res.copy === "password" ? msg.password : msg.passphrase, clip: S.clipSeconds };
@@ -354,7 +354,7 @@ async function fill(id, tabId) {
   if (!r || !r.ok) throw new Error(r && r.reason === "origin" ? t("The page changed. Try again.") : t("No sign-in fields were found on this page."));
   // Uses of items in shared vaults are logged for their managers (the
   // server ignores personal items).
-  server().then((s) => call(s.server, s.token, "POST", "/api/items/" + id + "/access", { action: "fill" })).catch(() => {});
+  reportUse(id, "fill");
   return r;
 }
 
@@ -466,7 +466,7 @@ async function runPendingOpen() {
   const it = consoleLogin(p.req);
   const fail = (error) => { if (p.tabId) api.tabs.sendMessage(p.tabId, { type: "consoleOpenFailed", error }, { frameId: 0 }).catch(() => {}); };
   if (!it) { fail(t("PassZit has no saved login for this device. Click \"Open with\" again to open it without a password.")); return; }
-  connectItem(it.id).catch((e) => fail(e.message || String(e)));
+  connectItem(it.id, "console").catch((e) => fail(e.message || String(e)));
 }
 
 api.permissions.onAdded.addListener(async (p) => {
@@ -627,6 +627,17 @@ async function tabBadge(tab, s) {
   } catch (e) { /* the tab is gone */ }
 }
 
+// reportUse tells the server about a use of an item (logged for shared
+// vaults); via "console" marks an Open with from a MaxZit console.
+function reportUse(id, action, via) {
+  server().then((s) => call(s.server, s.token, "POST", "/api/items/" + id + "/access", { action, via: via || "extension" })).catch(() => {});
+}
+
+// historyCount: how many former passwords an item keeps (vault policy).
+async function historyCount(s) {
+  try { return Math.max(1, Math.min(100, (await call(s.server, s.token, "GET", "/api/account")).history_count || 10)); } catch (e) { return 10; }
+}
+
 async function savePending(index, action) {
   const p = S.pending[index];
   if (!p) return;
@@ -636,10 +647,14 @@ async function savePending(index, action) {
     if (p.update && S.items.get(p.update)) {
       const it = S.items.get(p.update);
       const d = JSON.parse(JSON.stringify(it.data));
-      d.history = (d.history || []).concat([{ password: d.login.password, changed: now }]).slice(-10);
+      const s = await settings();
+      const keep = await historyCount(s);
+      d.history = (d.history || []).concat([{ password: d.login.password, changed: now, by: s.email }]).slice(-keep);
       d.login.password = p.password;
       d.passwordChanged = now;
+      d.passwordChangedBy = s.email;
       await saveItem(it, d);
+      reportUse(it.id, "changed");
     } else {
       await saveItem({}, { type: "login", name: p.host, folder: "", favorite: false, notes: "", fields: [], history: [], passwordChanged: now,
         login: { username: p.username, password: p.password, urls: [p.url] } });
@@ -740,7 +755,7 @@ const handlers = {
     }
     if (msg.field === "password" || msg.field === "totp") {
       api.alarms.create("pz-clip", { delayInMinutes: Math.max(S.clipSeconds, 30) / 60 });
-      server().then((s) => call(s.server, s.token, "POST", "/api/items/" + it.id + "/access", { action: "copy" })).catch(() => {});
+      reportUse(it.id, "copy");
     }
     return { value: v || "", clip: S.clipSeconds };
   },
@@ -917,7 +932,7 @@ const handlers = {
     }
     const it = consoleLogin(req);
     if (!it) return { taken: false };
-    connectItem(it.id).catch((e) => {
+    connectItem(it.id, "console").catch((e) => {
       if (sender.tab) api.tabs.sendMessage(sender.tab.id, { type: "consoleOpenFailed", error: e.message || String(e) }, { frameId: 0 }).catch(() => {});
     });
     return { taken: true };

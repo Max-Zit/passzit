@@ -6,14 +6,16 @@
 <p>The policy can allow only administrators to make shared vaults (<i>Settings → Vault policy → Sharing and export</i>).</p>
 
 <h2 id="rights">Rights</h2>
+<p>The rights of each person and group are check boxes in the vault's settings (<i>Members and settings</i>). A higher right includes the lower ones: ticking one ticks those before it, clearing one clears those after it.</p>
 <table>
-  <tr><th>Right</th><th>May</th></tr>
-  <tr><td>Use</td><td>fill and copy logins (web vault and extension), but not show passwords, notes and files</td></tr>
-  <tr><td>Read</td><td>see everything</td></tr>
-  <tr><td>Read and change</td><td>also add, change and delete items</td></tr>
+  <tr><th>Check box</th><th>May</th></tr>
+  <tr><td>Connect and fill</td><td>open connections (also from WatchZit), fill and copy logins (web vault and extension), but not show passwords, notes, documentation and files — every member has it</td></tr>
+  <tr><td>See passwords</td><td>see everything</td></tr>
+  <tr><td>Add and change</td><td>also add, change and delete items</td></tr>
   <tr><td>Manage</td><td>also members, groups, the name and the vault itself</td></tr>
 </table>
-<p>The server refuses changes without the right. <b>Use</b> is a convenience, not a lock: whoever can fill a password into a page can find it out with some effort. A vault always keeps at least one manager.</p>
+<p>For example: the group <i>Support</i> gets <i>Connect and fill</i> and <i>See passwords</i>, the group <i>Administrators</i> also <i>Add and change</i>.</p>
+<p>The server refuses changes without the right. <i>Connect and fill</i> without <i>See passwords</i> is a convenience, not a lock: whoever can fill a password into a page can find it out with some effort. A vault always keeps at least one manager.</p>
 
 <h2 id="members">Adding people</h2>
 <p>Under <i>Add a person</i> choose the user and the right, optionally an end date. Your browser seals the vault key to the person's <b>public key</b>; the server only stores the sealed key.</p>
@@ -22,8 +24,16 @@
 <h2 id="timed">Time-limited access</h2>
 <p>With an end date the access ends by itself at the end of that day, for example for an external technician. The audit log records the end.</p>
 
+<h2 id="requests">Access requests</h2>
+<p>Under <i>Tools → Access requests</i> anyone can ask for access, with a reason and for how long (1 hour to 30 days):</p>
+<ul>
+  <li><b>More rights in a team vault you are in</b> (also with the key button in the vault's title): every manager of the vault may approve. The rights go up at once and come back by themselves at the end.</li>
+  <li><b>Access to a vault you are not in:</b> you ask a person — a manager or an administrator. That person chooses the vault and clicks <i>Give access</i>; the browser confirms your key's fingerprint and gives the access until the end, then it ends by itself and the vault gets a new key.</li>
+</ul>
+<p>Whoever may decide gets an e-mail (when the server sends e-mail) and a number next to <i>Access requests</i>; the person who asked hears of the decision the same way. Requests nobody decides end after 7 days. Requests, decisions and the end of temporary rights are in the audit log. A manager who sets a person's rights by hand ends the temporary rights.</p>
+
 <h2 id="rotation">Leaving and a new key</h2>
 <p>When someone leaves a vault — removed, the access ended, left a group, or the account deleted — they still know the old vault key. PassZit therefore gives the vault a <b>new key</b>: when a manager removes a person in the browser it happens at once; otherwise the vault is marked and the next manager who opens it sees <i>Replace the key now</i>. The browser seals every item again with the new key and the new key to every remaining member. What the person saw before cannot be taken back — change important passwords if needed.</p>
 
 <h2 id="groups">Groups</h2>
-<p>Administrators make <b>groups</b> under <i>Groups</i> and choose their members. A manager gives a group access to a vault in its settings. Because the server cannot seal keys, a manager's browser gives the access: right away when the group is added, and later automatically when a manager opens the vault (new members of the group get access then). Leaving a group ends its access at once. Groups can follow the company directory or the identity provider (<a href="/docs/admin#company">Company sign-in</a>).</p>
+<p>Administrators make <b>groups</b> under <i>Groups</i> and choose their members. A manager gives a group access to a vault in its settings and ticks what the group may do (the same check boxes as for a person). Because the server cannot seal keys, a manager's browser gives the access: right away when the group is added, and later automatically when a manager opens the vault (new members of the group get access then). Leaving a group ends its access at once. Groups can follow the company directory or the identity provider (<a href="/docs/admin#company">Company sign-in</a>).</p>

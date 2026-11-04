@@ -62,6 +62,23 @@ function sealFor(pubB64, key, vaultID) {
   return pz.sealTo(pz.unb64u(pubB64), key, pz.AAD.vaultKey(vaultID));
 }
 
+// grantMember gives a person access to a shared vault until a time (an
+// approved request): the fingerprint is confirmed like when adding a member,
+// then the vault key is sealed to the person. False when not confirmed.
+export async function grantMember(vaultID, user, rights, expiresAt) {
+  const v = C.S.vaults.get(vaultID);
+  if (!v || !v.key) throw new Error(t("This vault cannot be opened."));
+  const k = await keyCheck(user.user_id, user.public_key);
+  const q = k.status === "changed"
+    ? t("Warning: the key of %s is not the one you confirmed before. Fingerprint now: %s. Add the person anyway?", user.email, k.fp)
+    : t("Fingerprint of %s: %s. The person sees it under My account. Add?", user.email, k.fp);
+  if (!(await confirmBox(q, t("Add"), k.status === "changed"))) return false;
+  await api("PUT", "/api/vaults/" + vaultID + "/members", { user_id: user.user_id, wrapped_key: await sealFor(user.public_key, v.key, vaultID), rights, expires_at: expiresAt });
+  await remember(user.user_id, user.email, k.fp);
+  warnings.delete(user.user_id);
+  return true;
+}
+
 // ---- creating a vault
 
 export async function createVault() {
@@ -178,8 +195,34 @@ function endOfDay(inp) {
   return new Date(y, m - 1, dd, 23, 59, 59).toISOString();
 }
 
+// rightsSelect shows rights as check boxes: connect and fill (every
+// member), see passwords, add and change, manage. A higher one needs the
+// lower ones, so checking one checks those below and clearing one clears
+// those above. .value is the rights; "change" fires on every click.
+const RIGHT_BOXES = [["use", "Connect and fill"], ["view", "See passwords"], ["edit", "Add and change"], ["manage", "Manage"]];
+
 function rightsSelect(cur, disabled) {
-  return el("select", { class: "narrow", disabled, "aria-label": t("Rights") }, ...RIGHTS.map((r) => el("option", { value: r, selected: r === cur }, rightsLabel(r))));
+  const box = el("span", { class: "rightsboxes", role: "group", "aria-label": t("Rights") });
+  const at = Math.max(0, RIGHTS.indexOf(cur));
+  const inputs = RIGHT_BOXES.map(([r, label], i) => {
+    const c = el("input", { type: "checkbox", value: r, disabled: disabled || i === 0 });
+    c.checked = i <= at;
+    box.append(el("label", { class: "check", title: rightsLabel(r) }, c, t(label)));
+    return c;
+  });
+  box.addEventListener("change", (ev) => {
+    const i = inputs.indexOf(ev.target);
+    if (i < 0) return;
+    inputs.forEach((c, j) => { if (ev.target.checked ? j < i : j > i) c.checked = ev.target.checked; });
+    inputs[0].checked = true;
+  }, true);
+  Object.defineProperty(box, "value", { get: () => RIGHTS[inputs.filter((c) => c.checked).length - 1] || "use" });
+  return box;
+}
+
+function tempRights(m) {
+  if (!m.rights_until || !m.base_rights) return null;
+  return el("small", { class: "badge", text: t("until %s, then %s", new Date(m.rights_until).toLocaleString(document.documentElement.lang || undefined, { dateStyle: "short", timeStyle: "short" }), rightsLabel(m.base_rights)) });
 }
 
 async function vaultBody(vaultID, v, manage, data, dir, groups, refresh, dlg) {
@@ -226,7 +269,7 @@ async function vaultBody(vaultID, v, manage, data, dir, groups, refresh, dlg) {
     rows.push(el("tr", null,
       el("td", null, el("b", { text: m.email }), self ? el("small", { class: "muted", text: " (" + t("you") + ")" }) : null, m.disabled ? el("small", { class: "badge", text: t("disabled") }) : null,
         el("br"), el("small", { class: "muted mono", title: t("Fingerprint of the public key"), text: fp })),
-      el("td", null, r, viaGroup ? el("small", { class: "muted", text: " " + t("through %s", m.group_name) }) : null),
+      el("td", null, r, viaGroup ? el("small", { class: "muted", text: " " + t("through %s", m.group_name) }) : null, tempRights(m)),
       el("td", { class: "hide-sm" }, until),
       el("td", { class: "actions" }, manage && !self && !viaGroup ? button("", { class: "ghost sm", icon: "trash", aria: t("Remove"), title: t("Remove"), onclick: guard(async () => {
         if (!(await confirmBox(t("Remove %s from this vault? The vault then gets a new key.", m.email), t("Remove"), true))) return;
@@ -239,7 +282,7 @@ async function vaultBody(vaultID, v, manage, data, dir, groups, refresh, dlg) {
   out.push(el("h3", { text: t("Members") }), el("div", { class: "table-wrap" }, el("table", null,
     el("thead", null, el("tr", null, el("th", { text: t("Person") }), el("th", { text: t("Rights") }), el("th", { class: "hide-sm", text: t("Access until") }), el("th"))),
     el("tbody", null, ...rows))));
-  out.push(el("p", { class: "small muted", text: t("Use: fill and copy, but not show passwords (in this browser and the extension). Read: see everything. Change: also add and edit items. Manage: also members and the vault itself. Anyone who can use an item can find out its password with some effort; do not rely on Use against people with bad intent.") }));
+  out.push(el("p", { class: "small muted", text: t("Connect and fill: open connections, fill and copy, but not show passwords (every member may). See passwords: see everything. Add and change: also add and edit items. Manage: also members, groups and the vault itself. Anyone who can use an item can find out its password with some effort; do not rely on this against people with bad intent.") }));
   if (manage) {
     const members = new Set(data.members.map((m) => m.user_id));
     const pick = el("select", { "aria-label": t("Person") }, el("option", { value: "" }, t("Choose a person…")),

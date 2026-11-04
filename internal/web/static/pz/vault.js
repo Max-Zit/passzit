@@ -14,6 +14,8 @@ import { readQR, authenticatorKeys } from "./qr.js";
 import { generate as sshGenerate, fingerprint as sshFingerprint } from "./sshkey.js";
 import { initSharing, loadKnown, completePending, createVault, openVault as openVaultDialog, rotateBanner, canEditVault, vaultLabel } from "./sharing.js";
 import { initSends, openSends, itemText } from "./sends.js";
+import { initRequests, openRequests, refreshCount as refreshRequests } from "./requests.js";
+import { initDocs, docField } from "./docs.js";
 import { helloKeys, helloLabel, unlockWithHello } from "./hello.js";
 
 const root = document.getElementById("pz-vault");
@@ -49,6 +51,8 @@ const TYPES = {
 async function start() {
   initSharing({ S, render, sync, dialog, prompt1 });
   initSends({ dialog, fmtDate });
+  initRequests({ S, render, sync, dialog, fmtDate });
+  initDocs({ S, saveItem, render, canEditItem, fmtDate, dialog, prompt1 });
   await loadTexts();
   wireLogout();
   let keys = null;
@@ -262,6 +266,10 @@ async function openVault() {
   // folders of earlier versions move into the vaults
   await migrateFolders();
   connectExtension();
+  // requests waiting for this user (the badge), or the link of a notice
+  await refreshRequests();
+  render();
+  if (new URLSearchParams(location.search).get("requests")) openRequests("");
 }
 
 // ---- "Connect with the web vault": the extension's popup opens
@@ -713,6 +721,8 @@ function renderFilters() {
   nav.append(el("span", { class: "navlabel brk" }), link("trash", t("Trash"), "trash"),
     el("span", { class: "navlabel", text: t("Tools") }),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openHealth(); } }, icon("shield"), el("span", { text: t("Password health") })),
+    el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openRequests(""); } }, icon("users"), el("span", { text: t("Access requests") }),
+      S.requestsWaiting ? el("small", { class: "badge warn", title: t("Waiting for your decision"), text: String(S.requestsWaiting) }) : null),
     S.acct.no_sends ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openSends(""); } }, icon("link"), el("span", { text: t("Secret links") })),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openImport(); } }, icon("upload"), el("span", { text: t("Import") })),
     S.acct.no_export ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openExport(); } }, icon("download"), el("span", { text: t("Export") })));
@@ -760,6 +770,7 @@ function renderList() {
   if (S.view === "vault" && (S.vaults.get(S.vault) || {}).kind === "shared") {
     const v = S.vaults.get(S.vault);
     actions.append(el("small", { class: "muted", text: rightsText(v.rights) }),
+      v.rights !== "manage" ? button("", { class: "ghost sm", icon: "key", aria: t("Ask for more rights"), title: t("Ask for more rights"), onclick: () => openRequests(S.vault) }) : null,
       button("", { class: "ghost sm", icon: "settings", aria: t("Members and settings"), title: t("Members and settings"), onclick: () => openVaultDialog(S.vault) }));
   }
   tools.append(actions);
@@ -984,15 +995,17 @@ function renderDetail() {
     rows.push(field(t("Remote connection"), tool + " · " + (c.user ? c.user + "@" : "") + c.host + (c.port ? ":" + c.port : ""), { copy: false }));
   }
   if (d.notes) rows.push(el("div", { class: "vfield" }, el("label", { text: t("Notes") }), noShow ? el("p", { class: "small muted", text: t("Hidden: you may use this item, not read it.") }) : el("pre", { class: "vnotes", text: d.notes })));
+  rows.push(docField(it, noShow));
   const folder = folderOf(it);
   const meta = el("p", { class: "small muted" },
     t("Changed %s", fmtDate(it.updated_at)), " · ", t("Created %s", fmtDate(it.created_at)),
-    d.passwordChanged ? " · " + t("Password changed %s", fmtDate(d.passwordChanged)) : "");
+    d.passwordChanged ? " · " + t("Password changed %s", fmtDate(d.passwordChanged)) + (d.passwordChangedBy ? " " + t("by %s", d.passwordChangedBy) : "") : "");
   const hist = !noShow && (d.history || []).length ? el("details", { class: "vhist" }, el("summary", { text: t("Password history (%d)", d.history.length) }),
     el("ul", null, ...d.history.slice().reverse().map((h) => el("li", null, el("code", { class: "mono", text: "••••••••" }),
-      el("small", { class: "muted", text: " " + fmtDate(h.changed) + " " }),
+      el("small", { class: "muted", text: " " + t("until %s", fmtDate(h.changed)) + (h.by ? " · " + t("changed by %s", h.by) : "") + " " }),
       button("", { class: "ghost sm", icon: "eye", aria: t("Show"), onclick: (ev) => { const c = ev.currentTarget.parentElement.querySelector("code"); c.textContent = c.textContent === "••••••••" ? h.password : "••••••••"; } }),
-      button("", { class: "ghost sm", icon: "copy", aria: t("Copy"), onclick: () => copy(h.password, true) }))))) : null;
+      button("", { class: "ghost sm", icon: "copy", aria: t("Copy"), onclick: () => copy(h.password, true) }),
+      !it.deleted_at && canEditItem(it) ? button("", { class: "ghost sm", icon: "restore", aria: t("Restore"), title: t("Make it the current password again"), onclick: () => restorePassword(it, h) }) : null)))) : null;
   return el("div", { class: "vview" }, back,
     el("div", { class: "vview-head" },
       avatar(it, "lg"),
@@ -1025,6 +1038,26 @@ async function act(it, op, msg) {
     await itemOp(it.id, op);
     if (op === "purge" || op === "trash" || op === "restore") S.selected = "";
     toast(msg);
+    render();
+  } catch (e) { toast(e.message, true); }
+}
+
+// historyCount: how many former passwords an item keeps (the vault policy).
+function historyCount() { return Math.max(1, Math.min(100, S.acct.history_count || 10)); }
+
+// restorePassword makes a former password the current one again; the
+// current one goes into the history, so nothing is lost.
+async function restorePassword(it, h) {
+  if (!(await confirmBox(t("Make this former password (from %s) the current one again? The current password is kept in the history.", fmtDate(h.changed)), t("Restore")))) return;
+  const d = it.data;
+  const now = new Date().toISOString();
+  const history = (d.history || []).filter((x) => x !== h);
+  if (d.login && d.login.password) history.push({ password: d.login.password, changed: now, by: S.acct.email });
+  const data = Object.assign({}, d, { login: Object.assign({}, d.login, { password: h.password }), history: history.slice(-historyCount()), passwordChanged: now, passwordChangedBy: S.acct.email });
+  try {
+    const saved = await saveItem(it, data);
+    reportUse(saved, "restored");
+    toast(t("The former password is the current one again."));
     render();
   } catch (e) { toast(e.message, true); }
 }
@@ -1283,6 +1316,7 @@ function renderEditor() {
     err.hidden = true;
     const old = e.item && e.item.data;
     // Keep what this editor does not show (for example the TOTP secret of an import).
+    let pwChanged = false;
     const out = Object.assign({}, old || {}, {
       type: type.value, name: name.value.trim(), folder: folder.value, favorite: fav.checked, notes: notes.value,
       fields: [...fields.children].map((r) => { const i = r.querySelectorAll("input"); return { name: i[0].value.trim(), value: i[1].value, hidden: i[2].checked }; }).filter((f) => f.name || f.value),
@@ -1293,10 +1327,10 @@ function renderEditor() {
       out.login = Object.assign({}, old && old.login || {}, { username: user.value.trim(), password: pass.value, urls: [...urls.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean) });
       const oldPw = old && old.login ? old.login.password : "";
       if (oldPw && oldPw !== out.login.password) {
-        out.history.push({ password: oldPw, changed: new Date().toISOString() });
-        out.history = out.history.slice(-10);
+        out.history.push({ password: oldPw, changed: new Date().toISOString(), by: S.acct.email });
+        out.history = out.history.slice(-historyCount());
       }
-      if (oldPw !== out.login.password) out.passwordChanged = new Date().toISOString();
+      if (oldPw !== out.login.password) { out.passwordChanged = new Date().toISOString(); out.passwordChangedBy = S.acct.email; pwChanged = !!oldPw; }
       out.login.totp = totp.value.trim();
       if (out.login.totp) {
         try { totpParse(out.login.totp); } catch (x) { err.textContent = t("The authenticator key is not valid."); err.hidden = false; return; }
@@ -1328,6 +1362,7 @@ function renderEditor() {
     try {
       const target = vaultSel.value || curVault;
       const saved = e.item && target !== e.item.vault_id ? await moveItem(e.item, target, out) : await saveItem(e.item || { vault_id: target }, out);
+      if (pwChanged) reportUse(saved, "changed");
       S.editing = null;
       S.selected = saved.id;
       toast(t("Saved."));
@@ -1361,7 +1396,8 @@ function openGenerator(onUse) {
 function fmtSize(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
 
 function attachmentsBlock(it) {
-  const files = it.data.attachments || [];
+  // pictures of the documentation are files too, shown in the page only
+  const files = (it.data.attachments || []).filter((f) => !f.doc);
   const canEdit = !it.deleted_at && canEditItem(it);
   if (!files.length && !canEdit) return null;
   const input = el("input", { type: "file", hidden: true, multiple: true });
@@ -1722,8 +1758,11 @@ function accessLog(it) {
     if (!d.open) return;
     try {
       const list = await api("GET", "/api/items/" + it.id + "/access");
-      const what = { show: t("showed the password"), copy: t("copied a secret"), fill: t("filled it in"), view: t("opened it"), connect: t("connected with it") };
-      body.replaceChildren(list.length ? el("ul", null, ...list.map((a) => el("li", null, el("b", { text: a.email }), " " + (what[a.action] || a.action) + " · ", el("small", { class: "muted", text: fmtDate(a.at) + (a.ip ? " · " + a.ip : "") }))))
+      const what = { show: t("showed the password"), copy: t("copied a secret"), fill: t("filled it in"), view: t("opened it"), connect: t("connected with it"),
+        changed: t("changed the password"), restored: t("restored a former password"), rotated: t("changed the password on the device") };
+      const via = { web: t("web vault"), extension: t("browser extension"), console: t("from a MaxZit console (WatchZit)"), cli: t("command line") };
+      body.replaceChildren(list.length ? el("ul", null, ...list.map((a) => el("li", null, el("b", { text: a.email }), " " + (what[a.action] || a.action) + " · ",
+        el("small", { class: "muted", text: [fmtDate(a.at), via[a.via] || "", a.device, a.ip].filter(Boolean).join(" · ") }))))
         : el("p", { class: "muted", text: t("Nobody has used it yet.") }));
     } catch (e) { body.replaceChildren(el("p", { class: "muted", text: e.message })); }
   });

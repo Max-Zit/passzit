@@ -15,6 +15,9 @@
       <label>{{.T "Minimum master password length"}}<input type="number" name="min_password_length" value="{{.Data.MinPasswordLength}}" min="10" max="64" required><small>{{.T "For new accounts and changed master passwords."}}</small></label>
       <label>{{.T "Empty the trash after (days)"}}<input type="number" name="trash_days" value="{{.Data.TrashDays}}" min="1" max="365" required></label>
     </div>
+    <div class="cols">
+      <label>{{.T "Former passwords kept per item"}}<input type="number" name="history_count" value="{{.Data.HistoryCount}}" min="1" max="100" required><small>{{.T "The password history of an item; former passwords can be shown and restored."}}</small></label>
+    </div>
   </section>
   <section class="panel">
     <h2>{{template "icon" "file"}}{{.T "Files and breach check"}}</h2>

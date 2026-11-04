@@ -191,6 +191,10 @@ type Member struct {
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 	PublicKey   string     `json:"public_key"`
 	Disabled    bool       `json:"disabled"`
+	// BaseRights come back at RightsUntil (temporary rights of an
+	// approved request).
+	BaseRights  string     `json:"base_rights,omitempty"`
+	RightsUntil *time.Time `json:"rights_until,omitempty"`
 }
 
 // VaultMembers lists the members of a shared vault (for its members).
@@ -205,7 +209,7 @@ func (s *Store) VaultMembers(ctx context.Context, userID int64, vaultID string) 
 	if !ok {
 		return nil, ErrNotFound
 	}
-	rows, err := s.db.Query(ctx, `SELECT u.id, u.email, u.display_name, m.rights, m.group_id, COALESCE(g.name, ''), m.expires_at, u.public_key, u.disabled
+	rows, err := s.db.Query(ctx, `SELECT u.id, u.email, u.display_name, m.rights, m.group_id, COALESCE(g.name, ''), m.expires_at, u.public_key, u.disabled, COALESCE(m.base_rights, ''), m.rights_until
 		FROM vault_members m JOIN users u ON u.id=m.user_id LEFT JOIN groups g ON g.id=m.group_id
 		WHERE m.vault_id=$1 ORDER BY lower(u.email)`, vaultID)
 	if err != nil {
@@ -213,7 +217,7 @@ func (s *Store) VaultMembers(ctx context.Context, userID int64, vaultID string) 
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Member, error) {
 		var m Member
-		err := r.Scan(&m.UserID, &m.Email, &m.DisplayName, &m.Rights, &m.GroupID, &m.GroupName, &m.ExpiresAt, &m.PublicKey, &m.Disabled)
+		err := r.Scan(&m.UserID, &m.Email, &m.DisplayName, &m.Rights, &m.GroupID, &m.GroupName, &m.ExpiresAt, &m.PublicKey, &m.Disabled, &m.BaseRights, &m.RightsUntil)
 		return m, err
 	})
 }
@@ -276,7 +280,7 @@ func (s *Store) PutMember(ctx context.Context, actor int64, actorName, vaultID s
 	case err != nil:
 		return false, err
 	default:
-		_, err = tx.Exec(ctx, `UPDATE vault_members SET rights=$3, expires_at=$4, revision=nextval('revisions') WHERE vault_id=$1 AND user_id=$2`,
+		_, err = tx.Exec(ctx, `UPDATE vault_members SET rights=$3, expires_at=$4, base_rights=NULL, rights_until=NULL, revision=nextval('revisions') WHERE vault_id=$1 AND user_id=$2`,
 			vaultID, c.UserID, c.Rights, c.ExpiresAt)
 	}
 	if err != nil {
@@ -717,7 +721,7 @@ func (s *Store) PutVaultGroup(ctx context.Context, actor int64, vaultID string, 
 		}
 		return err
 	}
-	rows, err := tx.Query(ctx, `UPDATE vault_members SET rights=$3, revision=nextval('revisions') WHERE vault_id=$1 AND group_id=$2 RETURNING user_id`, vaultID, groupID, rights)
+	rows, err := tx.Query(ctx, `UPDATE vault_members SET rights=CASE WHEN rights_until IS NULL THEN $3 ELSE rights END, base_rights=CASE WHEN rights_until IS NULL THEN NULL ELSE $3 END, revision=nextval('revisions') WHERE vault_id=$1 AND group_id=$2 RETURNING user_id`, vaultID, groupID, rights)
 	if err != nil {
 		return err
 	}

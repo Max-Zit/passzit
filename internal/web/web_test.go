@@ -645,7 +645,7 @@ func TestPolicyAndPrefs(t *testing.T) {
 		t.Fatalf("too weak key derivation accepted: %d", code)
 	}
 	if code, _ := admin.form("/settings/policy", url.Values{"lock_minutes": {"10"}, "clipboard_seconds": {"20"}, "min_password_length": {"14"}, "trash_days": {"7"}, "max_file_mb": {"1"}, "storage_mb": {"2"},
-		"kdf_m": {"32"}, "kdf_t": {"3"}, "kdf_p": {"2"}}); code != http.StatusSeeOther {
+		"kdf_m": {"32"}, "kdf_t": {"3"}, "kdf_p": {"2"}, "history_count": {"20"}}); code != http.StatusSeeOther {
 		t.Fatalf("policy: %d", code)
 	}
 	// a user may choose shorter times, not longer ones

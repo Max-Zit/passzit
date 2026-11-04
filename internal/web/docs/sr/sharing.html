@@ -6,14 +6,16 @@
 <p>Pravila mogu da dozvole pravljenje deljenih trezora samo administratorima (<i>Podešavanja → Pravila trezora → Deljenje i izvoz</i>).</p>
 
 <h2 id="rights">Prava</h2>
+<p>Prava svake osobe i grupe su polja za potvrdu u podešavanjima trezora (<i>Članovi i podešavanja</i>). Više pravo uključuje niža: kada označite jedno, označe se i ona pre njega, a kada ga poništite, ponište se i ona posle njega.</p>
 <table>
-  <tr><th>Pravo</th><th>Sme da</th></tr>
-  <tr><td>Korišćenje</td><td>popunjava i kopira prijave (web trezor i ekstenzija), ali ne prikazuje lozinke, beleške i fajlove</td></tr>
-  <tr><td>Čitanje</td><td>vidi sve</td></tr>
-  <tr><td>Čitanje i izmena</td><td>i dodaje, menja i briše stavke</td></tr>
-  <tr><td>Upravljanje</td><td>i članove, grupe, naziv i sam trezor</td></tr>
+  <tr><th>Polje</th><th>Sme da</th></tr>
+  <tr><td>Povezivanje i popunjavanje</td><td>otvara veze (i iz WatchZit-a), popunjava i kopira prijave (web trezor i ekstenzija), ali ne prikazuje lozinke, beleške, dokumentaciju i fajlove — ima ga svaki član</td></tr>
+  <tr><td>Pregled lozinki</td><td>vidi sve</td></tr>
+  <tr><td>Dodavanje i izmena</td><td>i dodaje, menja i briše stavke</td></tr>
+  <tr><td>Upravljaj</td><td>i članove, grupe, naziv i sam trezor</td></tr>
 </table>
-<p>Server odbija izmene bez prava. <b>Korišćenje</b> je olakšica, ne brava: ko može da unese lozinku u stranicu, uz malo truda može i da je sazna. Trezor uvek zadržava bar jednog upravnika.</p>
+<p>Na primer: grupa <i>Podrška</i> dobija <i>Povezivanje i popunjavanje</i> i <i>Pregled lozinki</i>, a grupa <i>Administratori</i> i <i>Dodavanje i izmena</i>.</p>
+<p>Server odbija izmene bez prava. <i>Povezivanje i popunjavanje</i> bez <i>Pregleda lozinki</i> je olakšica, ne brava: ko može da unese lozinku u stranicu, uz malo truda može i da je sazna. Trezor uvek zadržava bar jednog upravnika.</p>
 
 <h2 id="members">Dodavanje osoba</h2>
 <p>U delu <i>Dodaj osobu</i> izaberite korisnika i pravo, po želji i datum završetka. Vaš pregledač pečati ključ trezora <b>javnim ključem</b> te osobe; server čuva samo zapečaćen ključ.</p>
@@ -22,8 +24,16 @@
 <h2 id="timed">Vremenski ograničen pristup</h2>
 <p>Sa datumom završetka pristup sam prestaje na kraju tog dana, na primer za spoljnog tehničara. Dnevnik revizije beleži kraj.</p>
 
+<h2 id="requests">Zahtevi za pristup</h2>
+<p>U delu <i>Alati → Zahtevi za pristup</i> svako može da zatraži pristup, uz razlog i trajanje (od 1 sata do 30 dana):</p>
+<ul>
+  <li><b>Više prava u timskom trezoru u kome ste</b> (i dugmetom sa ključem u naslovu trezora): odobriti može svaki upravnik trezora. Prava odmah rastu i na kraju se sama vraćaju.</li>
+  <li><b>Pristup trezoru u kome niste:</b> pitate osobu — upravnika ili administratora. Ta osoba bira trezor i klikne <i>Daj pristup</i>; pregledač potvrđuje otisak vašeg ključa i daje pristup do kraja roka, posle čega sam prestaje, a trezor dobija novi ključ.</li>
+</ul>
+<p>Ko sme da odluči dobija e-poruku (ako server šalje e-poštu) i broj pored <i>Zahtevi za pristup</i>; osoba koja je tražila saznaje odluku na isti način. Zahtevi o kojima niko ne odluči ističu posle 7 dana. Zahtevi, odluke i kraj privremenih prava beleže se u dnevniku revizije. Kada upravnik ručno promeni prava osobe, privremena prava prestaju.</p>
+
 <h2 id="rotation">Odlazak i novi ključ</h2>
 <p>Kada neko napusti trezor — uklonjen je, pristup je istekao, izašao je iz grupe ili mu je nalog obrisan — i dalje zna stari ključ trezora. Zato PassZit trezoru daje <b>novi ključ</b>: kada upravnik ukloni osobu u pregledaču, to se dešava odmah; inače se trezor označi i prvi sledeći upravnik koji ga otvori vidi <i>Zameni ključ sada</i>. Pregledač ponovo šifruje svaku stavku novim ključem i pečati novi ključ za svakog preostalog člana. Ono što je osoba već videla ne može se vratiti — po potrebi promenite važne lozinke.</p>
 
 <h2 id="groups">Grupe</h2>
-<p>Administratori prave <b>grupe</b> u delu <i>Grupe</i> i biraju njihove članove. Upravnik daje grupi pristup trezoru u njegovim podešavanjima. Pošto server ne može da pečati ključeve, pristup daje pregledač upravnika: odmah kada se grupa doda, a kasnije automatski kada upravnik otvori trezor (tada novi članovi grupe dobijaju pristup). Izlazak iz grupe odmah prekida njen pristup. Grupe mogu da prate direktorijum kompanije ili provajdera identiteta (<a href="/docs/admin#company">Prijava preko kompanije</a>).</p>
+<p>Administratori prave <b>grupe</b> u delu <i>Grupe</i> i biraju njihove članove. Upravnik daje grupi pristup trezoru u njegovim podešavanjima i označava šta grupa sme (ista polja kao za osobu). Pošto server ne može da pečati ključeve, pristup daje pregledač upravnika: odmah kada se grupa doda, a kasnije automatski kada upravnik otvori trezor (tada novi članovi grupe dobijaju pristup). Izlazak iz grupe odmah prekida njen pristup. Grupe mogu da prate direktorijum kompanije ili provajdera identiteta (<a href="/docs/admin#company">Prijava preko kompanije</a>).</p>
