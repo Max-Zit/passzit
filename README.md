@@ -16,7 +16,7 @@
 
 > **Status:** under active development; the first public release was 0.9.0 in November 2026 and new versions come out often. Development happens on the `develop` branch; follow the repository or [Discussions](https://github.com/Max-Zit/passzit/discussions) for news.
 
-**Browser extension:** [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/lnncodjlllmeaoebmnncjaofiaiipghe) (Firefox and Chrome Web Store are in review) · for Firefox, Chrome, Opera, Brave and Vivaldi download it from your PassZit console (*Extensions*).
+**Browser extension:** [Chrome Web Store](https://chromewebstore.google.com/detail/kldmhdpnijihjfgfgngfjooppfhidcfc) (also Brave, Opera, Vivaldi) · [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/passzit/) · [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/lnncodjlllmeaoebmnncjaofiaiipghe) · or download it from your PassZit console (*Extensions*).
 
 | | |
 |---|---|

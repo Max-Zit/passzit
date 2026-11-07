@@ -38,7 +38,7 @@ type extensionStore struct {
 var extensionStores = []extensionStore{
 	{Browser: "chrome", Name: "Chrome Web Store", URL: "https://chromewebstore.google.com/detail/kldmhdpnijihjfgfgngfjooppfhidcfc"},
 	{Browser: "edge", Name: "Microsoft Edge Add-ons", URL: "https://microsoftedge.microsoft.com/addons/detail/lnncodjlllmeaoebmnncjaofiaiipghe"},
-	{Browser: "firefox", Name: "Firefox Add-ons"},
+	{Browser: "firefox", Name: "Firefox Add-ons", URL: "https://addons.mozilla.org/firefox/addon/passzit/"},
 }
 
 func publishedStores() []extensionStore {
