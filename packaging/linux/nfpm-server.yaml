@@ -61,6 +61,10 @@ contents:
     dst: /usr/share/passzit/appliance/sudoers-passzit-setup
   - src: ./packaging/appliance/sshd-passzit.conf
     dst: /usr/share/passzit/appliance/sshd-passzit.conf
+  - src: ./packaging/appliance/sysctl-passzit.conf
+    dst: /usr/share/passzit/appliance/sysctl-passzit.conf
+  - src: ./packaging/appliance/modprobe-passzit.conf
+    dst: /usr/share/passzit/appliance/modprobe-passzit.conf
   - src: ./packaging/linux/server.env
     dst: /etc/passzit/server.env
     type: config|noreplace

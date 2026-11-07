@@ -30,6 +30,12 @@ if [ -f /var/lib/passzit/.appliance ]; then
     install -m 0644 $a/passzit-menu.sh /etc/profile.d/passzit-menu.sh
     install -m 0440 $a/sudoers-passzit-setup /etc/sudoers.d/passzit-setup
     systemctl daemon-reload 2>/dev/null || true
+    # Kernel and module hardening (Lynis), also for appliances installed
+    # before; PostgreSQL settings readable only by postgres.
+    install -m 0644 $a/sysctl-passzit.conf /etc/sysctl.d/60-passzit.conf
+    install -m 0644 $a/modprobe-passzit.conf /etc/modprobe.d/60-passzit.conf
+    sysctl -q -p /etc/sysctl.d/60-passzit.conf 2>/dev/null || true
+    chmod o-rwx /etc/postgresql/*/main/*.conf 2>/dev/null || true
     systemctl enable passzit-appliance-boot.service >/dev/null 2>&1 || true
     if [ -d /etc/ssh/sshd_config.d ]; then
         install -m 0644 $a/sshd-passzit.conf /etc/ssh/sshd_config.d/50-passzit.conf
