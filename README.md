@@ -12,11 +12,11 @@
 [![CI](https://github.com/Max-Zit/passzit/actions/workflows/ci.yml/badge.svg)](https://github.com/Max-Zit/passzit/actions/workflows/ci.yml)
 [![Security scan](https://github.com/Max-Zit/passzit/actions/workflows/security.yml/badge.svg)](https://github.com/Max-Zit/passzit/actions/workflows/security.yml)
 
-**Free, open-source, self-hosted password manager** for people and teams — your own server, end-to-end encrypted vaults, and browser extensions for Chrome, Edge, Firefox, Opera and Brave.
+**Free, open-source, self-hosted password manager** for people and teams — your own server, end-to-end encrypted vaults, and browser extensions for Chrome, Edge, Firefox, Opera, Brave and Vivaldi.
 
 > **Status:** under active development; the first public release was 0.9.0 in November 2026 and new versions come out often. Development happens on the `develop` branch; follow the repository or [Discussions](https://github.com/Max-Zit/passzit/discussions) for news.
 
-**Browser extension:** [Chrome Web Store](https://chromewebstore.google.com/detail/kldmhdpnijihjfgfgngfjooppfhidcfc) (also Brave, Opera, Vivaldi) · [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/passzit/) · [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/lnncodjlllmeaoebmnncjaofiaiipghe) · or download it from your PassZit console (*Extensions*).
+**Browser extension:** [Chrome Web Store](https://chromewebstore.google.com/detail/kldmhdpnijihjfgfgngfjooppfhidcfc) (also Brave, Opera, Vivaldi) · [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/passzit/) · [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/lnncodjlllmeaoebmnncjaofiaiipghe) (update to 0.9.4 in review) · or download it from your PassZit console (*Extensions*).
 
 | | |
 |---|---|
@@ -41,20 +41,21 @@ The script checks the release signature, installs PostgreSQL, starts the service
 ## Features
 
 - **End-to-end encryption, zero knowledge:** the browser derives keys from the master password with Argon2id (64 MiB, 3 passes), encrypts every item — name, user name, password, websites, notes, files — with AES-256-GCM and sends only ciphertext. The server stores an argon2id hash of a separate auth key and never sees the master password or any key it could use. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- **Web vault:** websites, remote connections (RDP, SSH, WinSCP, WinBox, VNC, Telnet), SSH keys (Ed25519 generated in the browser), secure notes, cards, identities; one-time codes (TOTP, also read from a QR code), encrypted file attachments, own fields, nested folders typed as customer, site, branch, department, data center, network or project, favourites, search across all vaults, trash, password history, password health report with an optional breach check (k-anonymity), clipboard clearing; installable as an app.
+- **Web vault:** websites, remote connections (RDP, SSH, WinSCP, WinBox, VNC, Telnet), SSH keys (Ed25519 generated in the browser), secure notes, cards, identities; one-time codes (TOTP, also read from a QR code), encrypted file attachments, own fields, nested folders typed as customer, site, branch, department, data center, network or project, favourites, search across all vaults, trash, password history with restore, documentation per item (an encrypted page with headings, tables, code and pictures), password health report with an optional breach check (k-anonymity), clipboard clearing; installable as an app.
+- **Passkeys in the vault:** the extension saves website passkeys as encrypted vault items and signs in with them in every browser it runs in.
 - **Unlock:** one unlock for the web vault and the browser extension; no automatic lock by default (the policy or the user can set one); unlock with **Windows Hello**, Touch ID or the phone's screen lock through a passkey (WebAuthn PRF — the server keeps only the sealed key).
-- **Browser extensions** for Chrome, Edge, Opera, Brave, Vivaldi and Firefox, downloadable from the console: fill logins and one-time codes only on the matching site (Public Suffix List), offer to save new and changed logins, scan a 2FA QR code, generator, search.
-- **Remote connections:** double-click an RDP, SSH, WinSCP, WinBox, VNC or Telnet item and the paired **MaxZit Launcher** (shared with [WatchZit](https://github.com/Max-Zit/watchzit), downloadable from the console) opens it with the stored credentials.
-- **Teams:** shared vaults with per-user rights (view, use, edit, manage), groups, time-limited access, LDAP and SSO (OIDC, SAML) sign-in, secret links, emergency access, per-item access log, four-eyes approval.
-- **Command line:** the `passzit` command (Linux, Windows, macOS) reads logins and one-time codes in scripts, decrypting on its own computer.
+- **Browser extensions** for Chrome, Edge, Opera, Brave, Vivaldi and Firefox, from the stores or the console; connected by entering the server address: fill logins and one-time codes only on the matching site (Public Suffix List), offer to save new and changed logins, scan a 2FA QR code, generator, search.
+- **Remote connections:** double-click an RDP, SSH, WinSCP, WinBox, VNC or Telnet item and the paired **MaxZit Launcher** (shared with [WatchZit](https://github.com/Max-Zit/watchzit), downloadable from the console) opens it with the stored credentials — also in one click from a device in WatchZit (*Open with*).
+- **Teams:** shared vaults with per-user rights (view, use, edit, manage), groups, time-limited access, access requests with approval (more rights for some hours), LDAP and SSO (OIDC, SAML) sign-in, secret links, emergency access, per-item access log, four-eyes approval.
+- **Command line:** the `passzit` command (Linux, Windows, macOS) reads logins and one-time codes in scripts, and `passzit rotate` changes device passwords over SSH (Linux, MikroTik, Windows) and saves the new ones; it decrypts on its own computer.
 - **Import and export:** Chrome, Edge, Firefox, Safari, Bitwarden, KeePass/KeePassXC, 1Password, LastPass and generic CSV; encrypted PassZit export.
 - **Accounts:** only by invitation; mandatory two-factor sign-in (TOTP, security keys and passkeys, recovery codes); recovery key for a forgotten master password; master-password change without re-encrypting the items.
-- **Administration:** roles, vault policy (lock time, clipboard, key derivation, minimum length, trash, file limits, breach check), sessions and sign-in blocks, IP allow-list, hash-chained audit log, built-in user guide; 14 languages.
-- **Operation:** one-line installer with signature check, deb/rpm packages, appliance images, signed self-update with rollback and Stable/Testing channels, encrypted daily console backups with SFTP copy and restore.
+- **Administration:** roles, vault policy (lock time, clipboard, key derivation, minimum length, trash, file limits, breach check), sessions and sign-in blocks, IP allow-list, hash-chained audit log, e-mail notifications; interface in 14 languages; user guide in English and Serbian.
+- **Operation:** one-line installer with signature check, deb/rpm packages, appliance images, certificates from Let's Encrypt (HTTP-01 or Cloudflare DNS-01) or uploaded, signed self-update with rollback and Stable/Testing channels, encrypted daily console backups with SFTP copy and restore.
 
 ## Planned
 
-- Opening devices from [WatchZit](https://github.com/Max-Zit/watchzit) with the stored credentials in one click.
+- Safari and mobile apps.
 - More import formats.
 
 ## Building

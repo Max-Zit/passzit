@@ -16,7 +16,7 @@ We confirm reports within a few working days, fix confirmed problems in a new re
 ## How releases are protected
 
 - Every release has a manifest signed with the PassZit release key (ed25519); the console's update and `install.sh` verify the signature and checksums before installing.
-- Release packages are built from tagged commits of this repository; the appliance images carry a written source offer (`SOURCE-CODE.txt`). The browser extensions in the stores are built from the same tag (the source archive is attached to the Firefox submission).
+- Release packages are built from tagged commits of this repository; the appliance images carry a written source offer (`SOURCE-CODE.txt`). The browser extension has its own version (`extension/VERSION`); the store packages are built from the tag of that extension version (for example `v0.9.4`), which can be older than the current server release when the extension did not change (the source archive is attached to the Firefox submission).
 
 ## How PassZit is tested
 
