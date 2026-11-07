@@ -34,7 +34,7 @@ func run() error {
 		return err
 	}
 	for _, m := range []string{"argon2", "qr"} {
-		cmd := exec.Command(goBin, "build", "-trimpath", "-ldflags=-s -w -buildid=", "-o", filepath.Join(out, m+".wasm"), "./tools/"+m+"wasm") // #nosec G204 -- fixed arguments
+		cmd := exec.Command(goBin, "build", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=", "-o", filepath.Join(out, m+".wasm"), "./tools/"+m+"wasm") // #nosec G204 -- fixed arguments
 		cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {

@@ -27,8 +27,11 @@ for t in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
   ext=""; [ "${t%/*}" = windows ] && ext=".exe"
   GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -ldflags "-s -w -X main.version=$V" -o "dist/passzit-cli-$V-${t%/*}-${t#*/}$ext" ./cmd/passzit
 done
-# Browser extensions (Chromium browsers and Firefox).
-go run ./tools/extpack -version "$V" >/dev/null
+# Browser extensions (Chromium browsers and Firefox), with their own version
+# (extension/VERSION): an unchanged extension keeps it, so the stores need
+# no new review.
+EV=$(tr -d "[:space:]" < extension/VERSION)
+go run ./tools/extpack -version "$EV" >/dev/null
 # Licenses of everything linked into the programs (fails on an unknown license).
 go run ./tools/licenses -out THIRD_PARTY_LICENSES.md "dist/passzit-server-$V-linux-amd64" "dist/passzit-server-$V-linux-arm64" "dist/passzit-server-$V-windows-amd64.exe" "dist/passzit-helper-$V-windows-amd64.exe" "dist/passzit-cli-$V-linux-amd64" "dist/passzit-cli-$V-windows-amd64.exe" ./tools/argon2wasm ./tools/qrwasm
 cp THIRD_PARTY_LICENSES.md "dist/THIRD_PARTY_LICENSES-$V.md"
@@ -77,7 +80,7 @@ rm -rf "$R" && mkdir -p "$R"
 cp "dist/passzit-server-$V-linux-amd64" "dist/passzit-server-$V-linux-arm64" "dist/passzit-server-$V-windows-amd64.exe" \
    "dist/passzit-server_${V}_amd64.deb" "dist/passzit-server_${V}_arm64.deb" \
    "dist/passzit-server-${V}-1.x86_64.rpm" "dist/passzit-server-${V}-1.aarch64.rpm" \
-   "dist/passzit-extension-chromium-$V.zip" "dist/passzit-extension-firefox-$V.zip" \
+   "dist/passzit-extension-chromium-$EV.zip" "dist/passzit-extension-firefox-$EV.zip" \
    "dist/passzit-helper-$V-windows-amd64.exe" "dist/passzit-helper-$V-linux-amd64" "dist/passzit-helper-$V-linux-arm64" \
    dist/passzit-cli-"$V"-* \
    "dist/THIRD_PARTY_LICENSES-$V.md" packaging/install.sh "$R/"

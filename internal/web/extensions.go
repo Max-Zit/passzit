@@ -86,11 +86,12 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, p)
 }
 
-// extensionVersion is the version the packed extensions get (development
-// builds: 0.0.0).
+// extensionVersion is the version the packed extensions get: the
+// extension's own version in releases (it changes only with the
+// extension, see extension.Version), 0.0.0 in development builds.
 func (s *Server) extensionVersion() string {
-	if extpack.ValidVersion(s.Version) {
-		return s.Version
+	if extpack.ValidVersion(s.Version) && extpack.ValidVersion(extension.Version()) {
+		return extension.Version()
 	}
 	return "0.0.0"
 }
