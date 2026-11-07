@@ -413,8 +413,23 @@ func (s *Server) handleSAMLACS(w http.ResponseWriter, r *http.Request) {
 		s.ssoFailed(w, r, errSSOState)
 		return
 	}
+	// Only the HTTP-POST binding the console asks for (no artifact
+	// resolution), checked before the library reads it (GO-2026-6909, see
+	// samlcheck.go).
+	raw, err := base64.StdEncoding.DecodeString(r.PostForm.Get("SAMLResponse"))
+	if err == nil && r.PostForm.Get("SAMLart") != "" {
+		err = samlErr("SAML artifact binding is not used")
+	}
+	if err == nil {
+		err = checkSAMLResponse(raw, sp.Key)
+	}
+	if err != nil {
+		s.log.Warn("SAML response refused", "err", err.Error())
+		s.ssoFailed(w, r, uiMsg("The response of the identity provider is not valid."))
+		return
+	}
 	// Signed by the identity provider and the answer to our own request.
-	a, err := sp.ParseResponse(r, []string{v[1]})
+	a, err := parseSAMLResponse(func() (*saml.Assertion, error) { return sp.ParseResponse(r, []string{v[1]}) })
 	if err != nil {
 		detail := err.Error()
 		var ie *saml.InvalidResponseError

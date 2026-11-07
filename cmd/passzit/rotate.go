@@ -361,8 +361,10 @@ func changeOnDevice(method, addr, user, old, nw string) error {
 		return err
 	}
 	defer s.Close()
-	var out bytes.Buffer
-	s.Stdout, s.Stderr = &out, &out
+	// stdout and stderr are copied by two goroutines of the session: one
+	// buffer behind one lock
+	out := &lockedBuffer{b: new(bytes.Buffer), mu: new(sync.Mutex)}
+	s.Stdout, s.Stderr = out, out
 	switch method {
 	case "mikrotik":
 		q := func(v string) string {
@@ -377,7 +379,7 @@ func changeOnDevice(method, addr, user, old, nw string) error {
 			strings.ReplaceAll(old, "'", "''") + "','" + strings.ReplaceAll(nw, "'", "''") + "')"
 		err = s.Run("powershell -NoProfile -NonInteractive -EncodedCommand " + utf16Base64(ps))
 	case "linux":
-		err = passwdOverPTY(s, &out, old, nw)
+		err = passwdOverPTY(s, out, old, nw)
 	default:
 		return fmt.Errorf("unknown method %q", method)
 	}
@@ -402,7 +404,7 @@ func utf16Base64(s string) string {
 
 // passwdOverPTY answers the prompts of passwd: the current password first
 // (when asked), then the new one twice.
-func passwdOverPTY(s *ssh.Session, out *bytes.Buffer, old, nw string) error {
+func passwdOverPTY(s *ssh.Session, buf *lockedBuffer, old, nw string) error {
 	if err := s.RequestPty("xterm", 24, 80, ssh.TerminalModes{ssh.ECHO: 0}); err != nil {
 		return err
 	}
@@ -410,9 +412,6 @@ func passwdOverPTY(s *ssh.Session, out *bytes.Buffer, old, nw string) error {
 	if err != nil {
 		return err
 	}
-	var mu sync.Mutex
-	buf := &lockedBuffer{b: out, mu: &mu}
-	s.Stdout, s.Stderr = buf, buf
 	if err := s.Start("LC_ALL=C passwd"); err != nil {
 		return err
 	}

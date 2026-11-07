@@ -1,0 +1,4 @@
+# Vulnerabilities govulncheck reports in called code that are accepted for a
+# while, because no fixed release exists and PassZit works around them.
+# "<ID> <until YYYY-MM-DD> <reason>" - read by tools/vulngate in CI.
+GO-2026-6909 2026-12-07 crewjam/saml v0.5.1 (fix merged upstream 2026-11-06, not released): internal/web/samlcheck.go refuses SAML responses with assertion elements outside the SAML namespace or without a subject (also in encrypted assertions) before the library reads them, and turns a parser panic into a refused response. Update crewjam/saml when the fixed release is out.
