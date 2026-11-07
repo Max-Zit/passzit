@@ -1,11 +1,10 @@
-# Security checks on every push and pull request, and weekly (new CVEs).
+# The security checks weekly and on demand: new CVEs appear without a push.
+# On every push they run as the "go" job of ci.yml.
 name: security
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
   schedule:
     - cron: "17 4 * * 1"
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

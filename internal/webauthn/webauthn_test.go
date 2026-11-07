@@ -53,7 +53,7 @@ type softKey struct {
 	sign uint32
 }
 
-func newSoftKey(t *testing.T, alg int) *softKey {
+func newSoftKey(t testing.TB, alg int) *softKey {
 	k := &softKey{alg: alg, id: make([]byte, 16)}
 	_, _ = rand.Read(k.id)
 	var err error

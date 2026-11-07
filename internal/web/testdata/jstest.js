@@ -89,6 +89,50 @@ try {
   expect("encrypted export", back.items[0].name === "x" && wrong === "DecryptError" && !enc.includes('"x"'), { back, wrong });
   try { tr.detect("just some text"); imp.push("garbage accepted"); } catch (e) { /* refused */ }
   out.imports = imp;
+  // mutation fuzzing of the importers (files people bring from other
+  // programs): damaged input may be refused with an Error, never crash
+  // otherwise, hang or give something that is not a list of items
+  const fz = [];
+  let seed = 7;
+  const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const junk = ['"', ",", "\n", "\r", "<", ">", "&", "{", "}", "[", "]", ":", "\\", "\u0000", "﻿", "&lt;", "<![CDATA[", "<!DOCTYPE x>", "1e999", "null"];
+  const samples = ["name,url,username,password,note\nGitHub,https://github.com/login,alice,pw1,hello\n",
+    '"url","username","password"\r\n"https://example.com","bob","p,w""2"\r\n',
+    "url,username,password,totp,extra,name,grouping,fav\nhttp://sn,,,,Wifi,Home,Home,1\n",
+    JSON.stringify({ encrypted: false, folders: [{ id: "f1", name: "B" }], items: [{ type: 1, name: "B", folderId: "f1", login: { username: "u", password: "p", uris: [{ uri: "https://b.com" }] }, fields: [{ name: "PIN", value: "1", type: 1 }] }, { type: 3, name: "V", card: { number: "4111" } }] }),
+    '<?xml version="1.0"?><KeePassFile><Root><Group><Name>R</Name><Entry><String><Key>Title</Key><Value>t</Value></String></Entry><Group><Name>S</Name></Group></Group></Root></KeePassFile>',
+    csv];
+  const started = Date.now();
+  for (const s of samples) {
+    for (let i = 0; i < 300; i++) {
+      let m = s;
+      for (let j = 1 + rnd(4); j > 0; j--) {
+        const at = rnd(m.length + 1);
+        const op = rnd(4);
+        if (op === 0) m = m.slice(0, at) + junk[rnd(junk.length)] + m.slice(at);
+        else if (op === 1) m = m.slice(0, at) + m.slice(at + 1 + rnd(8));
+        else if (op === 2) m = m.slice(0, at);
+        else m = m.slice(0, at) + m.slice(rnd(m.length)) ;
+      }
+      try {
+        const res = tr.detect(m);
+        if (!res || (!res.encrypted && !Array.isArray(res.items))) fz.push("no item list for " + JSON.stringify(m.slice(0, 80)));
+      } catch (e) {
+        if (!(e instanceof Error)) fz.push("non-Error thrown for " + JSON.stringify(m.slice(0, 80)));
+      }
+    }
+  }
+  // damaged encrypted exports and secret links must refuse, not open
+  for (let i = 0; i < 40; i++) {
+    const at = 20 + rnd(enc.length - 40);
+    const m = enc.slice(0, at) + (enc[at] === "A" ? "B" : "A") + enc.slice(at + 1);
+    // (a changed unused bit in the last base64 character decodes to the
+    // same bytes: that file is not damaged)
+    const same = (a, b) => pz.b64u(pz.unb64u(a)) === pz.b64u(pz.unb64u(b));
+    try { const d = tr.detect(m); if (d.encrypted) { await tr.importEncrypted(d.encrypted, "export-password-1"); if (!same(d.encrypted.salt, det.encrypted.salt) || !same(d.encrypted.data, det.encrypted.data) || JSON.stringify(d.encrypted.kdf) !== JSON.stringify(det.encrypted.kdf)) fz.push("damaged export opened at " + at); } } catch (e) { if (!(e instanceof Error)) fz.push("non-Error from damaged export"); }
+  }
+  if (Date.now() - started > 60000) fz.push("importer fuzzing took " + (Date.now() - started) + " ms");
+  out.fuzzImports = fz;
   // TOTP: RFC 6238 test vectors (T = 59 s, 8 digits) and otpauth addresses
   const tv = [];
   for (const [alg, b32, want] of c.totp) {

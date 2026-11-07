@@ -150,6 +150,7 @@ func TestJavaScriptCrypto(t *testing.T) {
 		GenPassword, GenPhrase, Uniform, UU bool
 		UUID                                bool `json:"uuid"`
 		Sites, Matches, Imports, TOTP       []string
+		FuzzImports                         []string `json:"fuzzImports"`
 		Syntax                              []string
 		SSH                                 struct{ PrivateKey, PublicKey, Fingerprint string }
 		Error                               string
@@ -204,6 +205,9 @@ func TestJavaScriptCrypto(t *testing.T) {
 	}
 	if len(got.Imports) > 0 {
 		t.Errorf("import/export: %v", got.Imports)
+	}
+	if len(got.FuzzImports) > 0 {
+		t.Errorf("importer fuzzing: %v", got.FuzzImports)
 	}
 	if len(got.Sites)+len(got.Matches) > 0 {
 		t.Errorf("domain matching: %v %v", got.Sites, got.Matches)

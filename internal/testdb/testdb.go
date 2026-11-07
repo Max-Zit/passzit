@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -23,6 +24,13 @@ var (
 
 // Main starts PostgreSQL, runs the tests and stops it. Call it from TestMain.
 func Main(m *testing.M) int {
+	// fuzzing runs its targets in many worker processes; they need no
+	// database (each would start its own)
+	for _, a := range os.Args[1:] {
+		if strings.HasPrefix(a, "-test.fuzz") {
+			return m.Run()
+		}
+	}
 	dir, err := os.MkdirTemp("", "pzpg")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
