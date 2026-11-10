@@ -746,14 +746,14 @@ function renderFilters() {
   }
   for (const [id, v] of teams) nav.append(vaultLink(id, v));
   if (!teams.length && canCreate) nav.append(el("a", { href: "#", class: "muted", onclick: (ev) => { ev.preventDefault(); createVault(); } }, icon("plus"), el("span", { text: t("New shared vault") })));
-  nav.append(el("span", { class: "navlabel brk" }), link("trash", t("Trash"), "trash"),
+  nav.append(...[el("span", { class: "navlabel brk" }), link("trash", t("Trash"), "trash"),
     el("span", { class: "navlabel", text: t("Tools") }),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openHealth(); } }, icon("shield"), el("span", { text: t("Password health") })),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openRequests(""); } }, icon("users"), el("span", { text: t("Access requests") }),
       S.requestsWaiting ? el("small", { class: "badge warn", title: t("Waiting for your decision"), text: String(S.requestsWaiting) }) : null),
     S.acct.no_sends ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openSends(""); } }, icon("link"), el("span", { text: t("Secret links") })),
     el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openImport(); } }, icon("upload"), el("span", { text: t("Import") })),
-    S.acct.no_export ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openExport(); } }, icon("download"), el("span", { text: t("Export") })));
+    S.acct.no_export ? null : el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); openExport(); } }, icon("download"), el("span", { text: t("Export") }))].filter(Boolean));
   return nav;
 }
 
@@ -797,9 +797,9 @@ function renderList() {
   if (editable) actions.append(button("", { class: "ghost sm", icon: "folderplus", aria: t("New folder"), title: t("New folder"), onclick: () => newVaultFolder(S.vault, S.cwd) }));
   if (S.view === "vault" && (S.vaults.get(S.vault) || {}).kind === "shared") {
     const v = S.vaults.get(S.vault);
-    actions.append(el("small", { class: "muted", text: rightsText(v.rights) }),
+    actions.append(...[el("small", { class: "muted", text: rightsText(v.rights) }),
       v.rights !== "manage" ? button("", { class: "ghost sm", icon: "key", aria: t("Ask for more rights"), title: t("Ask for more rights"), onclick: () => openRequests(S.vault) }) : null,
-      button("", { class: "ghost sm", icon: "settings", aria: t("Members and settings"), title: t("Members and settings"), onclick: () => openVaultDialog(S.vault) }));
+      button("", { class: "ghost sm", icon: "settings", aria: t("Members and settings"), title: t("Members and settings"), onclick: () => openVaultDialog(S.vault) })].filter(Boolean));
   }
   tools.append(actions);
   if (S.view === "trash") tools.append(el("small", { class: "muted", text: t("Items in the trash are deleted after %d days.", S.acct.trash_days || 30) }));

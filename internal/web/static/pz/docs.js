@@ -174,8 +174,8 @@ export async function openDoc(item, edit) {
   const read = () => {
     const it = C.S.items.get(item.id) || item;
     const can = !it.deleted_at && C.canEditItem(it);
-    body.replaceChildren(html ? rendered(html, docFiles(it.data)) : el("p", { class: "muted", text: t("There is no documentation yet.") }),
-      can ? el("div", { class: "row end" }, button(t("Edit"), { class: "primary", icon: "edit", onclick: () => editor() })) : null);
+    body.replaceChildren(...[html ? rendered(html, docFiles(it.data)) : el("p", { class: "muted", text: t("There is no documentation yet.") }),
+      can ? el("div", { class: "row end" }, button(t("Edit"), { class: "primary", icon: "edit", onclick: () => editor() })) : null].filter(Boolean));
   };
   const editor = () => {
     const it = C.S.items.get(item.id) || item;
