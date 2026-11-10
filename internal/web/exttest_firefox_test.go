@@ -51,7 +51,7 @@ func TestExtensionInFirefox(t *testing.T) {
 		t.Skip("Firefox not found (set PASSZIT_FIREFOX)")
 	}
 	f := newExtFixture(t)
-	runFirefox(t, ff, f, f.build(t, "firefox"), `user_pref("extensions.originControls.grantByDefault", true);`+"\n", nil)
+	runFirefox(t, ff, f, f.build(t, "firefox"), `user_pref("extensions.originControls.grantByDefault", true);`+"\n", map[string]any{}, nil)
 	f.check(t)
 }
 
@@ -76,7 +76,7 @@ func TestExtensionPortFirefox(t *testing.T) {
 	prefs := `user_pref("extensions.originControls.grantByDefault", false);
 user_pref("extensions.webextOptionalPermissionPrompts", false);
 `
-	runFirefox(t, ff, f, dir, prefs, func(bidi *bidiConn, bc string) {
+	runFirefox(t, ff, f, dir, prefs, map[string]any{}, func(bidi *bidiConn, bc string) {
 		// click until the harness has asked (its button covers the page)
 		var lastErr error
 		defer func() {
@@ -100,13 +100,15 @@ user_pref("extensions.webextOptionalPermissionPrompts", false);
 	}
 }
 
+// ffUUID: a fixed internal UUID makes the moz-extension:// address known.
+const ffUUID = "6f1d2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b"
+
 // runFirefox starts headless Firefox with the extension in dir, opens the
 // harness and calls drive (when given) while it runs.
-func runFirefox(t *testing.T, ff string, f *extFixture, extDir, extraPrefs string, drive func(*bidiConn, string)) {
+func runFirefox(t *testing.T, ff string, f *extFixture, extDir, extraPrefs string, caps map[string]any, drive func(*bidiConn, string)) {
 	t.Helper()
 	profile := browserProfile(t)
-	// A fixed internal UUID makes the moz-extension:// address known.
-	const uuid = "6f1d2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b"
+	const uuid = ffUUID
 	prefs := `user_pref("extensions.webextensions.uuids", "{\"passzit@maxzit.com\":\"` + uuid + `\"}");
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("datareporting.policy.dataSubmissionEnabled", false);
@@ -154,7 +156,7 @@ user_pref("remote.active-protocols", 1);
 		t.Fatal(err)
 	}
 	t.Cleanup(bidi.close)
-	if _, err := bidi.call("session.new", map[string]any{"capabilities": map[string]any{}}); err != nil {
+	if _, err := bidi.call("session.new", map[string]any{"capabilities": map[string]any{"alwaysMatch": caps}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := bidi.call("webExtension.install", map[string]any{"extensionData": map[string]any{"type": "path", "path": extDir}}); err != nil {
@@ -168,10 +170,13 @@ user_pref("remote.active-protocols", 1);
 		Context string `json:"context"`
 	}
 	_ = json.Unmarshal(res, &bc)
-	harness := "moz-extension://" + uuid + "/test/harness.html?" + f.query.Encode()
-	opener := f.ts.URL + "/testsite/open?to=" + url.QueryEscape(harness)
-	if _, err := bidi.call("browsingContext.navigate", map[string]any{"context": bc.Context, "url": opener, "wait": "none"}); err != nil {
-		t.Fatalf("open the harness: %v", err)
+	// a store build has no harness: drive works with the popup itself
+	if f.query.Get("mode") != "store" {
+		harness := "moz-extension://" + uuid + "/test/harness.html?" + f.query.Encode()
+		opener := f.ts.URL + "/testsite/open?to=" + url.QueryEscape(harness)
+		if _, err := bidi.call("browsingContext.navigate", map[string]any{"context": bc.Context, "url": opener, "wait": "none"}); err != nil {
+			t.Fatalf("open the harness: %v", err)
+		}
 	}
 	if drive != nil {
 		drive(bidi, bc.Context)

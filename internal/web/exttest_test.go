@@ -73,6 +73,13 @@ type extFixture struct {
 
 func newExtFixture(t *testing.T) *extFixture {
 	t.Helper()
+	return newExtFixtureOn(t, false)
+}
+
+// newExtFixtureOn: with useTLS the test server runs over HTTPS (its own
+// certificate), like a real PassZit server on a port of its own.
+func newExtFixtureOn(t *testing.T, useTLS bool) *extFixture {
+	t.Helper()
 	if _, err := os.Stat(filepath.Join("static", "pz", "argon2.wasm")); err != nil {
 		t.Skip("argon2.wasm is not built (go run ./tools/buildwasm)")
 	}
@@ -117,7 +124,11 @@ func newExtFixture(t *testing.T) *extFixture {
 		}
 	})
 	mux.Handle("/", e.srv.Handler())
-	f.ts = httptest.NewServer(mux)
+	if useTLS {
+		f.ts = httptest.NewTLSServer(mux)
+	} else {
+		f.ts = httptest.NewServer(mux)
+	}
 	t.Cleanup(f.ts.Close)
 	site := f.ts.URL + "/testsite/login"
 	other := strings.Replace(f.ts.URL, "127.0.0.1", "localhost", 1) + "/testsite/login"
