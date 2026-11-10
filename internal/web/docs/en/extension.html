@@ -17,6 +17,7 @@
 </ol>
 <p>Instead you can open <i>Sign in with e-mail and master password instead</i> in the extension and sign in there with the master password and the code of your authenticator app.</p>
 <p>The extension appears under <i>My account → Active sessions</i> with the name of the browser; you can sign it out there. It stays signed in for 30 days (set by the administrator) and is signed out earlier when it is not used for 14 days.</p>
+<p>The server may run on any port, for example <code>https://vault.example.com:8443</code>: PassZit asks the browser for the server's name without the port (Firefox does not accept a port there) and still talks only to the exact address you entered.</p>
 <div class="callout warn"><p>The server needs a certificate the browser trusts. With the self-signed certificate of a fresh server the extension cannot connect: the administrator sets one under <a href="/docs/admin#certificate">Settings → Certificate</a> (your own certificate or Let's Encrypt). For a test server you can instead trust its certificate on your computer.</p></div>
 
 <h2 id="fill">Filling logins</h2>
@@ -31,7 +32,10 @@
 <p>Without asking, PassZit fills only a login saved for exactly this address (the same host and port) — also with Ctrl+Shift+L. A login of the same website saved for another address (for example <code>accounts.example.com</code> on <code>shop.example.com</code>) is listed too, but <b>Fill</b> first asks whether it may go there.</p>
 
 <h2 id="save">Offering to save</h2>
-<p>In the menu (≡) switch on <i>Offer to save new and changed logins</i>. The browser then asks for access to all websites — needed to notice when you sign in or change a password. When you do, the PassZit icon shows a number; open it and choose <b>Save</b> or <b>Update</b>. PassZit never shows anything inside the web page itself, so a page cannot imitate or click the offer.</p>
+<p>In the menu (≡) switch on <i>Offer to save new and changed logins</i>. The browser then asks for access to all websites — needed to notice when you sign in or change a password. When you do, the PassZit icon shows a number; open it and choose <b>Save</b> or <b>Update</b>. PassZit never shows anything inside the web page itself, so a page cannot imitate or click the offer. A login you already saved with the same password is not offered again, also when PassZit was locked while you signed in (it checks once it is unlocked); a new password for a saved login is offered as an update.</p>
+
+<h2 id="forms">Cards and addresses</h2>
+<p>On a payment or shipping page, open the PassZit icon: <i>Cards and addresses</i> lists the cards and identities of your vault. <b>Fill</b> puts the name, address, e-mail and phone of an identity, or the cardholder, number, expiry and security code of a card into the page; for a card PassZit asks first. Only empty fields (and choices in lists) are filled, only on encrypted (HTTPS) pages and only in the top page — payment fields in a frame of a payment provider are not filled; copy the card number from the web vault there. Check the fields before you send the form.</p>
 
 <h2 id="lock">Locking</h2>
 <p><b>One unlock:</b> the extension and the web vault of the same server share the unlocked state — unlock one of them and the other opens too (when you open the web vault or the extension), lock one and both lock. Each side checks that the keys belong to the same account. Both stay open until you lock or close the browser, unless you chose a lock time under <i>My account</i>. The keys are kept in the browser's memory, never on disk.</p>

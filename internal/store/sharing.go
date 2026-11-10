@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -75,6 +76,18 @@ var ErrOwnMembership = errors.New("you cannot change your own access; ask anothe
 // ErrLastManagerOfVault is returned when deleting or disabling a user would
 // leave a shared vault without a permanent manager.
 var ErrLastManagerOfVault = errors.New("this user is the last manager of a shared vault; make another member a manager of it first")
+
+// OrphanError is returned when a group change would leave shared vaults
+// without a permanent manager: Users manage them only through the group.
+// Vault names are encrypted, so only their number is known here.
+type OrphanError struct {
+	Vaults int
+	Users  []string
+}
+
+func (e *OrphanError) Error() string {
+	return fmt.Sprintf("the change would leave %d shared vault(s) without a manager", e.Vaults)
+}
 
 // requireManage checks that a user manages a shared vault (at the time now).
 func requireManage(ctx context.Context, tx pgx.Tx, vaultID string, userID int64, now time.Time) error {
@@ -647,8 +660,9 @@ func (s *Store) SaveGroup(ctx context.Context, id int64, name, desc string) (int
 
 // dropGroupAccess removes the memberships that came through a group (all
 // of them, or of some users or one vault) and marks those vaults for a new
-// key.
-func dropGroupAccess(ctx context.Context, tx pgx.Tx, groupID int64, users []int64, vaultID string) error {
+// key. It returns the shared vaults that had a permanent manager before and
+// have none now; with strict it refuses such a change (*OrphanError).
+func dropGroupAccess(ctx context.Context, tx pgx.Tx, groupID int64, users []int64, vaultID string, strict bool) ([]string, error) {
 	q := `DELETE FROM vault_members WHERE group_id=$1`
 	args := []any{groupID}
 	if users != nil {
@@ -659,9 +673,39 @@ func dropGroupAccess(ctx context.Context, tx pgx.Tx, groupID int64, users []int6
 		q += fmt.Sprintf(` AND vault_id=$%d`, len(args)+1)
 		args = append(args, vaultID)
 	}
+	// the managers of the vaults it touches, before the change
+	// the same rows, named through the alias m
+	where := strings.NewReplacer("group_id", "m.group_id", "user_id", "m.user_id", "vault_id", "m.vault_id").Replace(strings.TrimPrefix(q, "DELETE FROM vault_members WHERE "))
+	before := map[string]int{}
+	var removedManagers []string
+	brows, err := tx.Query(ctx, `SELECT DISTINCT m.vault_id::text FROM vault_members m JOIN vaults v ON v.id=m.vault_id AND v.kind='shared' WHERE `+where, args...)
+	if err != nil {
+		return nil, err
+	}
+	affected, err := pgx.CollectRows(brows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range affected {
+		n, err := permanentManagers(ctx, tx, v)
+		if err != nil {
+			return nil, err
+		}
+		before[v] = n
+	}
+	if len(affected) > 0 {
+		mrows, err := tx.Query(ctx, `SELECT DISTINCT u.email FROM vault_members m JOIN users u ON u.id=m.user_id
+			WHERE m.rights='manage' AND m.rights_until IS NULL AND m.expires_at IS NULL AND `+where+` ORDER BY u.email`, args...)
+		if err != nil {
+			return nil, err
+		}
+		if removedManagers, err = pgx.CollectRows(mrows, pgx.RowTo[string]); err != nil {
+			return nil, err
+		}
+	}
 	rows, err := tx.Query(ctx, q+` RETURNING vault_id::text, user_id`, args...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	type pair struct {
 		v string
@@ -673,7 +717,7 @@ func dropGroupAccess(ctx context.Context, tx pgx.Tx, groupID int64, users []int6
 		return p, err
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	vaults := map[string]bool{}
 	var touched []int64
@@ -683,15 +727,32 @@ func dropGroupAccess(ctx context.Context, tx pgx.Tx, groupID int64, users []int6
 	}
 	for v := range vaults {
 		if _, err := tx.Exec(ctx, `UPDATE vaults SET needs_rotation=true, revision=nextval('revisions') WHERE id=$1`, v); err != nil {
-			return err
+			return nil, err
 		}
 		ids, err := vaultMemberIDs(ctx, tx, v)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		touched = append(touched, ids...)
 	}
-	return touchUsers(ctx, tx, touched)
+	var orphans []string
+	for v, n := range before {
+		if n == 0 {
+			continue
+		}
+		now, err := permanentManagers(ctx, tx, v)
+		if err != nil {
+			return nil, err
+		}
+		if now == 0 {
+			orphans = append(orphans, v)
+		}
+	}
+	sort.Strings(orphans)
+	if strict && len(orphans) > 0 {
+		return orphans, &OrphanError{Vaults: len(orphans), Users: removedManagers}
+	}
+	return orphans, touchUsers(ctx, tx, touched)
 }
 
 // DeleteGroup removes a group and the access it gave.
@@ -701,7 +762,7 @@ func (s *Store) DeleteGroup(ctx context.Context, id int64) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if err := dropGroupAccess(ctx, tx, id, nil, ""); err != nil {
+	if _, err := dropGroupAccess(ctx, tx, id, nil, "", true); err != nil {
 		return err
 	}
 	tag, err := tx.Exec(ctx, `DELETE FROM groups WHERE id=$1`, id)
@@ -741,7 +802,7 @@ func (s *Store) SetGroupMembers(ctx context.Context, id int64, users []int64) er
 		return err
 	}
 	if len(left) > 0 {
-		if err := dropGroupAccess(ctx, tx, id, left, ""); err != nil {
+		if _, err := dropGroupAccess(ctx, tx, id, left, "", true); err != nil {
 			return err
 		}
 	}
@@ -848,7 +909,7 @@ func (s *Store) RemoveVaultGroup(ctx context.Context, actor int64, vaultID strin
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	if err := dropGroupAccess(ctx, tx, groupID, nil, vaultID); err != nil {
+	if _, err := dropGroupAccess(ctx, tx, groupID, nil, vaultID, false); err != nil {
 		return err
 	}
 	if err := keepManager(ctx, tx, vaultID, before); err != nil {
@@ -969,8 +1030,10 @@ func (s *Store) ExpireMemberships(ctx context.Context) (int, error) {
 
 // SetUserGroups puts a user into exactly the groups with these names
 // (from the directory or the identity provider; names compared without
-// case). Leaving a group ends the access it gave.
-func (s *Store) SetUserGroups(ctx context.Context, userID int64, names []string) error {
+// case). Leaving a group ends the access it gave, also when that leaves a
+// shared vault without a manager (the directory decides): their number is
+// returned, for a warning.
+func (s *Store) SetUserGroups(ctx context.Context, userID int64, names []string) (int, error) {
 	lower := make([]string, 0, len(names))
 	for _, n := range names {
 		if n = strings.ToLower(strings.TrimSpace(n)); n != "" {
@@ -979,24 +1042,63 @@ func (s *Store) SetUserGroups(ctx context.Context, userID int64, names []string)
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer tx.Rollback(ctx)
 	rows, err := tx.Query(ctx, `DELETE FROM group_members gm USING groups g WHERE gm.group_id=g.id AND gm.user_id=$1 AND NOT (lower(g.name) = ANY($2)) RETURNING gm.group_id`, userID, lower)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	left, err := pgx.CollectRows(rows, pgx.RowTo[int64])
 	if err != nil {
-		return err
+		return 0, err
 	}
+	orphans := 0
 	for _, g := range left {
-		if err := dropGroupAccess(ctx, tx, g, []int64{userID}, ""); err != nil {
-			return err
+		o, err := dropGroupAccess(ctx, tx, g, []int64{userID}, "", false)
+		orphans += len(o)
+		if err != nil {
+			return 0, err
 		}
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO group_members(group_id, user_id) SELECT id, $1 FROM groups WHERE lower(name) = ANY($2) ON CONFLICT DO NOTHING`, userID, lower); err != nil {
-		return err
+		return 0, err
 	}
-	return tx.Commit(ctx)
+	return orphans, tx.Commit(ctx)
+}
+
+// GroupManagers tells which shared vaults depend on a group for their
+// managers: per member, the vaults that member alone manages through the
+// group, and the number of vaults managed only through the group (all
+// their permanent managers came with it). The group page warns with it.
+func (s *Store) GroupManagers(ctx context.Context, groupID int64) (map[int64]int, int, error) {
+	const permanent = `rights='manage' AND rights_until IS NULL AND expires_at IS NULL`
+	rows, err := s.db.Query(ctx, `SELECT m.user_id, count(DISTINCT m.vault_id) FROM vault_members m JOIN vaults v ON v.id=m.vault_id AND v.kind='shared'
+		WHERE m.group_id=$1 AND m.`+strings.ReplaceAll(permanent, " AND ", " AND m.")+`
+		AND NOT EXISTS (SELECT 1 FROM vault_members o JOIN users ou ON ou.id=o.user_id AND NOT ou.disabled
+			WHERE o.vault_id=m.vault_id AND o.user_id<>m.user_id AND o.`+strings.ReplaceAll(permanent, " AND ", " AND o.")+`)
+		GROUP BY m.user_id`, groupID)
+	if err != nil {
+		return nil, 0, err
+	}
+	sole := map[int64]int{}
+	for rows.Next() {
+		var u int64
+		var n int
+		if err := rows.Scan(&u, &n); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		sole[u] = n
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	var only int
+	err = s.db.QueryRow(ctx, `SELECT count(DISTINCT m.vault_id) FROM vault_members m JOIN vaults v ON v.id=m.vault_id AND v.kind='shared'
+		WHERE m.group_id=$1 AND m.`+strings.ReplaceAll(permanent, " AND ", " AND m.")+`
+		AND NOT EXISTS (SELECT 1 FROM vault_members o JOIN users ou ON ou.id=o.user_id AND NOT ou.disabled
+			WHERE o.vault_id=m.vault_id AND o.group_id IS DISTINCT FROM $1 AND o.`+strings.ReplaceAll(permanent, " AND ", " AND o.")+`)`, groupID).Scan(&only)
+	return sole, only, err
 }

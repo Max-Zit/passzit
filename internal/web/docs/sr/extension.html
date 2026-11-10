@@ -17,6 +17,7 @@
 </ol>
 <p>Umesto toga možete u ekstenziji otvoriti <i>Umesto toga prijava e-mailom i glavnom lozinkom</i> i prijaviti se tamo glavnom lozinkom i kodom iz aplikacije za autentifikaciju.</p>
 <p>Ekstenzija se pojavljuje u <i>Moj nalog → Aktivne sesije</i> sa imenom pregledača; tamo je možete odjaviti. Ostaje prijavljena 30 dana (određuje administrator), a odjavljuje se ranije ako se ne koristi 14 dana.</p>
+<p>Server može da radi na bilo kom portu, na primer <code>https://vault.example.com:8443</code>: PassZit od pregledača traži pristup imenu servera bez porta (Firefox tu ne prihvata port), a i dalje razgovara samo sa tačnom adresom koju ste uneli.</p>
 <div class="callout warn"><p>Serveru je potreban sertifikat kome pregledač veruje. Sa samopotpisanim sertifikatom novog servera ekstenzija ne može da se poveže: administrator ga podešava u <a href="/docs/admin#certificate">Podešavanja → Sertifikat</a> (sopstveni sertifikat ili Let's Encrypt). Za test server možete umesto toga da na svom računaru označite njegov sertifikat kao pouzdan.</p></div>
 
 <h2 id="fill">Popunjavanje prijava</h2>
@@ -31,7 +32,10 @@
 <p>Bez pitanja PassZit popunjava samo prijavu sačuvanu za tačno ovu adresu (isti host i port) — i sa Ctrl+Shift+L. Prijava istog sajta sačuvana za drugu adresu (na primer <code>accounts.example.com</code> na <code>shop.example.com</code>) se takođe prikazuje, ali <b>Popuni</b> prvo pita da li sme tamo.</p>
 
 <h2 id="save">Ponuda za čuvanje</h2>
-<p>U meniju (≡) uključite <i>Nudi čuvanje novih i izmenjenih prijava</i>. Pregledač tada traži pristup svim sajtovima — potreban da bi se primetilo kada se prijavite ili promenite lozinku. Kada to uradite, PassZit ikona prikazuje broj; otvorite je i izaberite <b>Sačuvaj</b> ili <b>Ažuriraj</b>. PassZit nikada ništa ne prikazuje unutar same web stranice, pa stranica ne može da imitira ili klikne ponudu.</p>
+<p>U meniju (≡) uključite <i>Nudi čuvanje novih i izmenjenih prijava</i>. Pregledač tada traži pristup svim sajtovima — potreban da bi se primetilo kada se prijavite ili promenite lozinku. Kada to uradite, PassZit ikona prikazuje broj; otvorite je i izaberite <b>Sačuvaj</b> ili <b>Ažuriraj</b>. PassZit nikada ništa ne prikazuje unutar same web stranice, pa stranica ne može da imitira ili klikne ponudu. Prijava koju ste već sačuvali sa istom lozinkom ne nudi se ponovo, ni kada je PassZit bio zaključan dok ste se prijavljivali (proverava čim se otključa); nova lozinka za sačuvanu prijavu nudi se kao ažuriranje.</p>
+
+<h2 id="forms">Kartice i adrese</h2>
+<p>Na stranici za plaćanje ili isporuku otvorite PassZit ikonu: <i>Kartice i adrese</i> prikazuje kartice i identitete iz vašeg trezora. <b>Popuni</b> unosi u stranicu ime, adresu, e-mail i telefon iz identiteta, ili vlasnika, broj, rok važenja i sigurnosni kod kartice; za karticu PassZit prvo pita. Popunjavaju se samo prazna polja (i izbori u listama), samo na šifrovanim (HTTPS) stranicama i samo u glavnoj stranici — polja za plaćanje u okviru (frame) platnog servisa se ne popunjavaju; tamo kopirajte broj kartice iz web trezora. Proverite polja pre slanja forme.</p>
 
 <h2 id="lock">Zaključavanje</h2>
 <p><b>Jedno otključavanje:</b> ekstenzija i web trezor istog servera dele otključano stanje — otključate jedno i otvara se i drugo (kada otvorite web trezor ili ekstenziju), zaključate jedno i zaključavaju se oba. Svaka strana proverava da ključevi pripadaju istom nalogu. Oba ostaju otvorena dok ih ne zaključate ili ne zatvorite pregledač, osim ako ste izabrali vreme zaključavanja u <i>Moj nalog</i>. Ključevi se čuvaju u memoriji pregledača, nikada na disku.</p>

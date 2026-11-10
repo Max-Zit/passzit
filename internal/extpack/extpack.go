@@ -55,7 +55,10 @@ type Options struct {
 	// Test adds the harness (extension/test) and host permissions for
 	// loopback test servers; Key fixes the extension id (Chromium).
 	Test bool
-	Key  string
+	// Optional (with Test) leaves out the host permissions: the extension
+	// starts like one from a store and asks for its server's host itself.
+	Optional bool
+	Key      string
 }
 
 var versionRE = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
@@ -166,7 +169,7 @@ func thirdParty(wasmNotices string) string {
 	b.WriteString("== EFF Large Wordlist (CC BY 3.0 US) — in pz/words.js ==\n\n")
 	b.WriteString("The EFF Large Wordlist for passphrases by the Electronic Frontier Foundation\n")
 	b.WriteString("(https://www.eff.org/dice), licensed under the Creative Commons Attribution 3.0 United States\n")
-	b.WriteString("License (https://creativecommons.org/licenses/by/3.0/us/). The list is used unchanged.\n")
+	b.WriteString("License (https://creativecommons.org/licenses/by/3.0/us/). The list is used with one change: its four words with a hyphen (drop-down, felt-tip, t-shirt, yo-yo) are replaced by meadow, tundra, kayak and zigzag.\n")
 	return b.String()
 }
 
@@ -248,8 +251,10 @@ func manifest(src Sources, o Options) ([]byte, error) {
 		m["browser_specific_settings"] = map[string]any{"gecko": map[string]any{"id": "passzit@maxzit.com", "strict_min_version": "128.0",
 			"data_collection_permissions": map[string]any{"required": []string{"none"}}}}
 	}
-	if o.Test {
+	if o.Test && !o.Optional {
 		m["host_permissions"] = []string{"https://*/*", "http://*/*", "http://127.0.0.1/*", "http://localhost/*"} // as granted by a user who lets the extension offer to save
+	}
+	if o.Test {
 		m["name"] = "PassZit (test build)"
 		// Firefox's WebDriver BiDi may not open extension pages: a test page
 		// links to the harness instead.

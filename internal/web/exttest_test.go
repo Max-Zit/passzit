@@ -36,6 +36,26 @@ const testSignupPage = `<!doctype html><meta charset="utf-8"><title>Sign up</tit
 <label>New password <input name="pass" type="password" autocomplete="new-password"></label>
 <button type="submit">Create account</button></form>`
 
+// testCheckoutPage mixes fields with autocomplete names and fields found
+// only by their names and labels, lists for the expiry and the country,
+// and a field PassZit must leave alone.
+const testCheckoutPage = `<!doctype html><meta charset="utf-8"><title>Checkout</title>
+<form method="post" action="/testsite/done" onsubmit="return false">
+<label>Full name <input name="fullname" autocomplete="name"></label>
+<label>Street <input name="street"></label>
+<label>ZIP <input name="zip"></label>
+<label>City <input name="city"></label>
+<label>Country <select name="country"><option value="">Choose</option><option value="DE">Germany</option><option value="RS">Serbia</option></select></label>
+<label>E-mail <input name="mail" type="email"></label>
+<label>Phone <input name="phone" type="tel"></label>
+<label>Name on card <input name="cardholder"></label>
+<label>Card number <input name="pan" autocomplete="cc-number"></label>
+<label>Expiry month <select name="exp-month"><option value="">MM</option><option>01</option><option>02</option><option>03</option><option>04</option><option>05</option><option>06</option><option>07</option><option>08</option><option>09</option><option>10</option><option>11</option><option>12</option></select></label>
+<label>Expiry year <select name="exp-year"><option value="">YYYY</option><option>2026</option><option>2027</option><option>2028</option><option>2029</option></select></label>
+<label>CVC <input name="cvc" maxlength="4"></label>
+<label>Delivery note <input name="note"></label>
+<button type="submit">Pay</button></form>`
+
 const testCodePage = `<!doctype html><meta charset="utf-8"><title>Two-step</title>
 <form method="post" action="/testsite/done">
 <label>Code from your app <input name="otp" inputmode="numeric" autocomplete="one-time-code"></label>
@@ -66,6 +86,7 @@ func newExtFixture(t *testing.T) *extFixture {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/testsite/login", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, testLoginPage) })
 	mux.HandleFunc("/testsite/signup", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, testSignupPage) })
+	mux.HandleFunc("/testsite/checkout", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, testCheckoutPage) })
 	mux.HandleFunc("/testsite/code", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, testCodePage) })
 	mux.HandleFunc("/testsite/open", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -110,7 +131,15 @@ func newExtFixture(t *testing.T) *extFixture {
 	id3 := newUUID()
 	c.must("PUT", "/api/items/"+id3, putItemReq{VaultID: vid, Data: c.sealItem(vid, id3, map[string]any{"type": "login", "name": "Probe server",
 		"login": map[string]any{"username": "root", "password": "Device-Pass-1"}, "connect": map[string]any{"tool": "ssh", "host": "10.20.30.40", "port": 22}})}, nil)
-	f.query = url.Values{"server": {f.ts.URL}, "email": {"alice@example.com"}, "pw": {"Alice-Master-Password-9"}, "site": {site}, "other": {other}}
+	// a card and an identity for the checkout page (cards and addresses)
+	id4 := newUUID()
+	c.must("PUT", "/api/items/"+id4, putItemReq{VaultID: vid, Data: c.sealItem(vid, id4, map[string]any{"type": "card", "name": "Test card",
+		"card": map[string]any{"holder": "Alice Example", "number": "4111 1111 1111 1111", "expMonth": "7", "expYear": "2028", "code": "123", "brand": "Visa"}})}, nil)
+	id5 := newUUID()
+	c.must("PUT", "/api/items/"+id5, putItemReq{VaultID: vid, Data: c.sealItem(vid, id5, map[string]any{"type": "identity", "name": "Home address",
+		"identity": map[string]any{"first": "Alice", "last": "Example", "email": "alice@example.com", "phone": "+381 11 123456",
+			"address1": "Main Street 1", "postal": "11000", "city": "Belgrade", "country": "Serbia"}})}, nil)
+	f.query = url.Values{"server": {f.ts.URL}, "email": {"alice@example.com"}, "pw": {"Alice-Master-Password-9"}, "site": {site}, "other": {other}, "extra": {"2"}}
 	// a device token for "Connect with the web vault", made by the web session
 	var link extLoginResp
 	c.must("POST", "/api/ext/link", map[string]string{"device": "Linked test"}, &link)
@@ -131,7 +160,7 @@ func newExtFixture(t *testing.T) *extFixture {
 			c.must("PUT", "/api/items/"+id, putItemReq{VaultID: vid, Data: c.sealItem(vid, id, d)}, nil)
 			f.demo = append(f.demo, id)
 		}
-		f.query.Set("extra", strconv.Itoa(len(demo)))
+		f.query.Set("extra", strconv.Itoa(2+len(demo)))
 		f.query.Set("siteextra", "1") // Company intranet is a login of the test site
 	}
 	return f
@@ -149,6 +178,20 @@ func (f *extFixture) build(t *testing.T, target string) string {
 
 // check waits for the harness and fails the test for every failed step.
 func (f *extFixture) check(t *testing.T) {
+	t.Helper()
+	if n := f.steps(t); n < 15 {
+		t.Errorf("only %d steps ran", n)
+	}
+	// the saved login reached the server, encrypted
+	extra, _ := strconv.Atoi(f.query.Get("extra"))
+	if s := f.c.sync(0); len(s.Items) != 5+extra {
+		t.Errorf("server has %d items, want %d", len(s.Items), 5+extra)
+	}
+}
+
+// steps waits for the harness, fails the test for every failed step and
+// returns how many steps ran.
+func (f *extFixture) steps(t *testing.T) int {
 	t.Helper()
 	var raw []byte
 	select {
@@ -172,14 +215,7 @@ func (f *extFixture) check(t *testing.T) {
 			t.Logf("ok: %s %s", s.Name, s.Info)
 		}
 	}
-	if len(got.Steps) < 15 {
-		t.Errorf("only %d steps ran", len(got.Steps))
-	}
-	// the saved login reached the server, encrypted
-	extra, _ := strconv.Atoi(f.query.Get("extra"))
-	if s := f.c.sync(0); len(s.Items) != 5+extra {
-		t.Errorf("server has %d items, want %d", len(s.Items), 5+extra)
-	}
+	return len(got.Steps)
 }
 
 func browserProfile(t *testing.T) string {

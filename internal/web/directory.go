@@ -501,8 +501,10 @@ func (s *Server) ssoDone(w http.ResponseWriter, r *http.Request, c SSOSettings, 
 		return
 	}
 	if c.SyncGroups {
-		if err := s.store.SetUserGroups(ctx, u.ID, groupNames(groups)); err != nil {
+		if n, err := s.store.SetUserGroups(ctx, u.ID, groupNames(groups)); err != nil {
 			s.log.Warn("group sync failed", "user", u.Email, "err", err)
+		} else if n > 0 {
+			s.orphanedBySync(r, u.Email, n)
 		}
 	}
 	setStateCookie(w, r, "", -1)
@@ -748,8 +750,10 @@ func (s *Server) directoryCheck(r *http.Request, u *store.User, web bool) string
 		return translate(s.lang(r, nil), "Your account is not active in the company directory.")
 	}
 	if c.SyncGroups {
-		if err := s.store.SetUserGroups(ctx, u.ID, groupNames(a.Groups)); err != nil {
+		if n, err := s.store.SetUserGroups(ctx, u.ID, groupNames(a.Groups)); err != nil {
 			s.log.Warn("group sync failed", "user", u.Email, "err", err)
+		} else if n > 0 {
+			s.orphanedBySync(r, u.Email, n)
 		}
 	}
 	return ""

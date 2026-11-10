@@ -76,3 +76,6 @@ button.qrscan .ic { width: 15px; height: 15px; }
 .addconsole input { flex: 1; min-width: 0; }
 details.bypw { margin-top: 8px; }
 details.bypw > summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.forms { margin: 10px 0 4px; }
+.forms > summary { cursor: pointer; font-weight: 600; margin: 0 2px 8px; }
+.forms .av .ic { width: 16px; height: 16px; }

@@ -87,6 +87,25 @@ export function sameServer(origin) {
   return [u.origin, v.origin];
 }
 
+// hostPattern is the permission pattern for a server or console origin,
+// without the port: Firefox ignores patterns that name a port (and then
+// never runs the content scripts), Chromium matches every port of the host
+// with it. The exact origin, port included, is checked whenever a page or
+// the server is talked to.
+export function hostPattern(origin) {
+  const u = new URL(origin);
+  return u.protocol + "//" + u.hostname + "/*";
+}
+
+// hostAllowed tells whether the browser lets PassZit reach this origin
+// (also with a pattern granted before 0.9.5, which named the port).
+export async function hostAllowed(origin) {
+  for (const p of [hostPattern(origin), origin + "/*"]) {
+    if (await api.permissions.contains({ origins: [p] }).catch(() => false)) return true;
+  }
+  return false;
+}
+
 export async function call(server, token, method, path, body) {
   const opt = { method, headers: {}, cache: "no-store", credentials: "omit" };
   if (token) opt.headers.Authorization = "Bearer " + token;

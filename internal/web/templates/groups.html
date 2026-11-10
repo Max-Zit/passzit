@@ -11,11 +11,12 @@
     </div>
     <fieldset class="box">
       <legend>{{$.T "Members"}}</legend>
-      <div class="checklist">{{range $.Data.Users}}<label class="check"><input type="checkbox" name="member" value="{{.ID}}" {{if index $.Data.Member .ID}}checked{{end}}>{{.Email}}{{with .DisplayName}} <small class="muted">{{.}}</small>{{end}}</label>{{end}}</div>
+      <div class="checklist">{{range $.Data.Users}}<label class="check"><input type="checkbox" name="member" value="{{.ID}}" {{if index $.Data.Member .ID}}checked{{end}}>{{.Email}}{{with .DisplayName}} <small class="muted">{{.}}</small>{{end}}{{with index $.Data.Sole .ID}} <small class="warn-text">{{$.T "only manager of %d shared vault(s) — cannot leave the group yet" .}}</small>{{end}}</label>{{end}}</div>
     </fieldset>
     <p class="small muted">{{$.T "Members who leave the group lose the access it gave at once; those vaults then get a new key the next time a manager opens them. New members get access when a manager of the vault opens it."}}</p>
     <div class="row"><button class="primary">{{$.T "Save"}}</button> <a class="btn ghost" href="/groups">{{$.T "Cancel"}}</a></div>
   </form>
+  {{if $.Data.Only}}<p class="small warn-text">{{$.T "%d shared vault(s) are managed only through this group: the group cannot be deleted, and its managers cannot leave it, until those vaults have another manager." $.Data.Only}}</p>{{end}}
   <form method="post" action="/groups/{{.ID}}/delete" class="mt" data-confirm="{{$.T "Delete the group %s? Its members lose the access it gave." .Name}}"><button class="ghost danger">{{template "icon" "trash"}}{{$.T "Delete the group"}}</button></form>
 </section>
 {{end}}

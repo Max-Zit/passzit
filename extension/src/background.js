@@ -3,7 +3,7 @@
 // it closes), syncs the encrypted vault, finds logins for the open site and
 // fills them into the page when the user asks.
 import * as pz from "./pz/crypto.js";
-import { api, settings, saveSettings, call, loadTexts, t, sameServer, deviceName, consoleSecure } from "./ext.js";
+import { api, settings, saveSettings, call, loadTexts, t, sameServer, deviceName, consoleSecure, hostPattern, hostAllowed } from "./ext.js";
 import { match, exact, parse } from "./domain.js";
 import { newPasskey, sign as passkeySign, rpCheck } from "./passkeys.js";
 import { parse as totpParse, code as totpCode } from "./pz/totp.js";
@@ -94,6 +94,7 @@ async function sync(full) {
   for (const id of d.removed) S.items.delete(id);
   for (const it of d.items) S.items.set(it.id, await decryptItem({ id: it.id, vault_id: it.vault_id, revision: it.revision, deleted_at: it.deleted_at, raw: it.data }));
   S.revision = Math.max(S.revision, d.revision);
+  recheckPending();
   await persist();
   badge().catch(() => {});
 }
@@ -387,6 +388,171 @@ async function fill(id, tabId, anyHost) {
   return r;
 }
 
+// ---- cards and addresses: filled only when the user picks one in the
+// popup, only into the top page and only over HTTPS (or on this computer)
+
+// formItems lists the cards and identities of the vault for the popup.
+function formItems() {
+  const out = [];
+  for (const it of S.items.values()) {
+    const d = it.data;
+    if (!d || it.deleted_at) continue;
+    if (d.type === "card" && d.card) {
+      const last = String(d.card.number || "").replace(/\D/g, "").slice(-4);
+      out.push({ id: it.id, type: "card", name: d.name || "", hint: [d.card.brand, last ? "•••• " + last : ""].filter(Boolean).join(" ") });
+    } else if (d.type === "identity" && d.identity) {
+      const p = d.identity;
+      out.push({ id: it.id, type: "identity", name: d.name || "", hint: [p.first, p.last].filter(Boolean).join(" ") || p.email || p.city || "" });
+    }
+  }
+  return out.sort((a, b) => (a.type === b.type ? 0 : a.type === "card" ? -1 : 1) || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
+// formValues turns a card or identity into values by the HTML autocomplete
+// names of the fields they go into.
+function formValues(d) {
+  const v = {};
+  const s = (x) => String(x || "").trim();
+  if (d.type === "card" && d.card) {
+    const c = d.card;
+    const month = s(c.expMonth).replace(/\D/g, "").padStart(2, "0").slice(-2);
+    const year = s(c.expYear).replace(/\D/g, "");
+    const y4 = year.length === 2 ? "20" + year : year;
+    const holder = s(c.holder);
+    Object.assign(v, { "cc-name": holder, "cc-number": s(c.number).replace(/\D/g, ""), "cc-csc": s(c.code) });
+    if (holder.includes(" ")) {
+      v["cc-given-name"] = holder.slice(0, holder.lastIndexOf(" "));
+      v["cc-family-name"] = holder.slice(holder.lastIndexOf(" ") + 1);
+    }
+    if (month !== "00" && /^\d{4}$/.test(y4)) Object.assign(v, { "cc-exp-month": month, "cc-exp-year": y4, "cc-exp": month + "/" + y4.slice(2) });
+  }
+  if (d.type === "identity" && d.identity) {
+    const p = d.identity;
+    Object.assign(v, { "honorific-prefix": s(p.title), "given-name": s(p.first), "additional-name": s(p.middle), "family-name": s(p.last),
+      name: [p.first, p.middle, p.last].map(s).filter(Boolean).join(" "), organization: s(p.company), email: s(p.email), tel: s(p.phone),
+      "address-line1": s(p.address1), "address-line2": s(p.address2), "street-address": [p.address1, p.address2].map(s).filter(Boolean).join(", "),
+      "postal-code": s(p.postal), "address-level2": s(p.city), "address-level1": s(p.state), country: s(p.country) });
+  }
+  for (const k of Object.keys(v)) if (!v[k]) delete v[k];
+  return v;
+}
+
+// pzFillForm runs in the page (top frame): it finds the fields by their
+// autocomplete names, else by their names and labels, and fills the empty
+// ones (and choices in lists) with the values it has.
+function pzFillForm(expectedOrigin, kind, values) {
+  if (location.origin !== expectedOrigin || self.origin !== expectedOrigin) return { ok: false, reason: "origin" };
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return r.width > 1 && r.height > 1 && cs.visibility !== "hidden" && cs.display !== "none" && parseFloat(cs.opacity || "1") > 0.1;
+  };
+  const skip = ["hidden", "password", "checkbox", "radio", "submit", "button", "reset", "file", "image", "range", "color", "search"];
+  const fields = [...document.querySelectorAll("input, select, textarea")].filter((f) => !f.disabled && !f.readOnly && visible(f) &&
+    !(f.tagName === "INPUT" && skip.includes((f.getAttribute("type") || "text").toLowerCase())));
+  // names and labels, most specific first; the card ones only for cards
+  const guesses = {
+    card: [
+      ["cc-csc", /cvc|cvv|csc|cid\b|security.?code|card.?code|card.?verif|pr[uü]fnummer|sigurnosn|kontrolni/i],
+      ["cc-number", /card.?n(o|um)|cc.?n(o|um)|cardnumber|kartennummer|broj.?kartic|num[eé]ro.?(de.?)?(la.?)?(carte|tarjeta)|\bpan\b/i],
+      ["cc-exp-month", /(exp|valid|ablauf|va[žz]i).*(month|\bmm\b|monat|mesec)|cc.?month|card.?month/i],
+      ["cc-exp-year", /(exp|valid|ablauf|va[žz]i).*(year|\byy|jahr|godin)|cc.?year|card.?year/i],
+      ["cc-exp", /expir|exp.?date|valid.?(thru|until|to)|mm\s*\/\s*yy|g[uü]ltig|va[žz]i.?do|datum.?isteka/i],
+      ["cc-name", /card.?holder|holder|name.?on.?card|cc.?name|card.?name|karteninhaber|vlasnik|titulaire|titular/i],
+    ],
+    identity: [
+      ["email", /e.?mail|mejl/i],
+      ["tel", /phone|tel(efon)?\b|mobile|handy|mobil/i],
+      ["organization", /company|organi[sz]ation|firma|kompanij|soci[eé]t[eé]|empresa|preduze/i],
+      ["address-line2", /address.?(line)?.?2|addr2|apartment|suite|\bapt\b|adresszusatz/i],
+      ["postal-code", /zip|postal|post.?code|\bplz\b|po[šs]tansk|code.?postal|c[oó]digo.?postal/i],
+      ["address-level2", /city|town|stadt|\bort\b|\bgrad\b|mesto|ville|ciudad/i],
+      ["address-level1", /state|province|region|county|bundesland|pokrajin|okrug/i],
+      ["country", /country|\bland\b|dr[žz]ava|pays|pa[ií]s/i],
+      ["address-line1", /address.?(line)?.?1|street|stra(ss|ß)e|ulica|adres|addr1|\brue\b|calle|address/i],
+      ["given-name", /first.?name|given|fname|vorname|\bime\b|pr[eé]nom|nombre/i],
+      ["family-name", /last.?name|surname|family|lname|nachname|prezime|\bnom\b|apellido/i],
+      ["additional-name", /middle.?name/i],
+      ["honorific-prefix", /\btitle\b|salutation|anrede|prefix/i],
+      ["name", /full.?name|your.?name|^name$|ime.?i.?prezime/i],
+    ],
+  }[kind] || [];
+  const words = (f) => [f.name, f.id, f.getAttribute("placeholder"), f.getAttribute("aria-label"), ...[...(f.labels || [])].map((l) => l.textContent)].filter(Boolean).join(" ");
+  const tokenOf = (f) => {
+    const ac = (f.getAttribute("autocomplete") || "").toLowerCase().split(/\s+/).filter((x) => x && !/^(section-|shipping|billing|home|work|mobile|fax|pager)/.test(x));
+    const last = ac[ac.length - 1];
+    if (last && last !== "on" && last !== "off") return last in values ? last : (last === "country-name" && values.country ? "country" : "");
+    if (kind === "identity" && f.type === "email") return "email";
+    if (kind === "identity" && f.type === "tel") return "tel";
+    const w = words(f);
+    for (const [tok, re] of guesses) if (re.test(w)) return tok;
+    return "";
+  };
+  const setValue = (el, v) => {
+    el.focus();
+    const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value").set.call(el, v);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    el.blur();
+  };
+  const choose = (sel, v, tok) => {
+    const want = String(v).toLowerCase();
+    const num = /^\d+$/.test(want) ? parseInt(want, 10) : NaN;
+    const opt = [...sel.options].find((o) => {
+      const a = o.value.toLowerCase().trim(), b = o.text.toLowerCase().trim();
+      if (a === want || b === want) return true;
+      if (!Number.isNaN(num) && (parseInt(a, 10) === num || parseInt(b, 10) === num || (tok === "cc-exp-year" && parseInt(a, 10) === num % 100))) return true;
+      return tok === "country" && want.length > 3 && b.startsWith(want);
+    });
+    if (!opt) return false;
+    sel.value = opt.value;
+    sel.dispatchEvent(new Event("input", { bubbles: true }));
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  };
+  let filled = 0;
+  for (const f of fields) {
+    const tok = tokenOf(f);
+    if (!tok || !(tok in values)) continue;
+    let v = values[tok];
+    if (f.tagName === "SELECT") {
+      if (choose(f, v, tok)) filled++;
+      continue;
+    }
+    if (f.value) continue; // what the user typed stays
+    if (tok === "cc-exp") {
+      const ph = (f.getAttribute("placeholder") || "").toUpperCase();
+      const [mm, yy] = v.split("/");
+      v = /YYYY/.test(ph) || f.maxLength === 7 ? mm + "/20" + yy : f.maxLength === 4 ? mm + yy : mm + "/" + yy;
+    }
+    if (tok === "cc-exp-year" && (f.maxLength === 2 || /^YY$/i.test(f.getAttribute("placeholder") || ""))) v = v.slice(2);
+    setValue(f, v);
+    filled++;
+  }
+  return { ok: filled > 0, filled };
+}
+
+// fillForm puts a card or an identity into the page of the tab.
+async function fillForm(id, tabId) {
+  if (!S.keys) throw new Error(t("Not found."));
+  const it = S.items.get(id);
+  if (!it || !it.data || !["card", "identity"].includes(it.data.type)) throw new Error(t("Not found."));
+  const tab = tabId ? await api.tabs.get(tabId) : await activeTab();
+  const page = parse(await tabURL(tab));
+  if (!page || !consoleSecure(new URL(page.origin))) throw new Error(t("Cards and addresses are filled only into encrypted (HTTPS) pages."));
+  const [res] = await api.scripting.executeScript({
+    target: { tabId: tab.id, frameIds: [0] },
+    func: pzFillForm,
+    args: [page.origin, it.data.type, formValues(it.data)],
+  });
+  armLock();
+  const r = res && res.result;
+  if (!r || !r.ok) throw new Error(r && r.reason === "origin" ? t("The page changed. Try again.") : t("No fields for this were found on this page."));
+  reportUse(id, "fill");
+  return r;
+}
+
 // ---- clipboard from the background (an offscreen document on Chromium,
 // the background page itself on Firefox): clearing after a copied
 // password, and the password of a connection opened from a MaxZit console
@@ -457,7 +623,7 @@ async function syncPairScript() {
   const origins = s.server ? sameServer(s.server) : [];
   const want = [];
   for (const o of origins) { const u = new URL(o); want.push(u.protocol + "//" + u.hostname + "/launcher*", u.protocol + "//" + u.hostname + "/vault*"); }
-  const has = origins.length && await api.permissions.contains({ origins: [origins[0] + "/*"] }).catch(() => false);
+  const has = origins.length && await hostAllowed(origins[0]);
   const same = regs.length && JSON.stringify(regs[0].matches) === JSON.stringify(want);
   if (regs.length && (!has || !same)) await api.scripting.unregisterContentScripts({ ids: [PAIR] });
   if (has && !same) {
@@ -475,9 +641,8 @@ async function syncConsoleScript() {
   const s = await settings();
   const want = [];
   for (const o of s.consoles) {
-    if (!consoleSecure(new URL(o)) || !(await api.permissions.contains({ origins: [o + "/*"] }).catch(() => false))) continue;
-    const u = new URL(o);
-    const p = u.protocol + "//" + u.hostname + "/*";
+    if (!consoleSecure(new URL(o)) || !(await hostAllowed(o))) continue;
+    const p = hostPattern(o);
     if (!want.includes(p)) want.push(p);
   }
   const regs = await api.scripting.getRegisteredContentScripts({ ids: [CONSOLE] }).catch(() => []);
@@ -545,7 +710,7 @@ async function runPendingOpen() {
 
 api.permissions.onAdded.addListener(async (p) => {
   const o = pendingConsole;
-  if (!o || !(p.origins || []).includes(o + "/*")) return;
+  if (!o || !(p.origins || []).some((x) => x === hostPattern(o) || x === o + "/*")) return;
   pendingConsole = "";
   const s = await settings();
   if (!s.consoles.includes(o)) await saveSettings({ consoles: s.consoles.concat(o).slice(0, 20) });
@@ -662,6 +827,36 @@ async function syncCapture() {
   }
 }
 
+// savedAs compares a captured login with the vault: true when it is saved
+// already with this password, the id of the login to update when only the
+// password differs, else "". Only a login of this very host is offered for
+// an update (another host of the same site must not change it).
+function savedAs(url, username, password) {
+  let update = "";
+  for (const m of matchesFor(url)) {
+    if (m.match !== "host") continue;
+    const it = S.items.get(m.id);
+    if ((it.data.login.username || "") !== username) continue;
+    if (it.data.login.password === password) return true;
+    update = it.id;
+  }
+  return update;
+}
+
+// recheckPending looks again at the save offers once the vault is open or
+// synced: a login captured while PassZit was locked (for example the sign-in
+// on the PassZit page itself) may be saved already, or saved with another
+// password and so an update.
+function recheckPending() {
+  if (!S.keys) return;
+  S.pending = livePending().filter((p) => {
+    const known = savedAs(p.url, p.username, p.password);
+    if (known === true) return false;
+    p.update = known;
+    return true;
+  });
+}
+
 async function capture(msg, sender) {
   if (!sender.tab || sender.frameId !== 0 || !msg.password || msg.password.length > 1000) return;
   const sp = senderPage(sender);
@@ -671,16 +866,9 @@ async function capture(msg, sender) {
   const username = String(msg.username || "").slice(0, 500);
   let update = "";
   if (S.keys) {
-    // only a login of this very host is offered for an update (another
-    // host of the same site must not change it)
-    for (const m of matchesFor(pageURL)) {
-      if (m.match !== "host") continue;
-      const it = S.items.get(m.id);
-      if ((it.data.login.username || "") === username) {
-        if (it.data.login.password === msg.password) return; // already saved
-        update = it.id;
-      }
-    }
+    const known = savedAs(pageURL, username, msg.password);
+    if (known === true) return; // already saved
+    update = known;
   }
   S.pending = livePending().filter((p) => !(p.site === page.site && p.username === username)).slice(-4);
   S.pending.push({ id: pz.b64u(pz.random(9)), url: page.origin, site: page.site, host: page.hostname, username, password: msg.password, update, at: Date.now() });
@@ -811,6 +999,7 @@ const handlers = {
     const active = !!origin && s.consoles.includes(origin);
     const consoleInfo = origin && (active || (tab && await consoleHint(tab))) ? { origin, active } : null;
     return { url, console: consoleInfo, host: p ? p.hostname : "", secure: p ? p.protocol === "https:" : false, matches: p ? matchesFor(url) : [],
+      forms: p && consoleSecure(new URL(p.origin)) ? formItems() : [],
       device, deviceMatches: device ? devicesFor(device) : [], helper: await helperAllowed(),
       pending: livePending().map((x, i) => ({ i, id: x.id || "", host: x.host, username: x.username, update: !!x.update })) };
   },
@@ -831,7 +1020,7 @@ const handlers = {
     const cur = parse(await tabURL(tab));
     const origin = String(msg.origin || "");
     if (!cur || !consoleSecure(new URL(cur.origin)) || cur.origin !== origin) throw new Error(t("Open the console in this tab first."));
-    if (!(await api.permissions.contains({ origins: [origin + "/*"] }))) throw new Error(t("The browser did not allow PassZit on that console."));
+    if (!(await hostAllowed(origin))) throw new Error(t("The browser did not allow PassZit on that console."));
     const s = await settings();
     if (!s.consoles.includes(origin)) await saveSettings({ consoles: s.consoles.concat(origin).slice(0, 20) });
     await syncConsoleScript();
@@ -846,6 +1035,7 @@ const handlers = {
   // anyHost: the user confirmed in the popup a login of another host or
   // port of this site
   async fill(msg) { return await fill(msg.id, msg.tabId, msg.anyHost === true); },
+  async fillForm(msg) { return await fillForm(String(msg.id || ""), msg.tabId); },
   async secret(msg) {
     const it = S.items.get(msg.id);
     if (!S.keys || !it || !it.data) throw new Error(t("Not found."));

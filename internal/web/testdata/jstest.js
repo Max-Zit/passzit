@@ -41,13 +41,13 @@ try {
   // generator
   const pw = password({ length: 32, lower: true, upper: true, digits: true, symbols: true });
   out.genPassword = pw.length === 32 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw) && !/[lIO01]/.test(pw);
-  // (split on a separator no list word contains: four EFF words have a
-  // hyphen, e.g. "t-shirt", so a "-" phrase may split into more pieces)
+  // every word comes from the list, and a phrase splits back into its
+  // words (no list word has a hyphen, see words_test.go)
   const wordSet = new Set(WORDS);
   out.genPhrase = [...Array(200)].every(() => {
     const parts = passphrase({ words: 6, separator: ".", capitalize: true, number: false }).split(".");
     return parts.length === 6 && parts.every((w) => wordSet.has(w[0].toLowerCase() + w.slice(1)));
-  }) && /^[a-z]+(-[a-z]+)*$/.test(passphrase({ words: 3, capitalize: false, number: false }));
+  }) && [...Array(200)].every(() => passphrase({ words: 6, separator: "-", capitalize: false, number: false }).split("-").length === 6);
   const counts = new Array(6).fill(0);
   for (let i = 0; i < 60000; i++) counts[randomInt(6)]++;
   out.uniform = counts.every((n) => Math.abs(n - 10000) < 600);

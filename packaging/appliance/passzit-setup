@@ -35,6 +35,14 @@ $text"
 
 current_ip() { ip -4 -o addr show scope global | awk '{print $4}' | head -1; }
 
+# console_url is the console's address with the port the server last ran
+# on (none for 443; 8443 before the first start).
+console_url() {
+    port=$(sed -n 's/.*"mgmt_listen":"[^"]*:\([0-9]*\)".*/\1/p' "$HELPER/server.json" 2>/dev/null)
+    port=${port:-8443}
+    if [ "$port" = 443 ]; then echo "https://$(current_ip | cut -d/ -f1)"; else echo "https://$(current_ip | cut -d/ -f1):$port"; fi
+}
+
 network() {
     mode=$(whiptail --title "$T" --menu "Network of the appliance (now $(current_ip))" 14 74 2 \
         dhcp "Automatic address (DHCP)" static "Fixed address" 3>&1 1>&2 2>&3) || return
@@ -73,7 +81,7 @@ console_info() {
     [ -f "$DATA/setup-token.txt" ] && tok="
 Setup token: $(cat "$DATA/setup-token.txt")
 Open the console, enter the token and create the first administrator."
-    msg "Web console: https://$(current_ip | cut -d/ -f1):8443
+    msg "Web console: $(console_url)
 $tok"
 }
 
@@ -113,7 +121,7 @@ restore_backup() {
 }
 
 while true; do
-    c=$(whiptail --title "$T" --menu "Address: $(current_ip)   Console: https://$(current_ip | cut -d/ -f1):8443" 22 74 11 \
+    c=$(whiptail --title "$T" --menu "Address: $(current_ip)   Console: $(console_url)" 22 74 11 \
         1 "Network (DHCP or fixed address)" \
         2 "Server name" \
         3 "Time zone" \

@@ -2,7 +2,7 @@
 // search, generator, save offers and settings. The master password is used
 // only here, to derive keys; it is never stored or sent.
 import { generate, entropy, loadOptions, saveOptions } from "./pz/generator.js";
-import { api, settings, saveSettings, loadTexts, t, normServer, deviceName, sameServer, consoleOrigin } from "./ext.js";
+import { api, settings, saveSettings, loadTexts, t, normServer, deviceName, sameServer, consoleOrigin, hostPattern } from "./ext.js";
 import { bg, signIn, secondFactor, unlock } from "./client.js";
 import { readQR, authenticatorKeys } from "./pz/qr.js";
 import { parse as totpParse } from "./pz/totp.js";
@@ -36,6 +36,7 @@ const PATHS = {
   qr: ["M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z", "M14 14h2v2h-2zM18 14h2M14 18v2M18 18h2v2h-2"],
   clock: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M12 7v5l3 2"],
   alert: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M12 8v5M12 16.5v.01"],
+  card: ["M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z", "M2 10h20M6 15h4"],
 };
 
 function icon(name) {
@@ -133,7 +134,7 @@ function showSignIn(st) {
     const origin = normServer(server.value);
     if (!origin) { showErr(err, t("Enter the address of your PassZit server, e.g. https://vault.example.com.")); return; }
     let granted = false;
-    try { granted = await api.permissions.request({ origins: sameServer(origin).map((o) => o + "/*") }); } catch (e) { granted = false; }
+    try { granted = await api.permissions.request({ origins: sameServer(origin).map(hostPattern) }); } catch (e) { granted = false; }
     if (!granted) { showErr(err, t("Without this permission the extension cannot reach your server.")); return; }
     await saveSettings({ server: origin, token: "" });
     await bg("settingsChanged");
@@ -157,7 +158,7 @@ function showSignIn(st) {
     if (!email.value.trim() || !pw.value) { showErr(err, t("Enter your e-mail address and master password.")); return; }
     // The permission request must be the first thing in the click.
     let granted = false;
-    try { granted = await api.permissions.request({ origins: sameServer(origin).map((o) => o + "/*") }); } catch (e) { granted = false; }
+    try { granted = await api.permissions.request({ origins: sameServer(origin).map(hostPattern) }); } catch (e) { granted = false; }
     if (!granted) { showErr(err, t("Without this permission the extension cannot reach your server.")); return; }
     go.disabled = true;
     go.textContent = t("Deriving the keys from the master password…");
@@ -251,6 +252,7 @@ async function showMain() {
   body.append(el("div", { class: "site" }, icon("globe"), p.host || t("No website")));
   if (p.host && !p.secure) body.append(el("div", { class: "warn" }, t("This page is not encrypted (HTTP). Logins saved for HTTPS are not offered here.")));
   body.append(itemList(p.matches, true, t("No saved login for this website."), p.helper));
+  if (p.forms && p.forms.length) body.append(formList(p.forms));
   if (p.host) body.append(el("button", { type: "button", class: "ghost qrscan", onclick: () => scanPage(p) }, icon("qr"), t("Read an authenticator QR code on this page")));
   if (p.device) {
     body.append(el("div", { class: "site" }, icon("globe"), t("Device %s", p.device)),
@@ -276,7 +278,7 @@ function consoleOffer(origin) {
     // prompt); the permission is asked right away, still in the click
     bg("consolePending", { origin }).catch(() => {});
     let ok = false;
-    try { ok = await api.permissions.request({ origins: [origin + "/*"] }); } catch (e) { ok = false; }
+    try { ok = await api.permissions.request({ origins: [hostPattern(origin)] }); } catch (e) { ok = false; }
     if (!ok) { showErr(err, t("The browser did not allow PassZit on that console.")); return; }
     try {
       await bg("consoleAdd", { origin });
@@ -301,6 +303,26 @@ function itemList(items, canFill, emptyText, helper) {
       m.hasPassword ? el("button", { type: "button", class: "iconbtn", title: t("Copy the password"), "aria-label": t("Copy the password"), onclick: () => copySecret(m.id, "password") }, icon("key")) : null,
       m.hasTotp ? el("button", { type: "button", class: "iconbtn", title: t("Copy the one-time code"), "aria-label": t("Copy the one-time code"), onclick: () => copySecret(m.id, "totp") }, icon("clock")) : null,
       canFill ? el("button", { type: "button", class: "fill", onclick: () => doFill(m) }, t("Fill")) : null))));
+}
+
+// formList offers the cards and identities of the vault for the forms of
+// this page (payment, shipping); filled only on a click, a card after a
+// question.
+function formList(items) {
+  return el("details", { class: "forms" }, el("summary", { text: t("Cards and addresses") + " (" + items.length + ")" }),
+    el("ul", { class: "list" }, ...items.map((m) => el("li", { class: "row" },
+      el("span", { class: "av" }, icon(m.type === "card" ? "card" : "user")),
+      el("span", { class: "who" }, el("b", { text: m.name || m.hint }), el("small", { text: m.hint })),
+      el("span", { class: "acts" }, el("button", { type: "button", class: "fill", onclick: () => doFillForm(m) }, t("Fill")))))));
+}
+
+async function doFillForm(m) {
+  if (m.type === "card" && !window.confirm(t("Fill the card %s into %s?", m.name || m.hint, pageHost))) return;
+  try {
+    const r = await bg("fillForm", { id: m.id });
+    toast(t("Filled %d fields. Check them before you send the form.", r.filled));
+    setTimeout(() => window.close(), 1500);
+  } catch (e) { toast(e.message); }
 }
 
 async function doConnect(m) {
@@ -523,7 +545,7 @@ async function showMenu(st) {
     if (!origin) { showErr(err, t("Enter the address of the console, e.g. https://watchzit.example.com:8443.")); return; }
     // asked right away: the browser allows the question only on the click
     let ok = false;
-    try { ok = await api.permissions.request({ origins: [origin + "/*"] }); } catch (e) { ok = false; }
+    try { ok = await api.permissions.request({ origins: [hostPattern(origin)] }); } catch (e) { ok = false; }
     if (!ok) { showErr(err, t("The browser did not allow PassZit on that console.")); return; }
     const cur = (await settings()).consoles;
     if (!cur.includes(origin)) await saveSettings({ consoles: cur.concat(origin).slice(0, 20) });

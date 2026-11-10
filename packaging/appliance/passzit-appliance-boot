@@ -46,9 +46,18 @@ grow_root() {
     log "root file system now $(df -h / | awk 'NR == 2 { print $2 }')"
 }
 
+# port_suffix is ":port" of the console as the server last ran it (from
+# its helper file), nothing for 443, and :8443 before the first start.
+port_suffix() {
+    port=$(sed -n 's/.*"mgmt_listen":"[^"]*:\([0-9]*\)".*/\1/p' /var/lib/passzit/helper/server.json 2>/dev/null)
+    port=${port:-8443}
+    [ "$port" = 443 ] || echo ":$port"
+}
+
 # write_issue shows the console's address and, until the first
 # administrator exists, the setup token.
 write_issue() {
+    suffix=$(port_suffix)
     tok=/var/lib/passzit/setup-token.txt
     if [ -f "$tok" ]; then
         setup="Setup token:   $(cat "$tok")
@@ -61,7 +70,7 @@ write_issue() {
     cat > /etc/issue <<ISSUE
 PassZit appliance - \n
 
-  Web vault:     https://\4:8443
+  Web vault:     https://\4$suffix
   $setup
 
   Setup menu:    sign in here as pzadmin (first password: passzit,

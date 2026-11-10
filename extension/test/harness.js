@@ -1,7 +1,7 @@
 // Test harness of the extension (test builds only): drives the real
 // background through the same calls as the popup, against a test server,
 // and reports the results to it. Run by internal/web TestExtensionInBrowser.
-import { api, saveSettings } from "../ext.js";
+import { api, saveSettings, sameServer, hostPattern, hostAllowed } from "../ext.js";
 import { bg, signIn, unlock } from "../client.js";
 
 const q = new URLSearchParams(location.search);
@@ -30,7 +30,58 @@ async function attempt(name, fn) {
   try { const v = await fn(); step(name, true, v); return v; } catch (e) { step(name, false, e.message); return null; }
 }
 
-try {
+// mode=optional: the extension starts without host permissions, like one
+// from a store, and asks for its server's host on a click (the test clicks).
+// The server runs on a port other than 443: the permission must not name
+// the port (Firefox ignores such patterns), yet the server, its vault page
+// and a MaxZit console on that port must all work.
+async function optionalMode() {
+  try {
+    step("starts without host access", !(await hostAllowed(server)));
+    const granted = await new Promise((res) => {
+      const btn = document.createElement("button");
+      btn.textContent = "Allow";
+      btn.style.cssText = "position:fixed;inset:0;width:100%;height:100%";
+      btn.onclick = () => { btn.remove(); api.permissions.request({ origins: sameServer(server).map(hostPattern) }).then(res, (e) => res("error: " + e.message)); };
+      document.body.append(btn);
+    });
+    step("host permission without the port granted", granted === true, granted);
+    step("server reachable on port " + new URL(server).port, await hostAllowed(server));
+    await signIn(server, email, pw, "Harness optional");
+    step("signed in over the granted host", (await bg("status")).unlocked);
+    await saveSettings({ consoles: [new URL(server).origin] });
+    await bg("settingsChanged");
+    const regs = await api.scripting.getRegisteredContentScripts().catch(() => []);
+    step("bridge and console scripts registered", ["pz-bridge", "pz-console"].every((id) => regs.some((r) => r.id === id)), JSON.stringify(regs.map((r) => [r.id, r.matches])));
+    const inTab = async (tabId, func) => {
+      for (let i = 0; ; i++) {
+        try { return (await api.scripting.executeScript({ target: { tabId }, world: "MAIN", func }))[0].result; } catch (e) { if (i >= 30) throw e; await sleep(200); }
+      }
+    };
+    const vp = await openTab(server + "/vault-probe");
+    await sleep(300);
+    const info = await inTab(vp.id, () => new Promise((res) => {
+      addEventListener("message", (e) => { if (e.data && e.data.type === "pz-link-info") res(e.data); });
+      postMessage({ type: "pz-link-ask" }, location.origin);
+      setTimeout(() => res(null), 3000);
+    }));
+    step("vault page on that port reaches the extension", info && info.device && info.signedIn === true, JSON.stringify(info));
+    const cp = await openTab(server + "/console-probe");
+    await sleep(300);
+    const state = await inTab(cp.id, () => new Promise((res) => {
+      addEventListener("message", (e) => { if (e.source === window && e.data && e.data.type === "maxzit-passzit") res(e.data.state); });
+      postMessage({ type: "maxzit-passzit-ask" }, location.origin);
+      setTimeout(() => res("no answer"), 1500);
+    }));
+    step("MaxZit console on that port reaches the extension", state === "ready", state);
+    await saveSettings({ consoles: [] });
+    await bg("logout");
+  } catch (e) {
+    step("harness", false, e.stack || e.message);
+  }
+}
+
+if (q.get("mode") === "optional") await optionalMode(); else try {
   // A freshly installed Firefox add-on gets its host permissions a moment later.
   let granted = false;
   for (let i = 0; i < 100 && !granted; i++) {
@@ -202,6 +253,56 @@ try {
   });
   await unlock(pw);
   step("unlocked again", (await bg("search", { q: "" })).items.length === 4 + extra);
+  // offers captured while locked are checked again once it is open: the
+  // same login again is dropped, a new password becomes an update
+  const submit = async (user, pass) => {
+    const tb = await openTab(site.replace("/login", "/signup"));
+    await sleep(500);
+    await api.scripting.executeScript({ target: { tabId: tb.id }, func: (u, p) => {
+      document.querySelector("[name=user]").value = u;
+      document.querySelector("[name=pass]").value = p;
+      document.querySelector("button").click();
+    }, args: [user, pass] });
+    let n = 0;
+    for (let i = 0; i < 30 && !n; i++) { await sleep(100); n = (await bg("status")).pending; }
+    await api.tabs.remove(tb.id).catch(() => {});
+    return n;
+  };
+  await bg("lock");
+  step("locked: a saved login is captured", (await submit("bob@example.com", "Brand-New-Pass-77")) === 1);
+  await unlock(pw);
+  step("unlocked: the saved login is no longer offered", (await bg("status")).pending === 0, (await bg("status")).pending);
+  await bg("lock");
+  step("locked: a changed password is captured", (await submit("bob@example.com", "Changed-Pass-78")) === 1);
+  await unlock(pw);
+  step("unlocked: the changed password is still offered", (await bg("status")).pending === 1);
+  await attempt("save the changed password", () => bg("pending", { index: 0, action: "save" }).then(() => "saved"));
+  const bobs = await bg("search", { q: "bob@example.com" });
+  step("saved as an update, not a second login", bobs.items.length === 1, bobs.items.length);
+  step("all logins still there", (await bg("search", { q: "" })).items.length === 4 + extra);
+  // cards and addresses: the identity fills the address fields, the card
+  // the payment fields; nothing else is touched
+  const co = await openTab(site.replace("/login", "/checkout"));
+  await sleep(500);
+  const fieldsOf = async () => (await api.scripting.executeScript({ target: { tabId: co.id }, func: () =>
+    Object.fromEntries([...document.querySelectorAll("input, select")].map((f) => [f.name, f.value])) }))[0].result;
+  const idItem = (await bg("search", { q: "Home address" })).items[0];
+  const cardItem = (await bg("search", { q: "Test card" })).items[0];
+  const r1 = await bg("fillForm", { id: idItem.id, tabId: co.id }).catch((e) => ({ error: e.message }));
+  const f1 = await fieldsOf();
+  step("identity fills the address", f1.fullname === "Alice Example" && f1.street === "Main Street 1" && f1.zip === "11000" && f1.city === "Belgrade" &&
+    f1.country === "RS" && f1.mail === "alice@example.com" && f1.phone === "+381 11 123456", JSON.stringify([r1, f1]));
+  step("identity leaves the card fields alone", !f1.cardholder && !f1.pan && !f1.cvc && !f1["exp-month"] && !f1.note, JSON.stringify(f1));
+  const r2 = await bg("fillForm", { id: cardItem.id, tabId: co.id }).catch((e) => ({ error: e.message }));
+  const f2 = await fieldsOf();
+  step("card fills the payment fields", f2.cardholder === "Alice Example" && f2.pan === "4111111111111111" && f2["exp-month"] === "07" &&
+    f2["exp-year"] === "2028" && f2.cvc === "123", JSON.stringify([r2, f2]));
+  step("the card leaves the rest alone", f2.note === "" && f2.fullname === "Alice Example", JSON.stringify(f2));
+  await attempt("a login is not filled as a form", async () => {
+    try { await bg("fillForm", { id: login.id, tabId: co.id }); } catch (e) { return e.message; }
+    throw new Error("filled a login as a form");
+  });
+  await api.tabs.remove(co.id).catch(() => {});
   // "Connect with the web vault": signed out, the vault page hands over a
   // device token the web session made (the fixture made it the same way)
   await bg("logout");

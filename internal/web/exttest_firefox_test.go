@@ -21,6 +21,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/max-zit/passzit/internal/extpack"
 )
 
 // firefoxPath finds Firefox for the extension test (PASSZIT_FIREFOX overrides).
@@ -49,30 +51,84 @@ func TestExtensionInFirefox(t *testing.T) {
 		t.Skip("Firefox not found (set PASSZIT_FIREFOX)")
 	}
 	f := newExtFixture(t)
-	extDir := f.build(t, "firefox")
+	runFirefox(t, ff, f, f.build(t, "firefox"), `user_pref("extensions.originControls.grantByDefault", true);`+"\n", nil)
+	f.check(t)
+}
+
+// TestExtensionPortFirefox starts the Firefox build like one from the
+// store, without host permissions, and lets it ask for its server's host
+// (which runs on a port other than 443) on a real click: Firefox ignores
+// permission patterns that name a port, so the extension asks without it,
+// and the server, its vault page and a MaxZit console must work on that
+// port.
+func TestExtensionPortFirefox(t *testing.T) {
+	ff := firefoxPath()
+	if ff == "" {
+		t.Skip("Firefox not found (set PASSZIT_FIREFOX)")
+	}
+	f := newExtFixture(t)
+	f.query.Set("mode", "optional")
+	dir := filepath.Join(t.TempDir(), "ext")
+	if err := extpack.Build(extpack.Options{Root: filepath.Join("..", ".."), Target: "firefox", Version: "0.0.1", Out: dir, Test: true, Optional: true}); err != nil {
+		t.Fatal(err)
+	}
+	// no prompt: the permission is granted when asked on a user's click
+	prefs := `user_pref("extensions.originControls.grantByDefault", false);
+user_pref("extensions.webextOptionalPermissionPrompts", false);
+`
+	runFirefox(t, ff, f, dir, prefs, func(bidi *bidiConn, bc string) {
+		// click until the harness has asked (its button covers the page)
+		var lastErr error
+		defer func() {
+			if lastErr != nil {
+				t.Logf("last click: %v", lastErr)
+			}
+		}()
+		for i := 0; i < 40 && len(f.result) == 0; i++ {
+			time.Sleep(500 * time.Millisecond)
+			_, lastErr = bidi.call("input.performActions", map[string]any{"context": bc, "actions": []any{map[string]any{
+				"type": "pointer", "id": "mouse", "parameters": map[string]any{"pointerType": "mouse"},
+				"actions": []any{
+					map[string]any{"type": "pointerMove", "x": 50, "y": 50},
+					map[string]any{"type": "pointerDown", "button": 0},
+					map[string]any{"type": "pointerUp", "button": 0},
+				}}}})
+		}
+	})
+	if n := f.steps(t); n < 7 {
+		t.Errorf("only %d steps ran", n)
+	}
+}
+
+// runFirefox starts headless Firefox with the extension in dir, opens the
+// harness and calls drive (when given) while it runs.
+func runFirefox(t *testing.T, ff string, f *extFixture, extDir, extraPrefs string, drive func(*bidiConn, string)) {
+	t.Helper()
 	profile := browserProfile(t)
 	// A fixed internal UUID makes the moz-extension:// address known.
 	const uuid = "6f1d2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b"
 	prefs := `user_pref("extensions.webextensions.uuids", "{\"passzit@maxzit.com\":\"` + uuid + `\"}");
-user_pref("extensions.originControls.grantByDefault", true);
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("datareporting.policy.dataSubmissionEnabled", false);
 user_pref("remote.active-protocols", 1);
-`
+` + extraPrefs
 	if err := os.WriteFile(filepath.Join(profile, "user.js"), []byte(prefs), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
-	defer cancel()
 	cmd := exec.CommandContext(ctx, ff, "--headless", "--no-remote", "--profile", profile, "--remote-debugging-port", "0") // #nosec G204 -- the test's own browser
+	// newer Firefox lets WebDriver act on extension pages (the harness) only so
+	cmd.Env = append(os.Environ(), "MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1")
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
+		cancel()
 		t.Fatal(err)
 	}
 	if err := cmd.Start(); err != nil {
+		cancel()
 		t.Fatalf("firefox: %v", err)
 	}
-	defer func() { cancel(); _ = cmd.Wait() }()
+	t.Cleanup(func() { cancel(); _ = cmd.Wait() })
 	// Firefox prints where WebDriver BiDi listens.
 	addr := make(chan string, 1)
 	go func() {
@@ -97,7 +153,7 @@ user_pref("remote.active-protocols", 1);
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bidi.close()
+	t.Cleanup(bidi.close)
 	if _, err := bidi.call("session.new", map[string]any{"capabilities": map[string]any{}}); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +173,9 @@ user_pref("remote.active-protocols", 1);
 	if _, err := bidi.call("browsingContext.navigate", map[string]any{"context": bc.Context, "url": opener, "wait": "none"}); err != nil {
 		t.Fatalf("open the harness: %v", err)
 	}
-	f.check(t)
+	if drive != nil {
+		drive(bidi, bc.Context)
+	}
 }
 
 // ---- a minimal WebSocket client (RFC 6455) for WebDriver BiDi

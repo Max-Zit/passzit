@@ -18,6 +18,10 @@ type groupsData struct {
 	Users  []*store.User
 	Edit   *store.Group
 	Member map[int64]bool
+	// Sole: members who alone manage shared vaults through the group (how
+	// many); Only: vaults managed only through it (deleting is refused)
+	Sole map[int64]int
+	Only int
 }
 
 func (s *Server) showGroups(w http.ResponseWriter, r *http.Request, edit *store.Group) {
@@ -40,6 +44,10 @@ func (s *Server) showGroups(w http.ResponseWriter, r *http.Request, edit *store.
 	if edit != nil {
 		for _, id := range edit.Members {
 			d.Member[id] = true
+		}
+		if d.Sole, d.Only, err = s.store.GroupManagers(r.Context(), edit.ID); err != nil {
+			s.serverError(w, r, err)
+			return
 		}
 	}
 	s.render(w, r, http.StatusOK, "groups", &Page{Title: "Groups", Nav: "groups", Data: d})
@@ -87,6 +95,10 @@ func (s *Server) handleGroupSave(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err := s.store.SetGroupMembers(r.Context(), id, members); err != nil {
+			if msg := s.orphanMsg(r, err); msg != "" {
+				s.redirectErr(w, r, back, msg)
+				return
+			}
 			s.serverError(w, r, err)
 			return
 		}
@@ -106,9 +118,36 @@ func (s *Server) handleGroupDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.DeleteGroup(r.Context(), id); err != nil {
+		if msg := s.orphanMsg(r, err); msg != "" {
+			s.redirectErr(w, r, fmt.Sprintf("/groups/%d", id), msg)
+			return
+		}
 		s.serverError(w, r, err)
 		return
 	}
 	s.audit(r, "group.delete", fmt.Sprintf("group:%d", id), "group %q deleted (members lost the access it gave)", g.Name)
 	s.redirect(w, r, "/groups", "Deleted.")
+}
+
+// orphanMsg explains a group change that was refused because shared vaults
+// would be left without a manager ("" for other errors).
+func (s *Server) orphanMsg(r *http.Request, err error) string {
+	var oe *store.OrphanError
+	if !errors.As(err, &oe) {
+		return ""
+	}
+	return s.msg(r, "Not saved: %d shared vault(s) would be left without a manager, because %s manage(s) them only through this group. First make another member a manager of those vaults (web vault → the vault → Members), then try again.",
+		oe.Vaults, strings.Join(oe.Users, ", "))
+}
+
+// orphanedBySync records that the company directory took the last manager
+// of shared vaults away (the directory decides; the vaults keep working for
+// their members, but nobody can share them or give them a new key until a
+// manager is back in the group).
+func (s *Server) orphanedBySync(r *http.Request, email string, n int) {
+	s.log.Warn("group sync left shared vaults without a manager", "user", email, "vaults", n)
+	s.auditAs(r, email, "vault.orphaned", "user:"+email, "the company directory removed %s from a group: %d shared vault(s) have no manager now", email, n)
+	s.notifyAdmins(r.Context(), mailText{Subject: "Shared vaults without a manager",
+		Lines: [][]any{{"The company directory removed %s from a group. %d shared vault(s) have no manager now: their members still use them, but nobody can share them or give them a new key.", email, n},
+			{"To fix it, put a manager of those vaults back into the group in the company directory."}}}, "/groups")
 }
