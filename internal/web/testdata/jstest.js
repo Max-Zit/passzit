@@ -3,6 +3,7 @@
 // results back to the test server.
 import * as pz from "/static/pz/crypto.js";
 import { password, passphrase, randomInt } from "/static/pz/generator.js";
+import { WORDS } from "/static/pz/words.js";
 import { siteOf, match } from "/ext/domain.js";
 import * as tr from "/static/pz/transfer.js";
 import * as totp from "/static/pz/totp.js";
@@ -40,7 +41,13 @@ try {
   // generator
   const pw = password({ length: 32, lower: true, upper: true, digits: true, symbols: true });
   out.genPassword = pw.length === 32 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw) && !/[lIO01]/.test(pw);
-  out.genPhrase = passphrase({ words: 6, separator: "-", capitalize: true, number: false }).split("-").length === 6;
+  // (split on a separator no list word contains: four EFF words have a
+  // hyphen, e.g. "t-shirt", so a "-" phrase may split into more pieces)
+  const wordSet = new Set(WORDS);
+  out.genPhrase = [...Array(200)].every(() => {
+    const parts = passphrase({ words: 6, separator: ".", capitalize: true, number: false }).split(".");
+    return parts.length === 6 && parts.every((w) => wordSet.has(w[0].toLowerCase() + w.slice(1)));
+  }) && /^[a-z]+(-[a-z]+)*$/.test(passphrase({ words: 3, capitalize: false, number: false }));
   const counts = new Array(6).fill(0);
   for (let i = 0; i < 60000; i++) counts[randomInt(6)]++;
   out.uniform = counts.every((n) => Math.abs(n - 10000) < 600);
