@@ -155,7 +155,12 @@ logo variant C.
   `chrome.*` handled by a small own shim). The crypto module is the same file
   as in the web vault.
 - The extension has its own version (`extension/VERSION`), so an unchanged
-  extension keeps its version across server releases.
+  extension keeps its version across server releases. The WebAssembly
+  modules in it (Argon2id, QR reader) and `wasm_exec.js` are built with
+  their own fixed Go version (`wasmToolchain` in `tools/buildwasm`), so a Go
+  update of the server (go.mod) does not change the extension; that version
+  is raised together with `extension/VERSION` when a Go fix concerns the
+  modules.
 - **Permissions:** `storage`, `activeTab`, `scripting`, `alarms`,
   `clipboardWrite`, `offscreen`, `nativeMessaging`. Access to sites is an
   **optional** host permission: the PassZit server and the MaxZit consoles the

@@ -24,6 +24,14 @@ func main() {
 	}
 }
 
+// wasmToolchain builds the WebAssembly modules and provides wasm_exec.js.
+// They are part of the browser extension, so a new Go version changes the
+// extension and needs a new extension version (and store review). The
+// server's toolchain (go.mod) can move on for fixes that do not concern the
+// modules (net/http, crypto/tls …); raise this together with
+// extension/VERSION when a Go fix concerns them.
+const wasmToolchain = "go1.27.3"
+
 func run() error {
 	out := filepath.Join("internal", "web", "static", "pz")
 	if err := os.MkdirAll(out, 0o750); err != nil {
@@ -33,15 +41,18 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	env := append(os.Environ(), "GOTOOLCHAIN="+wasmToolchain)
 	for _, m := range []string{"argon2", "qr"} {
 		cmd := exec.Command(goBin, "build", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=", "-o", filepath.Join(out, m+".wasm"), "./tools/"+m+"wasm") // #nosec G204 -- fixed arguments
-		cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+		cmd.Env = append(env, "GOOS=js", "GOARCH=wasm")
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {
 			return err
 		}
 	}
-	gr, err := exec.Command(goBin, "env", "GOROOT").Output() // #nosec G204 -- fixed arguments
+	gc := exec.Command(goBin, "env", "GOROOT") // #nosec G204 -- fixed arguments
+	gc.Env = env
+	gr, err := gc.Output()
 	if err != nil {
 		return err
 	}
