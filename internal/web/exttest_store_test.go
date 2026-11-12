@@ -66,7 +66,8 @@ user_pref("extensions.webextOptionalPermissionPrompts", false);
 				time.Sleep(250 * time.Millisecond)
 			}
 			text, _ := eval(ctx, `document.body ? document.body.innerText.slice(0, 600) : ""`)
-			t.Fatalf("%s: not reached (%v %v); page: %v", what, last, lastErr, text)
+			where, _ := eval(ctx, `location.pathname + location.search.replace(/password=[^&]*/, "password=…") + " " + document.readyState + " [" + ((document.getElementById("pz-error") || {}).textContent || "") + "]"`)
+			t.Fatalf("%s: not reached (%v %v); at %v; page: %v", what, last, lastErr, where, text)
 		}
 		click := func(ctx, selectorJS string) {
 			t.Helper()
@@ -120,12 +121,19 @@ user_pref("extensions.webextOptionalPermissionPrompts", false);
 			text, _ := eval(bc, `document.body ? document.body.innerText.slice(0, 400) : ""`)
 			t.Fatalf("the web vault did not open (popup: %v)", text)
 		}
-		wait(vault, `!!document.querySelector("input[name=email]") && !!document.querySelector("input[name=password]")`, "sign-in page of the web vault", 15)
+		// readyState "complete": the page's module scripts ran, so the form
+		// is PassZit's own (a submit before that is the browser's own GET,
+		// which only loads the sign-in page again — on slow CI machines).
+		wait(vault, `document.readyState === "complete" && !!document.querySelector("input[name=email]") && !!document.querySelector("input[name=password]")`, "sign-in page of the web vault", 30)
 		if _, err := eval(vault, `(() => {
 			const e = document.querySelector("input[name=email]"), p = document.querySelector("input[name=password]");
 			e.value = "alice@example.com"; p.value = "Alice-Master-Password-9";
 			e.form.requestSubmit(); return true; })()`); err != nil {
 			t.Fatal(err)
+		}
+		time.Sleep(500 * time.Millisecond)
+		if v, _ := eval(vault, `location.search`); strings.Contains(fmt.Sprint(v), "email=") {
+			t.Fatalf("the sign-in form was sent by the browser, not by PassZit (%v)", v)
 		}
 		// 3. the vault asks to connect this browser's extension: confirm
 		wait(vault, `!!document.querySelector("dialog.dlg[open]") && document.querySelector("dialog.dlg[open]").textContent.includes("Connect the PassZit extension")`, "the vault asks to connect the extension", 40)
