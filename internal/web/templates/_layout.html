@@ -50,6 +50,7 @@
     </form>
   </header>
   <main>
+    {{with .Update}}<div class="flash upd" role="status">{{template "icon" "download"}}<span class="upd-text">{{$.T "PassZit %s is available (installed: %s)." .Version .Installed}}{{if .NoHelper}} {{$.T "Install it with install.sh or the package of the release."}} <a href="/settings/version">{{$.T "Show how"}}</a>{{end}}</span><span class="upd-actions">{{if not .NoHelper}}<a class="btn primary" href="/settings/version">{{$.T "Install"}}</a>{{end}}<a class="btn secondary" href="{{.NotesURL}}"{{if ne .NotesURL "/settings/version"}} target="_blank" rel="noopener"{{end}}>{{$.T "Release notes"}}</a><form method="post" action="/settings/version/hide-notice"><button class="iconbtn" title="{{$.T "Hide for 5 days"}}" aria-label="{{$.T "Hide for 5 days"}}">&times;</button></form></span></div>{{end}}
     {{if .DevNo2FA}}<div class="flash err" role="alert">{{template "icon" "alert"}}<span>{{.T "Test mode: two-factor sign-in is switched off (--dev-no-2fa). Never use this on a real server."}}</span></div>{{end}}
     {{if .Flash}}{{if .FlashErr}}<div class="flash err" role="alert">{{template "icon" "alert"}}<span>{{.Flash}}</span></div>{{else}}<div class="flash ok" role="status">{{template "icon" "check"}}<span>{{.Flash}}</span></div>{{end}}{{end}}
     {{if .Error}}<div class="flash err" role="alert">{{template "icon" "alert"}}<span>{{.Error}}</span></div>{{end}}

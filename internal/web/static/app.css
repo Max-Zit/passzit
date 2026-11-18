@@ -148,6 +148,14 @@ td.ellipsis { max-width: 320px; white-space: nowrap; overflow: hidden; text-over
 .flash.err { background: var(--bad-bg); color: var(--bad); }
 .flash.warn { background: var(--warn-bg); color: var(--warn); }
 .flash.info { background: var(--accent-soft); color: var(--accent); }
+.flash.upd { background: var(--warn-bg); color: var(--warn); align-items: center; flex-wrap: wrap; }
+.flash.upd .upd-text { flex: 1 1 260px; }
+.flash.upd .upd-text a { color: inherit; text-decoration: underline; }
+.flash.upd .upd-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.flash.upd form { margin: 0; }
+.flash.upd .btn { padding: 6px 12px; }
+.flash.upd .iconbtn { width: 32px; height: 32px; font-size: 22px; line-height: 1; color: var(--warn); }
+.flash.upd .iconbtn:hover { color: var(--text); }
 
 /* ---- forms */
 form.stack { display: grid; gap: 16px; max-width: 720px; }

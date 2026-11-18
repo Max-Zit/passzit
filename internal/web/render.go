@@ -138,7 +138,9 @@ type Page struct {
 	// times (for the scripts).
 	LockMinutes      int
 	ClipboardSeconds int
-	Data             any
+	// Update is the "new version available" notice (administrators only).
+	Update *updateNotice
+	Data   any
 }
 
 // T translates a text for the page language.
@@ -262,6 +264,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, name
 	p.Host = r.Host
 	if p.User != nil {
 		p.LockMinutes, p.ClipboardSeconds = s.clientPrefs(r.Context(), p.User)
+		p.Update = s.updateNoticeFor(r.Context(), p.User, r.URL.Path)
 	}
 	if f := s.takeFlash(w, r); f != "" && p.Flash == "" {
 		// An error message (redirectErr) starts with "!".

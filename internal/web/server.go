@@ -492,6 +492,7 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /settings/version/check", s.handleVersionCheck)
 	admin("POST /settings/version/install", s.handleVersionInstall)
 	admin("POST /settings/version/settings", s.handleVersionSettings)
+	admin("POST /settings/version/hide-notice", s.handleUpdateNoticeHide)
 	admin("POST /settings/timezone", s.handleTimeZone)
 	admin("POST /settings/restart", s.handleRestart)
 	admin("POST /settings/server-network", s.handleServerNetwork)

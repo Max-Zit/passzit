@@ -25,6 +25,7 @@ sudo systemctl start passzit-server</pre>
 
 <h2 id="updates">Ažuriranja</h2>
 <p><b>Podešavanja → Ažuriranja i server</b> pokazuje verziju koja radi i najnoviju verziju. <b>Instaliraj</b> predaje ažuriranje root helperu: on ponovo proverava potpis, pravi rezervnu kopiju baze i programa, instalira paket i proverava da li se server vratio — ako nije, sam vraća staru verziju i bazu. Tu se može uključiti i automatska instalacija u izabranom satu.</p>
+<p id="update-banner">Kada izađe novija verzija, administratori na vrhu svake stranice konzole vide <i>Dostupan je PassZit X (instaliran: Y).</i>, sa dugmadima <b>Instaliraj</b> (otvara ovu stranicu; instalacija i njeno pitanje ostaju ovde), <b>Napomene o izdanju</b> i <b>×</b>. × sakriva obaveštenje na pet dana za tog administratora, u svakom pregledaču; još novija verzija ga odmah ponovo prikazuje. Korisnici trezora ga nikad ne vide. Bez helpera obaveštenje kaže da se instalira pomoću <code>install.sh</code> ili paketa izdanja. Verzija dolazi samo iz potpisane provere izdanja opisane iznad.</p>
 <p><b>Kanal ažuriranja</b> je <i>Stabilni</i> (najnovije izdanje) ili <i>Testni</i>, koji nudi i kandidate za izdanje pre nego što postanu stabilni — koristite ga na test serveru. Mirror ili lokalni folder podešava se sa <code>PASSZIT_UPDATE_SOURCE</code> u <code>server.env</code>; i njegova izdanja moraju imati potpis.</p>
 
 <h2 id="backup">Rezervna kopija i vraćanje</h2>

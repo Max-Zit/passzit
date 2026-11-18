@@ -25,6 +25,7 @@ sudo systemctl start passzit-server</pre>
 
 <h2 id="updates">Updates</h2>
 <p><b>Settings → Updates and server</b> shows the running and the newest version. <b>Install</b> hands the update to the root helper: it checks the signature again, backs up the database and the program, installs the package and checks that the server comes back — if not, it puts the old version and the database back by itself. Automatic installation in a chosen hour can be switched on there.</p>
+<p id="update-banner">When a newer version is out, administrators see <i>PassZit X is available (installed: Y).</i> at the top of every console page, with <b>Install</b> (opens this page; the installation and its question stay here), <b>Release notes</b> and <b>×</b>. The × hides the notice for five days for that administrator, in every browser; a still newer version shows it again at once. Vault users never see it. Without the helper the notice says to install with <code>install.sh</code> or the release package. The version comes only from the signed release check described above.</p>
 <p>The <b>update channel</b> is <i>Stable</i> (the newest release) or <i>Testing</i>, which also offers release candidates before they become stable — use it on a test server. A mirror or a local folder can be set with <code>PASSZIT_UPDATE_SOURCE</code> in <code>server.env</code>; its releases must still carry the signature.</p>
 
 <h2 id="backup">Backup and restore</h2>

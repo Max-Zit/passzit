@@ -600,3 +600,18 @@ func (s *Store) ResetTwoFactor(ctx context.Context, userID int64) error {
 	_, err = s.db.Exec(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID)
 	return err
 }
+
+// UpdateNoticeHidden returns the version a user hid the "new version
+// available" notice for and until when (no time: not hidden).
+func (s *Store) UpdateNoticeHidden(ctx context.Context, userID int64) (string, *time.Time, error) {
+	var v string
+	var until *time.Time
+	err := s.db.QueryRow(ctx, `SELECT update_hidden_version, update_hidden_until FROM users WHERE id=$1`, userID).Scan(&v, &until)
+	return v, until, notFound(err)
+}
+
+// HideUpdateNotice hides the notice of a version for a user until a time.
+func (s *Store) HideUpdateNotice(ctx context.Context, userID int64, version string, until time.Time) error {
+	_, err := s.db.Exec(ctx, `UPDATE users SET update_hidden_version=$2, update_hidden_until=$3 WHERE id=$1`, userID, version, until)
+	return err
+}
