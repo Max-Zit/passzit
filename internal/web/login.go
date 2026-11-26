@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -207,7 +208,16 @@ func readJSON(w http.ResponseWriter, r *http.Request, max int64, v any) bool {
 		apiError(w, http.StatusUnsupportedMediaType, "bad_request", "JSON expected.")
 		return false
 	}
-	dec := json.NewDecoder(io.LimitReader(r.Body, max))
+	body, err := io.ReadAll(io.LimitReader(r.Body, max))
+	if err != nil {
+		apiError(w, http.StatusBadRequest, "bad_request", "The request could not be read.")
+		return false
+	}
+	if jsonHasNUL(body) {
+		apiError(w, http.StatusBadRequest, "bad_request", badInputMessage)
+		return false
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		apiError(w, http.StatusBadRequest, "bad_request", "The request could not be read.")

@@ -511,7 +511,7 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /settings/security/unblock", s.handleUnblock)
 
 	s.mux = mux
-	return s.secure(s.aclCheck(s.MgmtACL, s.csrf(s.loadSession(mux))))
+	return s.secure(s.aclCheck(s.MgmtACL, s.csrf(s.cleanInput(s.loadSession(mux)))))
 }
 
 // cacheStatic: files requested with the asset version (?v=…) never change

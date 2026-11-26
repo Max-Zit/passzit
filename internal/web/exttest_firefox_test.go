@@ -162,7 +162,17 @@ user_pref("remote.active-protocols", 1);
 	if _, err := bidi.call("webExtension.install", map[string]any{"extensionData": map[string]any{"type": "path", "path": extDir}}); err != nil {
 		t.Fatalf("install the add-on: %v", err)
 	}
-	res, err := bidi.call("browsingContext.create", map[string]any{"type": "tab"})
+	// Right after the start (above all on a busy machine) Firefox may still
+	// replace its first window, and a tab created then fails with "no such
+	// frame … BrowsingContext does no longer exist": try again shortly.
+	var res json.RawMessage
+	for try := 1; ; try++ {
+		res, err = bidi.call("browsingContext.create", map[string]any{"type": "tab"})
+		if err == nil || try == 10 || !strings.Contains(err.Error(), "no such frame") {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
