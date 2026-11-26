@@ -15,7 +15,7 @@ require (
 	github.com/letsencrypt/pebble/v2 v2.10.3
 	github.com/makiuchi-d/gozxing v0.1.1
 	golang.org/x/crypto v0.59.0
-	golang.org/x/net v0.62.0
+	golang.org/x/net v0.63.0
 	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/term v0.48.0
