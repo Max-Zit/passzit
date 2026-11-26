@@ -157,7 +157,7 @@ logo variant C.
 - The extension has its own version (`extension/VERSION`), so an unchanged
   extension keeps its version across server releases. The WebAssembly
   modules in it (Argon2id, QR reader) and `wasm_exec.js` are built with
-  their own fixed Go version (`wasmToolchain` in `tools/buildwasm`) and
+  their own fixed Go version (`WasmToolchain` in `internal/licenses`) and
   their own dependency versions (`tools/buildwasm/wasm.mod`), so a Go or
   dependency update of the server (go.mod) does not change the extension;
   both are raised together with `extension/VERSION` when a fix concerns the

@@ -79,6 +79,14 @@ func Notice(dir string) string {
 	return ""
 }
 
+// WasmToolchain builds the WebAssembly modules of the browser extension and
+// provides wasm_exec.js. They are part of the extension, so a new Go version
+// changes it and needs a new extension version (and store review). The
+// server's toolchain (go.mod) can move on for fixes that do not concern the
+// modules (net/http, crypto/tls …); raise this together with
+// extension/VERSION when a Go fix concerns them.
+const WasmToolchain = "go1.27.3"
+
 // WasmModFile is the go.mod of the browser extension's WebAssembly modules
 // (tools/buildwasm/wasm.mod): their dependencies are kept apart from the
 // server's, so a server dependency update does not change the extension.

@@ -48,14 +48,24 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: licenses -out FILE BINARY…")
 		os.Exit(2)
 	}
-	mods := map[string]string{}
-	goVersion := ""
+	// module path → versions: the programs and the browser modules (with
+	// their own wasm.mod and Go version) can hold different versions of a
+	// module, and every one of them is listed.
+	mods := map[string]map[string]bool{}
+	add := func(p, v string) {
+		if mods[p] == nil {
+			mods[p] = map[string]bool{}
+		}
+		mods[p][v] = true
+	}
+	goVersions := map[string]bool{}
 	for _, bin := range flag.Args() {
 		if strings.HasPrefix(bin, "./") {
 			if st, err := os.Stat(bin); err == nil && st.IsDir() {
 				for p, v := range wasmDeps(bin) {
-					mods[p] = v
+					add(p, v)
 				}
+				goVersions[licenses.WasmToolchain] = true
 				continue
 			}
 		}
@@ -64,12 +74,12 @@ func main() {
 			fmt.Fprintln(os.Stderr, bin+":", err)
 			os.Exit(1)
 		}
-		goVersion = bi.GoVersion
+		goVersions[bi.GoVersion] = true
 		for _, d := range bi.Deps {
 			if d.Replace != nil {
 				d = d.Replace
 			}
-			mods[d.Path] = d.Version
+			add(d.Path, d.Version)
 		}
 	}
 	paths := make([]string, 0, len(mods))
@@ -82,21 +92,23 @@ func main() {
 	b.WriteString("# Third-party licenses\n\nPassZit is licensed under the GNU Affero General Public License v3.0 (see LICENSE).\n")
 	b.WriteString("Its programs contain the following components under their own licenses, all compatible with the AGPL-3.0.\n\n")
 	b.WriteString("| Component | Version | License |\n|---|---|---|\n")
-	b.WriteString("| Go standard library and runtime | " + goVersion + " | BSD-3-Clause |\n")
+	b.WriteString("| Go standard library and runtime | " + strings.Join(sorted(goVersions), ", ") + " | BSD-3-Clause |\n")
 	type entry struct{ path, version, kind, text string }
 	var list []entry
 	failed := false
 	for _, p := range paths {
-		dir := licenses.ModuleDir(cache, p, mods[p])
-		text, err := licenses.Text(dir)
-		kind := licenses.Detect(text)
-		if err != nil || kind == "" {
-			fmt.Fprintf(os.Stderr, "%s %s: license not recognized (%v); check it by hand\n", p, mods[p], err)
-			failed = true
-			continue
+		for _, v := range sorted(mods[p]) {
+			dir := licenses.ModuleDir(cache, p, v)
+			text, err := licenses.Text(dir)
+			kind := licenses.Detect(text)
+			if err != nil || kind == "" {
+				fmt.Fprintf(os.Stderr, "%s %s: license not recognized (%v); check it by hand\n", p, v, err)
+				failed = true
+				continue
+			}
+			list = append(list, entry{p, v, kind, text})
+			fmt.Fprintf(&b, "| %s | %s | %s |\n", p, v, kind)
 		}
-		list = append(list, entry{p, mods[p], kind, text})
-		fmt.Fprintf(&b, "| %s | %s | %s |\n", p, mods[p], kind)
 	}
 	b.WriteString("\nOther components:\n\n")
 	b.WriteString("- PostgreSQL (PostgreSQL License) is the database; with the development option `--dev-embedded-db` the server downloads PostgreSQL binaries (Zonky embedded-postgres-binaries, Apache-2.0) and runs them.\n")
@@ -145,3 +157,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`
+
+// sorted returns the members of a set in order.
+func sorted(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}

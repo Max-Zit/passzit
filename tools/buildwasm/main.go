@@ -24,14 +24,6 @@ func main() {
 	}
 }
 
-// wasmToolchain builds the WebAssembly modules and provides wasm_exec.js.
-// They are part of the browser extension, so a new Go version changes the
-// extension and needs a new extension version (and store review). The
-// server's toolchain (go.mod) can move on for fixes that do not concern the
-// modules (net/http, crypto/tls …); raise this together with
-// extension/VERSION when a Go fix concerns them.
-const wasmToolchain = "go1.27.3"
-
 func run() error {
 	out := filepath.Join("internal", "web", "static", "pz")
 	if err := os.MkdirAll(out, 0o750); err != nil {
@@ -41,7 +33,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	env := append(os.Environ(), "GOTOOLCHAIN="+wasmToolchain)
+	env := append(os.Environ(), "GOTOOLCHAIN="+licenses.WasmToolchain)
 	// the modules' own dependencies (wasm.mod), not the server's go.mod
 	mf, err := licenses.WasmModFile()
 	if err != nil {
