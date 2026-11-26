@@ -16,11 +16,11 @@ import (
 // GO-2026-6909: crewjam/saml up to v0.5.1 binds some assertion elements
 // without their namespace (a NameID of any namespace fills Subject.NameID,
 // so it could be spoofed inside a signed assertion) and dereferences an
-// optional Subject without a check (a panic). Until a fixed release is
-// out, the console checks every SAML response itself before the library
-// reads it: these elements must be in the SAML assertion namespace, and
-// every assertion needs a Subject. Encrypted assertions are decrypted and
-// checked the same way.
+// optional Subject without a check (a panic). It is fixed in v0.5.2 (PassZit
+// uses v0.6.3); the console still checks every SAML response itself before
+// the library reads it, as a second line: these elements must be in the
+// SAML assertion namespace, and every assertion needs a Subject. Encrypted
+// assertions are decrypted and checked the same way.
 
 const samlAssertionNS = "urn:oasis:names:tc:SAML:2.0:assertion"
 

@@ -79,10 +79,26 @@ func Notice(dir string) string {
 	return ""
 }
 
+// WasmModFile is the go.mod of the browser extension's WebAssembly modules
+// (tools/buildwasm/wasm.mod): their dependencies are kept apart from the
+// server's, so a server dependency update does not change the extension.
+func WasmModFile() (string, error) {
+	gomod, err := GoEnv("GOMOD")
+	if err != nil || gomod == "" || gomod == os.DevNull {
+		return "", fmt.Errorf("not inside the PassZit module (%v)", err)
+	}
+	return filepath.Join(filepath.Dir(gomod), "tools", "buildwasm", "wasm.mod"), nil
+}
+
 // WasmModules lists the modules (outside the main module) of a package
-// built for the browser (GOOS=js GOARCH=wasm), path → version.
+// built for the browser (GOOS=js GOARCH=wasm, with WasmModFile), path →
+// version.
 func WasmModules(pkg string) (map[string]string, error) {
-	cmd := exec.Command("go", "list", "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{end}}{{end}}", pkg) // #nosec G204 -- a package of this repository
+	mf, err := WasmModFile()
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command("go", "list", "-modfile="+mf, "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{end}}{{end}}", pkg) // #nosec G204 -- a package of this repository
 	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
 	out, err := cmd.Output()
 	if err != nil {

@@ -42,8 +42,13 @@ func run() error {
 		return err
 	}
 	env := append(os.Environ(), "GOTOOLCHAIN="+wasmToolchain)
+	// the modules' own dependencies (wasm.mod), not the server's go.mod
+	mf, err := licenses.WasmModFile()
+	if err != nil {
+		return err
+	}
 	for _, m := range []string{"argon2", "qr"} {
-		cmd := exec.Command(goBin, "build", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=", "-o", filepath.Join(out, m+".wasm"), "./tools/"+m+"wasm") // #nosec G204 -- fixed arguments
+		cmd := exec.Command(goBin, "build", "-modfile="+mf, "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=", "-o", filepath.Join(out, m+".wasm"), "./tools/"+m+"wasm") // #nosec G204 -- fixed arguments
 		cmd.Env = append(env, "GOOS=js", "GOARCH=wasm")
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {
